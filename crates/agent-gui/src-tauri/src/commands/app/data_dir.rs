@@ -76,8 +76,13 @@ pub async fn data_dir_migrate(
     let backend = app
         .try_state::<Arc<KBrainBackendState>>()
         .map(|state| Arc::clone(state.inner()));
-    if let Some(backend) = &backend {
-        backend.shutdown();
+    if let Some(backend) = backend.clone() {
+        // While the copy runs, the app's reconnect attempts must not bring K-brain back on
+        // the old root: whatever it wrote there would be missing after the restart. Stopping
+        // waits for the process tree, so keep it off the async runtime.
+        tauri::async_runtime::spawn_blocking(move || backend.suspend_and_shutdown())
+            .await
+            .map_err(|error| format!("停止本地服务失败：{error}"))?;
     }
     let (copy_source, copy_target, pointer_root) =
         (source.clone(), target.clone(), default.clone());
@@ -99,6 +104,7 @@ pub async fn data_dir_migrate(
         Err(error) => {
             // The old root is still authoritative: bring K-brain back on it.
             if let Some(backend) = backend {
+                backend.resume_starts();
                 let handle = app.clone();
                 let _ =
                     tauri::async_runtime::spawn_blocking(move || backend.ensure_started(&handle))
@@ -242,6 +248,10 @@ fn copy_entry(source: &Path, dest: &Path, stats: &mut (u64, u64)) -> Result<(), 
             let entry = entry.map_err(|e| format!("读取 {} 失败：{e}", source.display()))?;
             copy_entry(&entry.path(), &dest.join(entry.file_name()), stats)?;
         }
+    } else if is_special_file(&file_type) {
+        // Sockets, FIFOs and device nodes (a crashed browser's singleton socket, say) are
+        // runtime state, not data: opening a FIFO to copy it blocks until a writer appears,
+        // which would hang the migration with K-brain stopped.
     } else {
         let copied =
             fs::copy(source, dest).map_err(|e| format!("复制 {} 失败：{e}", source.display()))?;
@@ -257,6 +267,20 @@ fn copy_entry(source: &Path, dest: &Path, stats: &mut (u64, u64)) -> Result<(), 
         stats.1 += copied;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn is_special_file(file_type: &fs::FileType) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    file_type.is_socket()
+        || file_type.is_fifo()
+        || file_type.is_block_device()
+        || file_type.is_char_device()
+}
+
+#[cfg(not(unix))]
+fn is_special_file(_file_type: &fs::FileType) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -367,6 +391,56 @@ mod tests {
         fs::create_dir_all(&finder_only).unwrap();
         fs::write(finder_only.join(".DS_Store"), b"x").unwrap();
         validate_target(&source, &finder_only, &default_root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn migration_skips_sockets_and_fifos_and_keeps_symlinks_unresolved() {
+        use std::os::unix::net::UnixListener;
+        let temp = tempfile::tempdir().unwrap();
+        let default_root = temp.path().join(".liveagent");
+        seed(&default_root);
+        let profile = default_root.join("browser-profile");
+        fs::create_dir_all(&profile).unwrap();
+        // Unix socket paths are short-limited; keep the live socket outside the deep root.
+        let sockets = tempfile::Builder::new()
+            .prefix("s")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let _live = UnixListener::bind(sockets.path().join("sock")).unwrap();
+        std::os::unix::fs::symlink(sockets.path().join("sock"), profile.join("SingletonSocket"))
+            .unwrap();
+        let _direct = UnixListener::bind(sockets.path().join("direct")).unwrap();
+        fs::rename(sockets.path().join("direct"), profile.join("direct.sock")).unwrap();
+        let fifo = profile.join("pipe");
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success());
+        let target = temp.path().join("moved");
+
+        // Before the fix the FIFO's open() blocked forever; bound the test instead of hanging.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (source, dest, root) = (default_root.clone(), target.clone(), default_root.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(migrate_sync(&source, &dest, &root));
+        });
+        let (files, _) = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("migration must not block on special files")
+            .unwrap();
+
+        assert_eq!(files, 3, "two data files plus the symlink");
+        let link = target.join("browser-profile/SingletonSocket");
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_link(&link).unwrap(), sockets.path().join("sock"));
+        assert!(fs::symlink_metadata(target.join("browser-profile/pipe")).is_err());
+        assert!(fs::symlink_metadata(target.join("browser-profile/direct.sock")).is_err());
+        assert_eq!(read_pointer(&default_root), Some(target));
     }
 
     #[test]

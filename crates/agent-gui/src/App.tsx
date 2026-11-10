@@ -54,6 +54,7 @@ import { WindowsSettingsHeader } from "./components/WindowsSettingsHeader";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { useAppUpdateController } from "./lib/appUpdates";
 import { isKBrainBrowserHost } from "./lib/host";
+import { restartKBrainBackend } from "./lib/kbrain/bootstrap";
 import { HistoryMigrationNoticeBanner } from "./lib/kbrain/HistoryMigrationNoticeBanner";
 import { syncWorkspaceSkillsOverridesOnce } from "./lib/kbrain/workspaceSkills";
 import { requestPlanning } from "./lib/planning/kbrain";
@@ -136,6 +137,8 @@ function interpolateMessage(template: string, values: Record<string, string>) {
 }
 
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
+/** How long the boot screen waits for settings before offering to restart the local service. */
+const SETTINGS_LOAD_STALL_MS = 20_000;
 
 function AppChrome(props: { children: ReactNode; notice?: ReactNode }) {
   // Plain inputs get a shared cut/copy/paste menu; everything else keeps the
@@ -274,6 +277,10 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
+  // Each attempt re-runs the settings load; a stalled one can be replaced from the boot screen.
+  const [settingsAttempt, setSettingsAttempt] = useState(0);
+  const [settingsStalled, setSettingsStalled] = useState(false);
+  const [restartingLocalService, setRestartingLocalService] = useState(false);
   const [backgroundHostsReady, setBackgroundHostsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
   const [imageStudioWorkspace, setImageStudioWorkspace] = useState(settings.system.workdir);
@@ -434,6 +441,7 @@ export default function App() {
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Each new attempt from the boot screen reloads settings; the stale attempt is cancelled.
   useEffect(() => {
     let cancelled = false;
 
@@ -485,6 +493,27 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, [settingsAttempt]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new attempt restarts the stall timer.
+  useEffect(() => {
+    if (settingsReady) return;
+    setSettingsStalled(false);
+    const timer = window.setTimeout(() => setSettingsStalled(true), SETTINGS_LOAD_STALL_MS);
+    return () => window.clearTimeout(timer);
+  }, [settingsReady, settingsAttempt]);
+
+  const restartSettingsLoad = useCallback(() => {
+    setRestartingLocalService(true);
+    // The desktop app replaces a local service that stopped answering; a browser host can only
+    // ask again.
+    const restart = isKBrainBrowserHost() ? Promise.resolve() : restartKBrainBackend();
+    void restart
+      .catch((error) => console.error("Restarting the local service failed", error))
+      .finally(() => {
+        setRestartingLocalService(false);
+        setSettingsAttempt((attempt) => attempt + 1);
+      });
   }, []);
 
   useEffect(() => {
@@ -926,7 +955,26 @@ export default function App() {
       <LocaleContext.Provider value={localeContextValue}>
         <Toaster />
         <AppChrome>
-          <AppBootShell loadingLabel={translate("app.loading", settings.locale)} />
+          <AppBootShell
+            loadingLabel={translate("app.loading", settings.locale)}
+            stall={
+              settingsStalled
+                ? {
+                    message: translate("app.loadingStalled", settings.locale),
+                    actionLabel: translate(
+                      restartingLocalService
+                        ? "app.restartingLocalService"
+                        : isKBrainBrowserHost()
+                          ? "app.retryLoading"
+                          : "app.restartLocalService",
+                      settings.locale,
+                    ),
+                    busy: restartingLocalService,
+                    onAction: restartSettingsLoad,
+                  }
+                : undefined
+            }
+          />
         </AppChrome>
       </LocaleContext.Provider>
     );

@@ -115,6 +115,9 @@
       .app-boot-time { font-variant-numeric: tabular-nums; }
       .app-boot-waiting { min-height: 42px; opacity: .75; }
       .app-boot-retry { font: inherit; color: inherit; background: transparent; border: 1px solid hsl(var(--foreground) / .25); border-radius: 8px; padding: 8px 24px; cursor: pointer; }
+      .app-boot-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+      .app-boot-retry[hidden] { display: none; }
+      .app-boot-retry:disabled { cursor: default; opacity: .5; }
       [data-boot-failed] .app-boot-progress > span { animation: none; opacity: .35; }
     </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -136,7 +139,10 @@
           </div>
           <p class="app-boot-time" data-boot-elapsed="" aria-live="off"></p>
           <p class="app-boot-waiting" data-boot-waiting="" aria-live="polite"></p>
-          <button class="app-boot-retry" data-boot-retry="" type="button" hidden>重试</button>
+          <div class="app-boot-actions">
+            <button class="app-boot-retry" data-boot-retry="" type="button" hidden>重试</button>
+            <button class="app-boot-retry" data-boot-skip="" type="button" hidden>跳过，进入应用</button>
+          </div>
         </div>
       </div>
     </div>

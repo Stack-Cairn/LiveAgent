@@ -338,7 +338,7 @@ jobs:
         run: >
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
           chat_history ssh_local_forward shell_runner integration_commands::mcp
-          services::system_proxy services::kbrain_backend services::host_bridge
+          services::system_proxy services::kbrain_backend services::host_bridge app_commands::data_dir
           history_sync_v2_tests history_sync_command_tests
 
   managed-gateway:

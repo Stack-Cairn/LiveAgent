@@ -3,6 +3,7 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 import { hasFrozenCapability } from "@liveagent/ui/lib/kbrain/health";
 import { isTauriHost } from "../host";
 import { createKBrainClient } from "./client";
+import { withDeadline } from "./deadline";
 import {
   classifyHistoryMigrationFailure,
   type HistoryMigrationFailureKind,
@@ -139,7 +140,44 @@ export type HistoryMigrationOptions = {
   retryKnownFailures?: boolean;
   /** Shared across pages so one migration pass lists K-brain sessions at most once. */
   sessionExists?: (backendId: string) => Promise<boolean>;
+  /** Overrides for the per-step time limits (tests use short ones). */
+  timeouts?: Partial<HistoryMigrationTimeouts>;
 };
+
+export type HistoryMigrationTimeouts = {
+  /** Health, existence checks and listings: small metadata requests. */
+  requestMs: number;
+  /** One page read from the local legacy database (desktop command). */
+  pageMs: number;
+  /** Import POST: a base allowance plus time per MiB of payload, capped. */
+  importBaseMs: number;
+  importPerMiBMs: number;
+  importMaxMs: number;
+};
+
+/**
+ * Startup waits for this migration, so no single step may wait forever: a backend that stops
+ * answering used to keep the startup screen up with no way into the app. A step past its limit
+ * fails as transient, so the conversation is retried on the next launch.
+ */
+export const HISTORY_MIGRATION_TIMEOUTS: HistoryMigrationTimeouts = {
+  requestMs: 30_000,
+  pageMs: 120_000,
+  importBaseMs: 60_000,
+  importPerMiBMs: 2_000,
+  importMaxMs: 20 * 60_000,
+};
+
+function timeoutsFor(options: HistoryMigrationOptions): HistoryMigrationTimeouts {
+  return { ...HISTORY_MIGRATION_TIMEOUTS, ...options.timeouts };
+}
+
+export function importTimeoutMs(bytes: number, timeouts = HISTORY_MIGRATION_TIMEOUTS) {
+  return Math.min(
+    timeouts.importMaxMs,
+    timeouts.importBaseMs + Math.ceil(bytes / 1048576) * timeouts.importPerMiBMs,
+  );
+}
 
 type ExistenceClient = Pick<
   ReturnType<typeof createKBrainClient>,
@@ -167,14 +205,21 @@ export function createSessionExistenceCheck(
   client: ExistenceClient,
   signal?: AbortSignal,
   candidates: () => Iterable<string> = cachedBackendIds,
+  timeoutMs = HISTORY_MIGRATION_TIMEOUTS.requestMs,
 ) {
+  const bounded = <T>(what: string, step: (signal: AbortSignal) => Promise<T>) =>
+    withDeadline(step, timeoutMs, what, signal);
   let batched: Promise<{ asked: Set<string>; existing: Set<string> } | null> | undefined;
   const batch = () => {
     batched ??= (async () => {
       try {
         if (
           !hasFrozenCapability(
-            { capabilities: await client.getCapabilities(signal) },
+            {
+              capabilities: await bounded("K-brain health check", (bound) =>
+                client.getCapabilities(bound),
+              ),
+            },
             "session_exists",
           )
         )
@@ -183,9 +228,8 @@ export function createSessionExistenceCheck(
         const ids = [...asked];
         const existing = new Set<string>();
         for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
-          const found = await client.sessionsExist(
-            ids.slice(start, start + MAX_EXISTS_IDS),
-            signal,
+          const found = await bounded("K-brain session check", (bound) =>
+            client.sessionsExist(ids.slice(start, start + MAX_EXISTS_IDS), bound),
           );
           for (const id of found) existing.add(id);
         }
@@ -202,7 +246,9 @@ export function createSessionExistenceCheck(
       try {
         const ids = new Set<string>();
         for (let page = 1; page <= 1000; page += 1) {
-          const result = await client.listSessions({ page, pageSize: 200 });
+          const result = await bounded("K-brain session listing", () =>
+            client.listSessions({ page, pageSize: 200 }),
+          );
           for (const session of result.sessions) ids.add(session.id);
           if (result.sessions.length === 0 || ids.size >= result.total_count) break;
         }
@@ -218,14 +264,18 @@ export function createSessionExistenceCheck(
     if (known?.asked.has(backendId)) return known.existing.has(backendId);
     if (known) {
       try {
-        return (await client.sessionsExist([backendId], signal)).has(backendId);
+        return (
+          await bounded("K-brain session check", (bound) =>
+            client.sessionsExist([backendId], bound),
+          )
+        ).has(backendId);
       } catch {
         // Fall through to the slower checks, which never mistake an error for absence.
       }
     }
     if ((await list())?.has(backendId)) return true;
     try {
-      await client.getSession(backendId, signal);
+      await bounded("K-brain session lookup", (bound) => client.getSession(backendId, bound));
       return true;
     } catch (error) {
       if (historyErrorStatus(error) !== 404) throw error;
@@ -501,8 +551,10 @@ export async function migrateLegacyHistoryPage(
   });
   const results: MigrationImportResult[] = [];
   const failures: MigrationFailure[] = [];
+  const timeouts = timeoutsFor(options);
   const sessionExists =
-    options.sessionExists ?? createSessionExistenceCheck(client, options.signal);
+    options.sessionExists ??
+    createSessionExistenceCheck(client, options.signal, undefined, timeouts.requestMs);
   const scope = kBrainStorageScope();
   const cache = readMigrationCache(scope);
   const cacheUpdates = new Map<string, CachedMigration | null>();
@@ -610,7 +662,12 @@ export async function migrateLegacyHistoryPage(
       bodyBytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
       reportProgress(options, "importing");
       importAttempted = true;
-      const result = await client.importLegacyHistory(payload, options.signal);
+      const result = await withDeadline(
+        (bound) => client.importLegacyHistory(payload, bound),
+        importTimeoutMs(bodyBytes, timeouts),
+        "K-brain history import",
+        options.signal,
+      );
       if (
         result.source_id !== item.id ||
         result.backend_id !== item.id ||
@@ -710,7 +767,11 @@ export async function recoverLegacyHistory(id: string): Promise<boolean> {
     for (const command of ["legacy_history_migration_page", "pi_history_migration_page"] as const) {
       let cursor: string | undefined;
       do {
-        const page = await invoke<LegacyPage>(command, { cursor });
+        const page = await withDeadline(
+          () => invoke<LegacyPage>(command, { cursor }),
+          HISTORY_MIGRATION_TIMEOUTS.pageMs,
+          "Reading old history",
+        );
         const item = page.conversations.find((item) => item.id === id);
         if (item) {
           const migrated = await migrateLegacyHistoryPage({
@@ -791,17 +852,23 @@ async function migratedSessionsStillExist(
 ): Promise<boolean> {
   try {
     const client = createKBrainClient({ fetch: options.fetch });
-    if (
-      !hasFrozenCapability(
-        { capabilities: await client.getCapabilities(options.signal) },
-        "session_exists",
-      )
-    )
-      return false;
+    const { requestMs } = timeoutsFor(options);
+    const capabilities = await withDeadline(
+      (bound) => client.getCapabilities(bound),
+      requestMs,
+      "K-brain health check",
+      options.signal,
+    );
+    if (!hasFrozenCapability({ capabilities }, "session_exists")) return false;
     const ids = [...new Set(backendIds)];
     for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
       const chunk = ids.slice(start, start + MAX_EXISTS_IDS);
-      const found = await client.sessionsExist(chunk, options.signal);
+      const found = await withDeadline(
+        (bound) => client.sessionsExist(chunk, bound),
+        requestMs,
+        "K-brain session check",
+        options.signal,
+      );
       if (chunk.some((id) => !found.has(id))) return false;
     }
     return true;
@@ -810,9 +877,14 @@ async function migratedSessionsStillExist(
   }
 }
 
-async function readLegacySignature(): Promise<string | null> {
+async function readLegacySignature(options: HistoryMigrationOptions): Promise<string | null> {
   try {
-    const signature = await invoke<string | null>("legacy_history_migration_signature");
+    const signature = await withDeadline(
+      () => invoke<string | null>("legacy_history_migration_signature"),
+      timeoutsFor(options).pageMs,
+      "Reading the legacy history signature",
+      options.signal,
+    );
     return typeof signature === "string" && signature ? signature : null;
   } catch {
     return null;
@@ -834,7 +906,7 @@ async function migrateHistorySourceOnce(
   // Read before the pass, so a change made while it runs is never covered by its marker.
   const scope = kBrainStorageScope();
   const signature =
-    command === "legacy_history_migration_page" ? await readLegacySignature() : null;
+    command === "legacy_history_migration_page" ? await readLegacySignature(options) : null;
   const completion =
     signature && !options.retryKnownFailures ? readMigrationCompletion(scope) : null;
   if (
@@ -851,7 +923,12 @@ async function migrateHistorySourceOnce(
   try {
     do {
       reportProgress(options, "reading");
-      const page = await invoke<LegacyPage>(command, { cursor });
+      const page = await withDeadline(
+        () => invoke<LegacyPage>(command, { cursor }),
+        timeoutsFor(options).pageMs,
+        `Reading ${command === "legacy_history_migration_page" ? "legacy" : "other"} history`,
+        options.signal,
+      );
       const migrated = await migrateLegacyHistoryPage(page, options);
       all.push(...migrated.results);
       failures.push(...migrated.failures);
@@ -913,7 +990,12 @@ export async function migrateAllHistoryOnce(options: HistoryMigrationOptions = {
     ...options,
     sessionExists:
       options.sessionExists ??
-      createSessionExistenceCheck(createKBrainClient({ fetch: options.fetch }), options.signal),
+      createSessionExistenceCheck(
+        createKBrainClient({ fetch: options.fetch }),
+        options.signal,
+        undefined,
+        timeoutsFor(options).requestMs,
+      ),
   };
   const [legacy, pi] = await Promise.all([
     migrateLegacyHistoryOnce(shared),
