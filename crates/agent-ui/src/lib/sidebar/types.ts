@@ -19,10 +19,22 @@ export type SidebarConversation = {
   selectedModelJson?: string;
   /** Backend session ID of the conversation this one was branched from. */
   forkedFromSessionId?: string;
+  /** A turn another process (the kn terminal UI) is running in this session. */
+  externalRun?: SidebarExternalRun;
   // Local-only draft/persisting row; survives authoritative reconciles until
   // the backend confirms (an upsert event clears it) or it is removed locally.
   isPending?: boolean;
 };
+
+export type SidebarExternalRun = {
+  /** kn, kn run, or another backend. */
+  client: string;
+  startedAt: number;
+};
+
+export function sameExternalRun(left?: SidebarExternalRun, right?: SidebarExternalRun): boolean {
+  return left === right || (left?.client === right?.client && left?.startedAt === right?.startedAt);
+}
 
 export type SidebarWorkdirSummary = {
   path: string;

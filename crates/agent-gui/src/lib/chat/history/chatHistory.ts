@@ -38,6 +38,8 @@ import { parseHistorySegments, type SerializedHistorySegment } from "./chatHisto
 // earlier, edit-resend replace) — one contract, one constant.
 export const CHAT_HISTORY_WINDOW_MESSAGES = 360;
 
+import type { SidebarExternalRun } from "@liveagent/ui/lib/sidebar/types";
+
 export type ChatHistorySummary = {
   id: string;
   title: string;
@@ -57,6 +59,8 @@ export type ChatHistorySummary = {
   isPending?: boolean;
   /** Backend session ID of the conversation this one was branched from. */
   forkedFromSessionId?: string;
+  /** A turn another process (the kn terminal UI) is running in this session. */
+  externalRun?: SidebarExternalRun;
 };
 
 export type ChatHistoryShareStatus = {

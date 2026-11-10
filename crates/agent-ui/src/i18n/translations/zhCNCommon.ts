@@ -353,6 +353,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.statusPinned": "已置顶",
   "chat.statusShared": "已分享",
   "chat.statusRunningReply": "正在回复",
+  "chat.externalRunPlaceholder": "正在 {client} 中运行，回复会随回合进展显示在这里；结束后再发送。",
   "chat.delete": "删除",
   "chat.remove": "移除",
   "chat.manageSharedConversations": "管理已分享会话（{count}）",

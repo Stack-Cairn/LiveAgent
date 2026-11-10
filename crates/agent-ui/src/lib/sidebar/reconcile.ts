@@ -1,6 +1,6 @@
 // Sidebar 会话列表的纯 reducer：排序、合并、upsert、权威对账与后端事件应用。
 
-import type { SidebarBackendEvent, SidebarConversation } from "./types";
+import { type SidebarBackendEvent, type SidebarConversation, sameExternalRun } from "./types";
 
 export type MergeSidebarConversationOptions = {
   preserveExistingTitle?: boolean;
@@ -93,6 +93,7 @@ function sameSidebarConversation(left: SidebarConversation, right: SidebarConver
     left.isShared === right.isShared &&
     left.selectedModelJson === right.selectedModelJson &&
     left.forkedFromSessionId === right.forkedFromSessionId &&
+    sameExternalRun(left.externalRun, right.externalRun) &&
     left.isPending === right.isPending
   );
 }
@@ -133,6 +134,8 @@ export function mergeSidebarConversation(
     isShared: next.isShared ?? existing.isShared,
     selectedModelJson: mergeOptionalText(next.selectedModelJson, existing.selectedModelJson),
     forkedFromSessionId: mergeOptionalText(next.forkedFromSessionId, existing.forkedFromSessionId),
+    // Backend summaries always carry the key; local partial updates keep the last value.
+    externalRun: "externalRun" in next ? next.externalRun : existing.externalRun,
     isPending: next.isPending === true ? true : undefined,
   };
 
