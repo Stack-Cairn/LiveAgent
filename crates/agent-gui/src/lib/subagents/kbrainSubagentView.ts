@@ -40,6 +40,7 @@ export function kbrainSubagentView(entry: SubagentEntry): SubagentView {
     ...(tokens > 0 ? { tokens } : {}),
     toolCount: Math.max(subagent.tool_count ?? 0, entry.liveToolCount),
     ...(subagent.background ? { background: true } : {}),
+    ...(status === "running" && subagent.external ? { external: true } : {}),
     ...(status === "running" && entry.latestTool
       ? {
           latestTool: {

@@ -340,6 +340,64 @@ test("a reload lists the subagents; an older list never overwrites newer events"
   assert.equal(entry().lastSeq, 25);
 });
 
+test("subagents running in another process (kn) are polled, not streamed, until they end", async () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 15));
+  let phase = "running";
+  const listed = () =>
+    phase === "running"
+      ? subagent({ background: true, external: true, tool_count: 1, usage: { input_tokens: 40 } })
+      : subagent({ background: true, status: "done", report: "fine", tool_count: 2, ended_at: "2026-11-05T00:01:00Z" });
+  const transcriptFor = () => ({
+    subagent: listed(),
+    messages:
+      phase === "running"
+        ? [{ role: "user", content: [{ type: "text", text: "Survey the parser" }] }]
+        : [
+            { role: "user", content: [{ type: "text", text: "Survey the parser" }] },
+            { role: "assistant", content: [{ type: "text", text: "fine" }] },
+          ],
+    last_seq: 0,
+    live: false,
+  });
+  const client = fakeClient({
+    list: () => ({ subagents: [listed()], last_seq: 0 }),
+    transcript: async () => transcriptFor(),
+  });
+  setup(client);
+  store.configureKBrainSubagentStore({ externalPollMs: 5 });
+  try {
+    await store.loadKBrainSubagents("chat-kn");
+    const entry = () => store.getKBrainSubagentForToolCall("call-1").entry;
+    assert.equal(entry().subagent.external, true);
+    assert.equal(kbrainSubagentView(entry()).status, "running");
+    assert.equal(kbrainSubagentView(entry()).toolCount, 1);
+    assert.equal(kbrainSubagentView(entry()).external, true, "the pane offers no stop for it");
+    // No event stream exists for it in this backend.
+    assert.equal(client.calls.subscribe.length, 0);
+    store.openKBrainSubagent("chat-kn", "task-1");
+    await tick();
+    assert.equal(entry().transcript.messages.length, 1);
+    const listsWhileRunning = client.calls.list;
+    await tick();
+    assert.ok(client.calls.list > listsWhileRunning, "the list is re-read while it runs");
+
+    phase = "done";
+    await tick();
+    await tick();
+    assert.equal(entry().subagent.status, "done");
+    assert.equal(entry().subagent.external, undefined);
+    assert.equal(kbrainSubagentView(entry()).external, undefined);
+    assert.equal(entry().transcript.messages.length, 2, "the final transcript is read once it ends");
+    const settled = client.calls.list;
+    await tick();
+    await tick();
+    assert.equal(client.calls.list, settled, "polling stops once nothing runs elsewhere");
+    assert.equal(client.calls.subscribe.length, 0);
+  } finally {
+    store.configureKBrainSubagentStore({ externalPollMs: 1500 });
+  }
+});
+
 test("an older K-brain without the subagent routes marks the conversation unsupported", async () => {
   const client = fakeClient({
     list: () => {

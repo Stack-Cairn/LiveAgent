@@ -280,7 +280,14 @@ function SubagentHeader({
             {meta.length > 0 ? <span className="tabular-nums">{meta.join(" · ")}</span> : null}
           </div>
         </div>
-        {running ? (
+        {running && view.external ? (
+          <span
+            data-subagent-external={view.id}
+            className="shrink-0 pt-1 text-xs text-foreground/45"
+          >
+            {t("chat.subagent.pane.external")}
+          </span>
+        ) : running ? (
           <button
             type="button"
             onClick={stop}

@@ -1018,6 +1018,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.subagent.pane.retry": "重试",
   "chat.subagent.pane.noOutput": "暂无输出。",
   "chat.subagent.pane.background": "后台",
+  "chat.subagent.pane.external": "在 kn 中运行",
   "chat.tool.waiting": "等待",
   "chat.tool.command": "命令",
   "chat.tool.args": "参数",

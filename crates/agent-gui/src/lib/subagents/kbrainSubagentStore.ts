@@ -78,11 +78,15 @@ type Resources = {
   pending: Map<string, KBrainEvent[]>;
   turnActive: boolean;
   listLoad?: Promise<void>;
+  /** Polls subagents another process (kn) runs; they have no event stream here. */
+  externalPoll?: ReturnType<typeof setTimeout>;
 };
 
 let clientFactory: () => SubagentClient = () => createKBrainClient();
 let sessionResolver: (conversationId: string) => string | undefined = (conversationId) =>
   getKBrainSessionId(conversationId, getConfiguredKBrainConnection()?.baseUrl);
+/** How often subagents running in another process are re-read. */
+let externalPollMs = 1500;
 
 const conversations = new Map<string, ConversationSubagents>();
 const resources = new Map<string, Resources>();
@@ -101,14 +105,17 @@ const EMPTY: Readonly<Record<string, SubagentEntry>> = Object.freeze({});
 export function configureKBrainSubagentStore(options: {
   client?: () => SubagentClient;
   resolveSession?: (conversationId: string) => string | undefined;
+  externalPollMs?: number;
 }) {
   if (options.client) clientFactory = options.client;
   if (options.resolveSession) sessionResolver = options.resolveSession;
+  if (options.externalPollMs !== undefined) externalPollMs = options.externalPollMs;
 }
 
 export function resetKBrainSubagentStore() {
   for (const resource of resources.values()) {
     for (const controller of resource.follows.values()) controller.abort();
+    if (resource.externalPoll) clearTimeout(resource.externalPoll);
   }
   conversations.clear();
   resources.clear();
@@ -286,6 +293,10 @@ function followSubagent(conversationId: string, id: string) {
   const state = conversations.get(conversationId);
   const entry = state?.entries[id];
   if (!state?.sessionId || !entry || state.unsupported) return;
+  if (entry.subagent.external) {
+    scheduleExternalPoll(conversationId);
+    return;
+  }
   const controller = new AbortController();
   resource.follows.set(id, controller);
   const sessionId = state.sessionId;
@@ -307,7 +318,81 @@ function mergeListed(entry: SubagentEntry | undefined, listed: KBrainSubagent, l
   if (!entry) return { subagent: listed, lastSeq: listSeq, liveToolCount: 0 };
   // A list taken before the latest event this client applied is older than it.
   if (listSeq < entry.lastSeq) return entry;
-  return { ...entry, subagent: mergeSubagent(entry.subagent, listed), lastSeq: listSeq };
+  return { ...entry, subagent: mergeBackendSubagent(entry.subagent, listed), lastSeq: listSeq };
+}
+
+/** A list or transcript read is authoritative on whether another process runs it. */
+function mergeBackendSubagent(previous: KBrainSubagent, next: KBrainSubagent): KBrainSubagent {
+  const merged = mergeSubagent(previous, next);
+  if (next.external) return merged;
+  if (!merged.external) return merged;
+  const { external: _external, ...rest } = merged;
+  return rest;
+}
+
+function hasExternalRunning(state: ConversationSubagents | undefined) {
+  if (!state) return false;
+  return state.order.some((id) => {
+    const subagent = state.entries[id]?.subagent;
+    return subagent?.external === true && !isTerminalSubagentStatus(subagent.status);
+  });
+}
+
+/**
+ * Subagents another process runs are re-read every externalPollMs: the list for
+ * status, tool count and usage, and each loaded transcript for its messages. The
+ * poll stops after the read that finds none of them still running.
+ */
+function scheduleExternalPoll(conversationId: string) {
+  const resource = resourcesFor(conversationId);
+  if (resource.externalPoll) return;
+  resource.externalPoll = setTimeout(() => {
+    void pollExternalSubagents(conversationId).finally(() => {
+      if (resources.get(conversationId) !== resource) return;
+      resource.externalPoll = undefined;
+      if (hasExternalRunning(conversations.get(conversationId))) {
+        scheduleExternalPoll(conversationId);
+      }
+    });
+  }, externalPollMs);
+}
+
+async function pollExternalSubagents(conversationId: string) {
+  const before = conversations.get(conversationId);
+  const external = new Set(
+    (before?.order ?? []).filter((id) => before?.entries[id]?.subagent.external),
+  );
+  await loadKBrainSubagents(conversationId);
+  const state = conversations.get(conversationId);
+  await Promise.all(
+    [...external].map((id) => {
+      const entry = state?.entries[id];
+      return entry?.transcript?.status === "ready"
+        ? refreshKBrainSubagentTranscript(conversationId, id)
+        : undefined;
+    }),
+  );
+}
+
+/** Re-reads a loaded transcript in place (no loading state), for polled subagents. */
+function refreshKBrainSubagentTranscript(conversationId: string, id: string): Promise<void> {
+  const state = conversations.get(conversationId);
+  if (!state?.sessionId || !state.entries[id]) return Promise.resolve();
+  return clientFactory()
+    .getSubagentTranscript(state.sessionId, id)
+    .then((loaded: KBrainSubagentTranscript) => {
+      update(conversationId, (current) =>
+        withEntry(current, id, (value) => {
+          if (!value || value.transcript?.status !== "ready") return value;
+          return {
+            ...value,
+            subagent: mergeBackendSubagent(value.subagent, loaded.subagent),
+            transcript: { messages: loaded.messages ?? [], status: "ready" },
+          };
+        }),
+      );
+    })
+    .catch(() => undefined);
 }
 
 /**
@@ -405,14 +490,19 @@ export function loadKBrainSubagentTranscript(conversationId: string, id: string)
           }
           return {
             ...value,
-            subagent: baseSeq >= value.lastSeq ? subagent : value.subagent,
+            subagent:
+              baseSeq >= value.lastSeq
+                ? mergeBackendSubagent(value.subagent, loaded.subagent)
+                : value.subagent,
             lastSeq: Math.max(value.lastSeq, baseSeq),
             transcript: { messages, status: "ready" },
           };
         }),
       );
       const current = conversations.get(conversationId)?.entries[id];
-      if (loaded.live && current && !isTerminalSubagentStatus(current.subagent.status)) {
+      if (current?.subagent.external && !isTerminalSubagentStatus(current.subagent.status)) {
+        scheduleExternalPoll(conversationId);
+      } else if (loaded.live && current && !isTerminalSubagentStatus(current.subagent.status)) {
         if (!resource.turnActive) followSubagent(conversationId, id);
       }
     })
@@ -514,6 +604,7 @@ export function countRunningKBrainSubagents(state: ConversationSubagents | undef
 export function forgetKBrainSubagents(conversationId: string) {
   const resource = resources.get(conversationId);
   for (const controller of resource?.follows.values() ?? []) controller.abort();
+  if (resource?.externalPoll) clearTimeout(resource.externalPoll);
   resources.delete(conversationId);
   for (const index of [toolCallIndex, controlCallIndex]) {
     for (const [toolCallId, link] of index) {

@@ -1078,6 +1078,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.subagent.pane.retry": "Retry",
   "chat.subagent.pane.noOutput": "No output yet.",
   "chat.subagent.pane.background": "Background",
+  "chat.subagent.pane.external": "Running in kn",
   "chat.tool.waiting": "Waiting",
   "chat.tool.command": "Command",
   "chat.tool.args": "Args",
