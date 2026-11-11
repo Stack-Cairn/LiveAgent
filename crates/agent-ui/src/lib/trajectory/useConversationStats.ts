@@ -86,8 +86,15 @@ export type UseConversationStatsOptions = {
    * - `observed`（WebUI，默认）：仅在已观察到实时事件时收敛，避免页面刚重载时误判。
    */
   liveOwnership?: "authoritative" | "observed";
-  /** edit-resend / rebase 后整体重载。 */
+  /** edit-resend / rebase 后整体重载（丢弃缓存重新分页）。 */
   authoritativeRevision?: number;
+  /**
+   * 例行尾部刷新：权威方（K-brain 后端）的 journal 游标变化时，只重读最近一窗
+   * 并按收敛身份合并进已缓存事件。不重置缓存、不重新向前分页——大轨迹会话
+   * （几十万事件）每次全量重分页既让读数来回跳，也造成持续的读放大。
+   * 与 authoritativeRevision 的区别：那一个是历史被改写，必须整窗重载。
+   */
+  tailRevision?: number;
   /** 条为空或隐藏时不加载。 */
   enabled: boolean;
 };
@@ -101,6 +108,7 @@ export function useConversationStats(
   options: UseConversationStatsOptions,
 ): UseConversationStatsResult {
   const { host, liveEvents, liveOwnership, authoritativeRevision = 0, enabled } = options;
+  const tailRevision = options.tailRevision ?? 0;
   const conversationId = options.conversationId.trim();
 
   const [loading, setLoading] = useState(false);
@@ -213,6 +221,35 @@ export function useConversationStats(
       cancelIdle?.();
     };
   }, [conversationId, authoritativeRevision, enabled, entryFor]);
+
+  // 尾部例行刷新（K-brain 后端持有 journal 的场景）：游标变化时只取最近一窗
+  // 合并进缓存。首挂载（tailRevision 从 0 起跳）也走这里无妨——主 effect 的
+  // 分页会随后到达，合并是幂等的；主分页尚未开始时这里不产生任何请求。
+  useEffect(() => {
+    if (!enabled || conversationId === "" || tailRevision === 0) return;
+    let cancelled = false;
+    const current = cache.get(conversationId);
+    if (current === undefined || current.events.length === 0 || current.failed) return;
+    hostRef.current
+      .loadWindow(conversationId)
+      .then((payload) => {
+        if (cancelled) return;
+        const entry = cache.get(conversationId);
+        if (entry === undefined || entry !== current) return;
+        const fresh = parseTrajectoryEvents(payload.eventsJson);
+        if (fresh.length === 0) return;
+        const merged = mergeTrajectoryEventWindows(entry.events, fresh);
+        if (merged.length === entry.events.length) return;
+        touch(conversationId, { ...entry, events: merged, version: entry.version + 1 });
+        setEventVersion((value) => value + 1);
+      })
+      .catch(() => {
+        // 尾部刷新失败保持现状：下一个游标变化会再试。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, tailRevision, enabled]);
 
   // live 事件到达时节流 1s 再重建：流式期间事件密集，逐条重建账本没有意义。
   const [liveVersion, setLiveVersion] = useState(0);
