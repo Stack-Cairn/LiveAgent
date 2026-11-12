@@ -212,6 +212,45 @@ test("首窗读数立即可用，后台分页把更早的段补齐", async () =>
   await probe.unmount();
 });
 
+test("尾部例行刷新只取最近一窗合并，不重置缓存也不重新分页", async () => {
+  clearConversationStatsCache();
+  // 三段历史：首窗拿到最新一段，idle 分页补齐更早两段。
+  const pages = [turnEvents(1), turnEvents(2), turnEvents(3)];
+  const { host, calls } = createFakeHost(pages);
+  const probe = mountHook({
+    conversationId: "c-tail-refresh",
+    host,
+    liveEvents: [],
+    enabled: true,
+  });
+
+  await probe.mount();
+  await drain();
+  assert.equal(probe.seen.current.stats.turns, 3);
+  const pagedCallCount = calls.length;
+
+  // 后端 journal 前进：最新一窗多了一段新回合。
+  pages.push(turnEvents(4));
+  await probe.update({ tailRevision: 1 });
+  await drain();
+
+  assert.equal(probe.seen.current.stats.turns, 4, "新回合应并入读数");
+  assert.equal(probe.seen.current.stats.approximate, false, "尾部合并不降级精确性");
+  assert.equal(
+    calls.length,
+    pagedCallCount + 1,
+    "只允许一次尾部窗口请求，不得重新向前分页",
+  );
+  assert.equal(calls.at(-1).beforeSegmentIndex, undefined, "尾部刷新不带向前分页游标");
+
+  // 游标再次前进：同样只追加一窗，不重放历史分页。
+  await probe.update({ tailRevision: 2 });
+  await drain();
+  assert.equal(calls.length, pagedCallCount + 2, "游标变化各取一窗");
+
+  await probe.unmount();
+});
+
 test("live 事件与 persisted 重叠时按身份去重，不双算", async () => {
   clearConversationStatsCache();
   const shared = turnEvents(1);

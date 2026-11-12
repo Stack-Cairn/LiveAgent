@@ -719,7 +719,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         if (!isSessionBusyError(error)) throw error;
         if (Date.now() >= deadline) {
           throw new Error(
-            "The session is still busy (a background task may still be running). Send again after it finishes.",
+            "该会话上一轮仍在运行，已等待 3 分钟仍未结束。请点击停止按钮结束当前任务后重新发送，或稍后再试。",
           );
         }
         reportProgress({ stage: "waiting_session" });
