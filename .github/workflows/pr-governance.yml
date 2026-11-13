@@ -1,5 +1,9 @@
 name: PR Governance
 
+# 该 workflow 需要 pull_request_target:fork PR 的 pull_request 事件拿不到 secrets 和写权限。
+# 它只通过 API 读取 PR 元数据,不检出也不执行 PR 代码,所以不要在这里加 actions/checkout。
+# GitHub 从 2026-12-02 起默认拦截公开仓库的 pull_request_target,
+# 上游仓库的 Actions 事件策略必须显式允许它,清单见 docs/operations/actions-event-policy.md。
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize, ready_for_review]
@@ -18,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.state == 'open' }}
     steps:
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           DRAFT_PAT: ${{ secrets.PR_GOVERNANCE_PAT }}
         with:
