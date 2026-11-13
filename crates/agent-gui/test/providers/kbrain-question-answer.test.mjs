@@ -126,7 +126,9 @@ for (const mode of ["answered", "timeout", "cancelled", ...Object.keys(multiMode
         runtime: {}, selectedModel: {}, providerId: "fixture", model: "fixture",
         cancellation: { userStop: new AbortController() },
         buildPreparedContext: () => ({ messages: [{ role: "user", content: "ask" }] }),
-        getNextConversationState: () => ({ messages: [] }),
+        getNextConversationState: () => ({
+          segments: [{ messages: [{ id: "turn-1", role: "user", content: "ask", timestamp: 1 }] }],
+        }),
         batchLiveRoundsUpdate: (apply) => { rounds = apply(rounds); },
         gatewayBridgeEvents: { queueEvent: (event) => events.push(event), queueToken() {}, queueToolStatus() {}, emitError: (error) => assert.fail(error) },
         hookLifecycle: { startAgent() {}, startTurn() {}, ensureMessageEnded() {}, endTurn() {}, endAgent() {} },

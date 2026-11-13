@@ -113,7 +113,10 @@ function loadHistoryActions({ getWindow, replace, branch }) {
       },
     },
   });
-  return loader.loadModule("src/pages/chat/history/useConversationHistoryActions.ts");
+  return {
+    ...loader.loadModule("src/pages/chat/history/useConversationHistoryActions.ts"),
+    ...loader.loadModule("src/lib/kbrain/historySync.ts"),
+  };
 }
 
 function harness(params) {
@@ -171,6 +174,90 @@ function harness(params) {
   }
   return { actions, cache, cursors, upserted, synced, errors, currentId, entry, visible };
 }
+
+test("idle reconciliation shows a late backend result alongside multiple rejected inputs and retains retry state", async () => {
+  let reads = 0;
+  let remote = [userMessage("old run", 1, "old"), assistantMessage("background task actually finished")];
+  const { useConversationHistoryActions, protectKBrainInput, hasUnacceptedKBrainInput } = loadHistoryActions({
+    getWindow: async () => { reads++; return windowRecord(remote, `rev-${reads}`); },
+  });
+  const h = harness(useConversationHistoryActions);
+  const first = userMessage("continue", 3, "rejected-1");
+  const second = userMessage("continue again", 4, "rejected-2");
+  const original = { ...h.entry(buildState([remote[0], first, second], "rev-old")), errorMessage: "session busy; retry" };
+  h.cache.set("conversation-1", original);
+  const acceptFirst = protectKBrainInput("conversation-1", first);
+  const acceptSecond = protectKBrainInput("conversation-1", second);
+  for (let i = 0; i < 2; i++) {
+    const refreshed = await h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+    assert.ok(refreshed, "rejected input must not block backend results");
+    assert.deepEqual(h.visible.state.segments.flatMap(s => s.messages).map(m => m.id), ["old", "a1", "rejected-1", "rejected-2"]);
+    assert.equal(h.cache.get("conversation-1").errorMessage, original.errorMessage);
+    assert.equal(h.errors.at(-1), original.errorMessage);
+    assert.equal(hasUnacceptedKBrainInput("conversation-1"), true);
+  }
+  remote = [...remote, second];
+  acceptSecond();
+  await h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  assert.deepEqual(h.visible.state.segments.flatMap(s => s.messages).map(m => m.id), ["old", "a1", "rejected-2", "rejected-1"]);
+  assert.equal(hasUnacceptedKBrainInput("conversation-1"), true, "acceptance only releases its own input");
+  remote = [...remote, first];
+  acceptFirst();
+  await h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  assert.deepEqual(h.visible.state.segments.flatMap(s => s.messages).map(m => m.id), ["old", "a1", "rejected-2", "rejected-1"]);
+  assert.equal(hasUnacceptedKBrainInput("conversation-1"), false);
+  assert.equal(h.cache.get("conversation-1").errorMessage, null);
+});
+
+for (const change of ["streaming", "new-runtime"]) {
+  test(`idle reconciliation discards a snapshot overtaken by ${change}`, async () => {
+    let finish;
+    const { useConversationHistoryActions } = loadHistoryActions({
+      getWindow: () => new Promise(resolve => { finish = resolve; }),
+    });
+    const h = harness(useConversationHistoryActions);
+    h.cache.set("conversation-1", h.entry(h.visible.state));
+    const pending = h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+    if (change === "streaming") h.cache.get("conversation-1").isSending = true;
+    if (change === "new-runtime") h.cache.set("conversation-1", h.entry(buildState([userMessage("new input")], "rev-new")));
+    const newer = h.cache.get("conversation-1");
+    finish(windowRecord([userMessage("old snapshot")], "rev-old"));
+    assert.equal(await pending, null);
+    assert.equal(h.cache.get("conversation-1"), newer);
+    assert.deepEqual(h.synced, []);
+  });
+}
+
+test("repeated authority reconciliation replaces messages without appending duplicates", async () => {
+  const messages = [userMessage("accepted"), assistantMessage("finished")];
+  const { useConversationHistoryActions } = loadHistoryActions({
+    getWindow: async () => windowRecord(messages, "rev-2"),
+  });
+  const h = harness(useConversationHistoryActions);
+  h.cache.set("conversation-1", h.entry(h.visible.state));
+  for (let i = 0; i < 3; i++) await h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  assert.equal(h.cache.get("conversation-1").state.segments.flatMap(s => s.messages).length, 2);
+});
+
+test("notifications during an in-flight snapshot coalesce and still load the final authority", async () => {
+  const reads = [];
+  const { useConversationHistoryActions } = loadHistoryActions({
+    getWindow: () => new Promise(resolve => { reads.push(resolve); }),
+  });
+  const h = harness(useConversationHistoryActions);
+  h.cache.set("conversation-1", h.entry(h.visible.state));
+  const first = h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  const second = h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  const third = h.actions.reloadConversation("conversation-1", { onlyIfIdle: true });
+  assert.equal(reads.length, 1);
+  reads[0](windowRecord([userMessage("older")], "rev-2"));
+  await new Promise(setImmediate);
+  assert.equal(reads.length, 2);
+  reads[1](windowRecord([userMessage("final"), assistantMessage("finished")], "rev-3"));
+  await Promise.all([first, second, third]);
+  assert.equal(h.cache.get("conversation-1").state.transcript.revision, "rev-3");
+  assert.equal(h.cache.get("conversation-1").state.segments.flatMap(s => s.messages).length, 2);
+});
 
 test("revision conflict matcher accepts backend 409 and client guard text", () => {
   const { isKBrainRevisionConflict } = loadHistoryActions({});

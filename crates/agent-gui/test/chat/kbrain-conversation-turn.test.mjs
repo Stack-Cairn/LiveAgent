@@ -177,6 +177,16 @@ test("K-brain failed runs with no assistant content remain visible after final p
       response.end(`data: ${JSON.stringify({ version: "kbrain.agent.v1", seq: 2, conversation_id: "session", run_id: "run", type: "run.failed", created_at: new Date().toISOString(), payload: { state: "failed", error: "native web search is unsupported for Chat Completions" } })}\n\n`);
       return;
     }
+    if (request.url.startsWith("/v1/sessions/session/history")) {
+      const messages = [
+        { id: "user-failed", role: "user", content: [{ type: "text", text: "search the web" }] },
+        { id: "assistant-failed", role: "assistant", content: [{ type: "text", text: "native web search is unsupported for Chat Completions" }], stop_reason: "error" },
+      ];
+      const session = { id: "session", revision: "failed-history", model: { provider: "fixture", model: "model" }, messages, message_count: 2, last_seq: 2 };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ session, revision: "failed-history", oldest_offset: 0, has_more_before: false, total_message_count: 2, active_messages: messages }));
+      return;
+    }
     response.writeHead(404, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ error: `unexpected path ${request.url}`, body }));
   });
@@ -193,6 +203,12 @@ test("K-brain failed runs with no assistant content remain visible after final p
     server.close();
   });
 
+  const storage = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key),
+  };
   const context = { messages: [{ role: "user", content: "search the web", timestamp: 1 }] };
   let state = createConversationStateFromContext(context);
   let persisted;
@@ -278,7 +294,7 @@ for (const [mode, runTurn, decision, expectedDecision] of [
         if (mode === "agent-refresh-failed") return json({ error: "history temporarily unavailable" }, 503);
         const messages = [
           { id: "user-persisted", role: "user", content: [{ type: "text", text: "inspect" }] },
-          { id: "assistant-persisted", role: "assistant", content: [{ type: "text", text: "Hello" }], tool_calls: [{ id: "call", name: "read_file", arguments: { path: "README.md" } }] },
+          { id: "assistant-persisted", role: "assistant", content: [{ type: "text", text: "Hello" }], stop_reason: mode === "agent-failed" ? "error" : "stop", tool_calls: [{ id: "call", name: "read_file", arguments: { path: "README.md" } }] },
           { id: "tool-persisted", role: "tool", tool_call_id: "call", name: "read_file", content: [{ type: "text", text: expectedDecision === "reject" ? "permission rejected" : "file contents" }], stop_reason: expectedDecision === "reject" ? "error" : "stop" },
         ];
         const session = { id: "session", revision: "saved-revision", title: "Inspect", model: { provider: "fixture", model: "model" }, created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:01Z", message_count: messages.length, last_seq: sequence, messages,
@@ -412,11 +428,11 @@ for (const [mode, runTurn, decision, expectedDecision] of [
     const messages = persisted.state.segments.flatMap((segment) => segment.messages);
     if (mode === "agent-refresh-failed") {
       assert.equal(errors.length, 1);
-      assert.match(errors[0], /Reply completed, but history refresh failed:.*history temporarily unavailable/);
+      assert.match(errors[0], /Turn ended, but history refresh failed:.*history temporarily unavailable/);
       assert.equal(requests.filter((request) => request.path.endsWith("/runs")).length, 1);
     } else {
       assert.deepEqual(errors, mode === "agent-failed" ? ["fixture upstream unavailable"] : []);
-      if (mode !== "agent-failed") assert.equal(messages.find((message) => message.role === "user").id, "user-persisted");
+      assert.equal(messages.find((message) => message.role === "user").id, "user-persisted");
     }
     assert.equal(messages.find((message) => message.role === "assistant").stopReason, mode === "agent-failed" ? "error" : "stop");
     assert.ok(messages.some((message) => message.role === "toolResult" && message.toolCallId === "call"));
