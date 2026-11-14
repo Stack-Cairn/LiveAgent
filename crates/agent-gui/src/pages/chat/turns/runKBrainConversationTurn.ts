@@ -42,6 +42,7 @@ import {
   readGoalState as readStoredGoalState,
 } from "../../../lib/kbrain/goalStore";
 import { getKBrainHistoryWindow } from "../../../lib/kbrain/history";
+import { mergeUnacceptedKBrainInputs, protectKBrainInput } from "../../../lib/kbrain/historySync";
 import { getKBrainSessionId } from "../../../lib/kbrain/mapping";
 import { kbrainRunMcpServerIds } from "../../../lib/kbrain/mcp";
 import { canonicalKBrainToolPolicies } from "../../../lib/kbrain/toolPolicies";
@@ -344,13 +345,26 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
   const readLiveUsage = () => liveUsage;
   let attachClientRequestId: string | undefined;
   noteKBrainSubagentTurnStarted(params.conversationId);
+  // Keep the original message (including attachments and retry identity), rather
+  // than the prepared model-context copy which can strip local metadata.
+  const localInput = params
+    .getNextConversationState()
+    .segments.flatMap((segment) => segment.messages)
+    .filter((message) => message.role === "user")
+    .at(-1);
+  const acceptInput = localInput ? protectKBrainInput(params.conversationId, localInput) : () => {};
   try {
     const uploadsRoot = await resolveUploadStagingRoot();
     for (;;) {
       hookLifecycle.startTurn(round);
       latestGoalState = undefined;
       liveUsage = undefined;
+      let accepted = false;
       const assistant = await runKBrainTurn({
+        onAccepted: () => {
+          accepted = true;
+          acceptInput();
+        },
         locale: params.locale,
         conversationId: params.conversationId,
         sessionId: params.sessionId,
@@ -359,10 +373,10 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           params.clientRequestId?.trim() ||
           params.trajectoryMessageId ||
           crypto.randomUUID(),
-        turnId:
-          !attachClientRequestId && user && "id" in user && typeof user.id === "string"
-            ? user.id
-            : undefined,
+        turnId: !attachClientRequestId
+          ? (localInput?.id ??
+            (user && "id" in user && typeof user.id === "string" ? user.id : undefined))
+          : undefined,
         ...turnCommandParams(command, attachClientRequestId),
         onGoalUpdate: (state) => {
           latestGoalState = state;
@@ -561,6 +575,23 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
             });
           }
         },
+      }).catch(async (error: unknown) => {
+        // Stop can arrive before the acceptance response. The transport recovers
+        // and cancels that run, then throws; it still committed authoritative input.
+        if (accepted) {
+          try {
+            const history = await getKBrainHistoryWindow(params.conversationId);
+            params.applyConversationState(
+              mergeUnacceptedKBrainInputs(
+                params.conversationId,
+                buildConversationStateFromWindow(history),
+              ),
+            );
+          } catch {
+            // Keep the local projection; the idle watcher will retry reconciliation.
+          }
+        }
+        throw error;
       });
       const assistantCallIds = new Set(
         assistant.content.filter((block) => block.type === "toolCall").map((block) => block.id),
@@ -605,15 +636,18 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         projected,
         ...results.values(),
       ]);
-      if (projected.stopReason !== "error" && projected.stopReason !== "aborted") {
-        try {
-          const history = await getKBrainHistoryWindow(params.conversationId);
-          state = buildConversationStateFromWindow(history);
-        } catch (error) {
-          gatewayBridgeEvents.emitError(
-            `Reply completed, but history refresh failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+      // Cancelled/failed runs can also commit messages and background-task results.
+      // Replace from authority rather than appending replayed messages a second time.
+      try {
+        const history = await getKBrainHistoryWindow(params.conversationId);
+        state = mergeUnacceptedKBrainInputs(
+          params.conversationId,
+          buildConversationStateFromWindow(history),
+        );
+      } catch (error) {
+        gatewayBridgeEvents.emitError(
+          `Turn ended, but history refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
       params.applyConversationState(state);
       const goalState = readGoalState();

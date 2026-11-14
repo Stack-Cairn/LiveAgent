@@ -338,7 +338,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
 function findRetryTarget(rows: readonly TranscriptRow[], assistantIndex: number) {
   for (let index = assistantIndex - 1; index >= 0; index -= 1) {
     const row = rows[index];
-    if (row?.kind === "user") return row;
+    if (row?.kind === "user" && !row.backgroundNotice) return row;
   }
   return null;
 }

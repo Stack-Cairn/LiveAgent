@@ -702,6 +702,9 @@ export function rebuildTurnFromSnapshot(turn: Turn, parsed: ChatEntry[]): Turn {
       if (usedExistingEntries.has(entry) || entry.kind !== incoming.kind) {
         return false;
       }
+      if (entry.kind === "user" && incoming.kind === "user") {
+        return Boolean(entry.messageId) && entry.messageId === incoming.messageId;
+      }
       if (entry.kind === "tool_call" && incoming.kind === "tool_call") {
         return Boolean(entry.toolCall.id) && entry.toolCall.id === incoming.toolCall.id;
       }
@@ -728,7 +731,7 @@ export function rebuildTurnFromSnapshot(turn: Turn, parsed: ChatEntry[]): Turn {
   let user = turn.user;
   const entries: ChatEntry[] = [];
   for (const entry of parsed) {
-    if (entry.kind === "user") {
+    if (entry.kind === "user" && !entry.backgroundNotice) {
       if (!user) {
         user = { ...entry, id: seededUserEntryId(turn.runId || turn.key) };
       } else if (entry.messageId && user.messageId !== entry.messageId) {

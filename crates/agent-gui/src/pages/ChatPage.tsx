@@ -1848,12 +1848,33 @@ function ChatPageContent(props: ChatPageProps) {
     : undefined;
   useEffect(() => {
     if (!kBrainClient || !watchedKBrainSessionId) return;
-    return watchKBrainHistory(
-      kBrainClient,
-      watchedKBrainSessionId,
-      () => void sidebarStore.refresh(),
-    );
-  }, [watchedKBrainSessionId, kBrainClient, sidebarStore]);
+    const conversationId = currentConversationId;
+    return watchKBrainHistory(kBrainClient, watchedKBrainSessionId, () => {
+      void sidebarStore.refresh();
+      // Return the promise so failed reconciliation is retried on reconnect even
+      // if the backend revision stays unchanged during the outage.
+      return reloadConversationLatestRef.current(conversationId, { onlyIfIdle: true });
+    });
+  }, [watchedKBrainSessionId, currentConversationId, kBrainClient, sidebarStore]);
+  useEffect(() => {
+    if (!kBrainClient || !watchedKBrainSessionId || isSending) return;
+    // History notifications received during streaming are deliberately deferred.
+    // Reconcile again as soon as the local turn has released the runtime.
+    let disposed = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const reconcile = () => {
+      void reloadConversationLatestRef
+        .current(currentConversationId, { onlyIfIdle: true })
+        .catch(() => {
+          if (!disposed) retry = setTimeout(reconcile, 2_000);
+        });
+    };
+    reconcile();
+    return () => {
+      disposed = true;
+      clearTimeout(retry);
+    };
+  }, [currentConversationId, isSending, kBrainClient, watchedKBrainSessionId]);
   const composerCommandHost = useMemo<ComposerCommandHost>(
     () =>
       createGuiComposerCommandHost({

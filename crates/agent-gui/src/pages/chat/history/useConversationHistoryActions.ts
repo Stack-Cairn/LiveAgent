@@ -26,6 +26,11 @@ import {
   createConversationIdentity,
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
+import {
+  clearUnacceptedKBrainInputs,
+  hasUnacceptedKBrainInput,
+  mergeUnacceptedKBrainInputs,
+} from "../../../lib/kbrain/historySync";
 import { getProviderRuntimeBackend } from "../../../lib/providers/runtime/providerRuntimeConfig";
 import { type SelectedModel, serializeSelectedModelJson } from "../../../lib/settings";
 import type { ConversationHydrationStore } from "../conversations/conversationHydrationStore";
@@ -189,6 +194,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
 
   const earlierPageLoadsRef = useRef(new Map<string, Promise<void>>());
   const backgroundHydrationRef = useRef(new Map<string, Promise<void>>());
+  const idleReloadsRef = useRef(
+    new Map<
+      string,
+      {
+        requested: boolean;
+        promise: Promise<{ state: ConversationViewState; revision: string } | null>;
+      }
+    >(),
+  );
 
   function pruneIdleConversationCaches(extraKeepIds: Iterable<string> = []) {
     pruneIdleConversationRuntimeCaches({
@@ -335,7 +349,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       }
 
       if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
-      const state = buildConversationStateFromWindow(record);
+      const state = mergeUnacceptedKBrainInputs(id, buildConversationStateFromWindow(record));
       const selectedModel = resolveConversationSelectedModel(record.conversation.selectedModelJson);
       // Runtime may have advanced while metadata was loading (including streaming turns).
       const latestCached = fromSearch ? conversationRuntimeCacheRef.current.get(id) : undefined;
@@ -414,7 +428,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           record.conversation.selectedModelJson,
         );
         const entry = createConversationRuntimeEntry({
-          state: buildConversationStateFromWindow(record),
+          state: mergeUnacceptedKBrainInputs(id, buildConversationStateFromWindow(record)),
           sessionId: record.conversation.sessionId ?? record.conversation.id,
           createdAt: record.conversation.createdAt,
           workdir: record.conversation.cwd,
@@ -513,19 +527,64 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   // the retry, while the projection's own field stays nullable.
   async function reloadConversation(
     conversationId: string,
+    options?: { onlyIfIdle?: boolean },
   ): Promise<{ state: ConversationViewState; revision: string } | null> {
     const id = conversationId.trim();
     if (!id) return null;
+    if (!options?.onlyIfIdle) return readConversationSnapshot(id);
+    const pending = idleReloadsRef.current.get(id);
+    if (pending) {
+      // A terminal notification can arrive while an older snapshot is in flight.
+      // Coalesce bursts, then read once more so the newest notification is retained.
+      pending.requested = true;
+      return pending.promise;
+    }
+    const request = {
+      requested: false,
+      promise: Promise.resolve(null) as Promise<{
+        state: ConversationViewState;
+        revision: string;
+      } | null>,
+    };
+    idleReloadsRef.current.set(id, request);
+    request.promise = (async () => {
+      try {
+        let result: { state: ConversationViewState; revision: string } | null = null;
+        do {
+          request.requested = false;
+          result = await readConversationSnapshot(id, true);
+        } while (request.requested);
+        return result;
+      } finally {
+        idleReloadsRef.current.delete(id);
+      }
+    })();
+    return request.promise;
+  }
+
+  async function readConversationSnapshot(
+    id: string,
+    onlyIfIdle = false,
+  ): Promise<{ state: ConversationViewState; revision: string } | null> {
+    const before = conversationRuntimeCacheRef.current.get(id);
+    const canRefresh = () =>
+      !isConversationRunning(id) && !conversationRuntimeCacheRef.current.get(id)?.isSending;
+    if (onlyIfIdle && (!before || !canRefresh())) return null;
     const record = await getChatHistoryWindow({
       id,
       maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
       includeActiveSegment: true,
     });
     if (!record.activeSegment) return null;
-    const state = buildConversationStateFromWindow(record);
+    // A new turn, local edit, or another reload may have advanced this runtime
+    // while the snapshot was in flight. Never overwrite that newer projection.
+    if (onlyIfIdle && (!canRefresh() || conversationRuntimeCacheRef.current.get(id) !== before))
+      return null;
+    const state = mergeUnacceptedKBrainInputs(id, buildConversationStateFromWindow(record));
     const previous = conversationRuntimeCacheRef.current.get(id);
+    const errorMessage = hasUnacceptedKBrainInput(id) ? (previous?.errorMessage ?? null) : null;
     const entry = previous
-      ? { ...previous, state, errorMessage: null }
+      ? { ...previous, state, errorMessage }
       : createConversationRuntimeEntry({
           state,
           sessionId: record.conversation.sessionId ?? record.conversation.id,
@@ -539,7 +598,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       activeSegmentId: record.activeSegment.segmentId,
     });
     if (currentConversationIdRef.current === id) {
-      setErrorMessage(null);
+      setErrorMessage(errorMessage);
       syncVisibleConversationRuntime(id, entry);
     }
     markLocalHistorySnapshotSynced(id, record.updatedAt);
@@ -617,6 +676,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   // IPC delete); this evicts local caches and replaces the visible
   // conversation with a blank one when the deleted one was open.
   function cleanupDeletedConversation(id: string) {
+    clearUnacceptedKBrainInputs(id);
     conversationPersistenceCursorRef.current.delete(id);
     conversationRuntimeCacheRef.current.delete(id);
     deleteConversationArtifacts(id);

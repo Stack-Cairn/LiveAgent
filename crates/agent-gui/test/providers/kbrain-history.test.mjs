@@ -280,7 +280,7 @@ test("runtime notices saved before K-brain set origin still render as notices", 
   ];
   const texts = [...legacy, ...typed];
   const messages = texts.flatMap((text, index) => [
-    { id: `u-${index}`, role: "user", content: [{ type: "text", text }] },
+    { ...(index < legacy.length ? {} : { id: `u-${index}`, authored: true }), role: "user", content: [{ type: "text", text }] },
     { id: `a-${index}`, role: "assistant", content: [{ type: "text", text: "ok" }], provider: "fixture", model: "fixture-model" },
   ]);
   const session = makeSession({ tasks: [], messages, message_count: messages.length });

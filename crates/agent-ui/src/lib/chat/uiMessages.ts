@@ -113,6 +113,7 @@ export type UiMessage = {
   rounds?: UiRound[];
   messageIndex?: number;
   messageId?: string;
+  backgroundNotice?: boolean;
 };
 
 function cloneToolArgumentValue(value: unknown): unknown {
@@ -1582,6 +1583,10 @@ export function buildUiMessages(messages: Message[]): UiMessage[] {
         role: "user",
         text: getMessageText(message),
         attachments: getUserMessageAttachments(message as Message & Record<string, unknown>),
+        ...((message as Message & { liveAgentBackgroundNotice?: boolean })
+          .liveAgentBackgroundNotice === true
+          ? { backgroundNotice: true }
+          : {}),
         messageIndex: i,
       });
       i += 1;

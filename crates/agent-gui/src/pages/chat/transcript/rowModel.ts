@@ -817,7 +817,8 @@ export function createTranscriptRowModel(): TranscriptRowModel {
     for (const group of stitchCompactedReplies(prefixItems, classifyTimelineItem)) {
       const members = group.kind === "reply" ? group.items : [group.item];
       rows.push(...buildHistoryRows(members, retryTarget));
-      if (group.kind === "single" && group.item.kind === "user") retryTarget = group.item;
+      if (group.kind === "single" && group.item.kind === "user" && !group.item.backgroundNotice)
+        retryTarget = group.item;
     }
     return rows;
   };
@@ -900,7 +901,8 @@ export function createTranscriptRowModel(): TranscriptRowModel {
         const members = group.kind === "reply" ? group.items : [group.item];
         const itemRows = buildHistoryRows(members, retryTarget);
         historyRows.push(...itemRows);
-        if (group.kind === "single" && group.item.kind === "user") retryTarget = group.item;
+        if (group.kind === "single" && group.item.kind === "user" && !group.item.backgroundNotice)
+          retryTarget = group.item;
       }
       historyRowsCache = { items: historyItems, rows: historyRows };
     }

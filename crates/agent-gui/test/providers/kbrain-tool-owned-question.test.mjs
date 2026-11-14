@@ -172,7 +172,7 @@ test("an SSHManager host-key question stays on the SSHManager call and its resul
       model: "fixture",
       cancellation: { userStop: new AbortController() },
       buildPreparedContext: () => ({ messages: [{ role: "user", content: "run uname" }] }),
-      getNextConversationState: () => ({ messages: [] }),
+      getNextConversationState: () => ({ segments: [{ messages: [{ role: "user", id: "user-1", content: "run uname" }] }] }),
       batchLiveRoundsUpdate: (apply) => {
         rounds = apply(rounds);
       },

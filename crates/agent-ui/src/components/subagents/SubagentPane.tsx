@@ -5,6 +5,7 @@ import {
   subagentMetaParts,
   useTickingNow,
 } from "@liveagent/ui/components/chat/assistant-bubble/SubagentToolCard";
+import { BackgroundNoticeMessage } from "@liveagent/ui/components/chat/BackgroundNoticeMessage";
 import { UserMessageBubbleBody } from "@liveagent/ui/components/chat/UserMessageBubbleBody";
 import type { SubagentView } from "@liveagent/ui/contracts/subagentPane";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -393,7 +394,9 @@ function SubagentTranscriptBody({
     >
       <div className="space-y-4">
         {transcript.items.map((item, index) =>
-          item.role === "user" ? (
+          item.role === "user" && item.backgroundNotice ? (
+            <BackgroundNoticeMessage key={item.key} text={item.text} />
+          ) : item.role === "user" ? (
             <div key={item.key} className="chat-user-bubble-wrap relative ml-auto max-w-full">
               <UserMessageBubbleBody
                 messageKey={`subagent-${subagentId}-${item.key}`}

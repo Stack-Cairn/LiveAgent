@@ -265,6 +265,8 @@ export type KBrainTurnParams = {
   /** Every `subagent.*` and `trajectory.child.*` event, from any run of the session. */
   onSubagentEvent?: (event: KBrainEvent) => void;
   onStatus?: (status: string | null) => void;
+  /** Called only after the backend returns a valid accepted run identity. */
+  onAccepted?: () => void;
   content?: KBrainContentBlock[];
   onQuestionRequest?: (
     request: KBrainQuestionRequest,
@@ -737,13 +739,14 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     kbrainSessionId = await createSession();
     accepted = await startRunWhenIdle();
   }
+  if (accepted.conversation_id !== kbrainSessionId || !accepted.run_id) {
+    throw new Error("K-brain returned an invalid run identity");
+  }
+  params.onAccepted?.();
   if (params.signal.aborted) {
     await client.cancelRun(kbrainSessionId, accepted.run_id).catch(() => undefined);
     await waitForCancelledRun(client, kbrainSessionId, accepted.run_id, accepted.accepted_seq);
     throw abortError();
-  }
-  if (accepted.conversation_id !== kbrainSessionId || !accepted.run_id) {
-    throw new Error("K-brain returned an invalid run identity");
   }
   reportProgress({ stage: "preparing" });
 

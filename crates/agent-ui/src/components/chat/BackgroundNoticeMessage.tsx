@@ -62,7 +62,7 @@ export function BackgroundNoticeMessage(props: { text: string; className?: strin
       <span className="shrink-0 font-medium">{label}</span>
       <span
         className={cn(
-          "min-w-0 truncate text-muted-foreground/75",
+          "min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-muted-foreground/75",
           goalRound ? "text-sm" : "font-mono text-xs",
         )}
       >

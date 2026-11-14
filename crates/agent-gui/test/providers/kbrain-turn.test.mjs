@@ -588,6 +588,31 @@ test("Stop while waiting for a busy session aborts without starting a run", asyn
   assert.equal(calls.length, postsAtAbort, "no run may be submitted after Stop");
 });
 
+test("busy deadline releases status without accepting or resubmitting after failure", async (t) => {
+  storage.clear();
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const calls = [];
+  const statuses = [];
+  let accepted = 0;
+  await assert.rejects(runKBrainTurn({
+    ...baseParams,
+    fetch: busyFetch({ calls, busyCount: Number.POSITIVE_INFINITY }),
+    onAccepted: () => accepted++,
+    onStatus: status => {
+      statuses.push(status);
+      if (String(status).includes('"waiting_session"')) {
+        queueMicrotask(() => t.mock.timers.tick(180_001));
+      }
+    },
+  }), /该会话上一轮仍在运行/);
+  assert.equal(accepted, 0);
+  assert.equal(statuses.at(-1), null, "terminal failure must release the busy indicator");
+  assert.equal(calls.length, 2);
+  t.mock.timers.tick(180_001);
+  await new Promise(setImmediate);
+  assert.equal(calls.length, 2, "a failed send must not continue posting in the background");
+});
+
 test("other run conflicts are not retried as a busy session", async () => {
   storage.clear();
   const calls = [];
@@ -643,6 +668,33 @@ test("Stop mid-stream keeps the partial reply without the fetch AbortError text"
   assert.equal(result.errorMessage, undefined);
   assert.deepEqual(result.content, [{ type: "text", text: "partial reply" }]);
   assert.doesNotMatch(JSON.stringify(result), /Fetch is aborted/);
+});
+
+test("cancellation settle timeout releases the turn when the backend sends no terminal event", async (t) => {
+  storage.clear();
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const controller = new AbortController();
+  let subscriptions = 0;
+  let cancels = 0;
+  const fetch = async (url, init = {}) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === "/v1/sessions") return json({ id: "backend-session-1", model, messages: [], last_seq: 0 });
+    if (parsed.pathname.endsWith("/runs")) return json({ version: "kbrain.agent.v1", conversation_id: "backend-session-1", run_id: "run-1", accepted_seq: 1 }, 202);
+    if (parsed.pathname.endsWith("/cancel")) { cancels++; return json({ ok: true }); }
+    if (!parsed.pathname.endsWith("/events")) throw new Error(`unexpected URL ${url}`);
+    subscriptions++;
+    return new Response(new ReadableStream({
+      start(stream) {
+        init.signal.addEventListener("abort", () => stream.error(webKitFetchAbort()), { once: true });
+        if (subscriptions === 1) stream.enqueue(new TextEncoder().encode(event(2, "assistant.text.delta", { text: "partial" })));
+        else queueMicrotask(() => t.mock.timers.tick(10_001));
+      },
+    }), { headers: { "content-type": "text/event-stream" } });
+  };
+  const result = await runKBrainTurn({ ...baseParams, fetch, signal: controller.signal, onTextDelta: () => controller.abort() });
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(cancels, 1);
+  assert.equal(subscriptions, 2);
 });
 
 test("Stop before any output settles as an empty stopped turn, not raw abort text", async () => {

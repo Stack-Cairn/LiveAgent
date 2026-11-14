@@ -324,6 +324,11 @@ func isBackgroundNotice(message Message) bool {
 	if message.Origin != "" {
 		return message.Origin == OriginBackground
 	}
+	// Only legacy runtime notices lacked both origin and identity. Identified
+	// user messages may quote the same text and must remain user messages.
+	if message.Authored || strings.TrimSpace(message.ID) != "" {
+		return false
+	}
 	var text strings.Builder
 	for _, block := range message.Content {
 		if block.Type == "text" {
