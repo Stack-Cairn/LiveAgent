@@ -211,3 +211,128 @@ test("right dock offers the browser only on hosts that provide it", () => {
   // A browser tab synced from the desktop stays hidden on the web UI.
   assert.deepEqual(visible(false), []);
 });
+
+const cookieImport = loader.loadModule("@liveagent/ui/lib/browser/browserCookieImport.ts");
+const i18n = loader.loadModule("src/i18n/config.ts");
+
+test("sign-in import site filter parses hosts, URLs and separators", () => {
+  const parse = (input) => cookieImport.parseBrowserImportDomains(input);
+  assert.deepEqual(parse(""), []);
+  assert.deepEqual(parse("  ,  "), []);
+  assert.deepEqual(parse("GitHub.com, .example.org;a.test\nlocalhost"), [
+    "github.com",
+    "example.org",
+    "a.test",
+    "localhost",
+  ]);
+  assert.deepEqual(parse("https://app.example.com/login?x=1 example.com:8443/path"), [
+    "app.example.com",
+    "example.com",
+  ]);
+  assert.deepEqual(parse("github.com，gitlab.com、github.com"), ["github.com", "gitlab.com"]);
+  assert.deepEqual(parse("bad_host.com not..valid -dash.com ok-1.dev"), ["ok-1.dev"]);
+});
+
+test("sign-in import results summarise outcome and skip reasons", () => {
+  const view = (summary) =>
+    cookieImport.describeBrowserImportResult({
+      total: 0,
+      imported: 0,
+      failed: 0,
+      skipped: [],
+      keyError: null,
+      errors: [],
+      ...summary,
+    });
+  assert.equal(view({ total: 3, imported: 3 }).outcome, "success");
+  assert.equal(view({}).outcome, "nothing");
+  const partial = view({
+    total: 10,
+    imported: 4,
+    failed: 1,
+    skipped: [
+      { reason: "expired", count: 2 },
+      { reason: "appBoundEncryption", count: 3 },
+      { reason: "decryptFailed", count: 0 },
+    ],
+  });
+  assert.equal(partial.outcome, "partial");
+  assert.equal(partial.skippedTotal, 5);
+  assert.deepEqual(
+    partial.skipped.map((entry) => entry.reason),
+    ["appBoundEncryption", "expired"],
+  );
+  const denied = view({
+    total: 5,
+    skipped: [{ reason: "keyUnavailable", count: 5 }],
+    keyError: "  user denied  ",
+  });
+  assert.equal(denied.outcome, "failed");
+  assert.equal(denied.keyError, "user denied");
+  assert.equal(view({ total: 2, imported: 2, keyError: " " }).outcome, "success");
+
+  assert.equal(
+    cookieImport.browserImportSkipReasonKey("appBoundEncryption"),
+    "projectTools.browserImportSkip.appBoundEncryption",
+  );
+  assert.equal(
+    cookieImport.browserImportSkipReasonKey("somethingNew"),
+    "projectTools.browserImportSkip.other",
+  );
+  const source = {
+    browser: "chrome",
+    browserName: "Google Chrome",
+    profileDir: "Profile 1",
+    displayName: " ",
+  };
+  assert.equal(cookieImport.browserImportSourceKey(source), "chrome:Profile 1");
+  assert.equal(cookieImport.browserImportSourceLabel(source), "Google Chrome · Profile 1");
+});
+
+test("sign-in import and clear-data strings exist in every locale", () => {
+  const keys = [
+    "projectTools.browserImportMenu",
+    "projectTools.browserImportTitle",
+    "projectTools.browserImportKeychainNote",
+    "projectTools.browserImportPrivacyNote",
+    "projectTools.browserImportNoSourcesTitle",
+    "projectTools.browserImportKeyError",
+    "projectTools.browserClearDataMenu",
+    "projectTools.browserClearDataDescription",
+    ...["success", "partial", "nothing", "failed"].map(
+      (outcome) => `projectTools.browserImportOutcome.${outcome}`,
+    ),
+    ...[...cookieImport.BROWSER_IMPORT_SKIP_REASONS, "other"].map(
+      (reason) => `projectTools.browserImportSkip.${reason}`,
+    ),
+  ];
+  for (const locale of i18n.SUPPORTED_LOCALES) {
+    for (const key of keys) {
+      const value = i18n.t(key, locale);
+      assert.notEqual(value, key, `${locale} is missing ${key}`);
+      if (key.includes("Outcome.success") || key.includes("Outcome.partial")) {
+        assert.match(value, /\{count\}/, `${locale} ${key} keeps the {count} placeholder`);
+      }
+    }
+  }
+  assert.match(i18n.t("projectTools.browserImportSkip.appBoundEncryption", "en-US"), /Windows/);
+  assert.match(i18n.t("projectTools.browserImportSkip.appBoundEncryption", "zh-CN"), /Windows/);
+});
+
+test("browser pane host commands are not routed away as backend-owned commands", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const host = loader.loadModule("src/lib/host.ts");
+  const source = await readFile(
+    new URL("../../src/lib/browser/tauriEmbeddedBrowserClient.ts", import.meta.url),
+    "utf8",
+  );
+  const commands = [...source.matchAll(/invoke(?:<[^>]*>)?\(\s*"([a-z_]+)"/g)].map(
+    (match) => match[1],
+  );
+  assert.ok(commands.includes("embedded_browser_import_sources"));
+  assert.ok(commands.includes("embedded_browser_import_cookies"));
+  assert.ok(commands.includes("embedded_browser_clear_data"));
+  for (const command of commands) {
+    assert.equal(host.kBrainOwnedDesktopCommand(command), false, command);
+  }
+});

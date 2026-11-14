@@ -1,5 +1,5 @@
 //! 从本机已安装的 Chromium 系浏览器（Chrome/Edge/Chromium/Brave）导入登录态
-//! （cookies）到 LiveAgent 自有的浏览器 profile。用户在设置页手动触发，纯本地。
+//! （cookies）到内置浏览器面板的独立 profile。用户在面板菜单里手动触发，纯本地。
 //!
 //! 流程：
 //! 1. `list_source_profiles`：按平台枚举浏览器 user-data 目录，读 `Local State`
@@ -29,13 +29,14 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::Value;
 
-// 部分类型目前只有测试与 trait 签名引用；内置浏览器面板接入时（为其实现
-// ImportTarget / CdpCaller）直接从这里取用。
+// 部分类型目前只有测试与 trait 签名引用。
+pub(crate) use apply::IN_APP_BROWSER_NOT_RUNNING;
 #[allow(unused_imports)]
 pub use apply::{apply_cookies_via_cdp, ApplyReport, CdpCaller, ImportTarget};
 #[allow(unused_imports)]
 pub use discovery::{list_source_profiles, BrowserKind, CookieCrypto, SourceProfile};
-pub use keys::{KeyProvider, SystemKeyProvider};
+#[allow(unused_imports)]
+pub use keys::{import_key_provider, KeyProvider, SystemKeyProvider};
 pub use reader::read_cookies;
 
 /// 只导入指定站点的 cookie；`domains` 为空表示全部。匹配规则：host 等于该域名

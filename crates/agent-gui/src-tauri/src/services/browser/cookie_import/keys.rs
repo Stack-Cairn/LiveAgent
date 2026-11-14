@@ -26,6 +26,37 @@ impl KeyProvider for SystemKeyProvider {
     }
 }
 
+/// 仅 debug 构建：设置该环境变量后，导入改用固定的 Safe Storage 密码，
+/// 完全不访问系统钥匙串（用于在临时 HOME 下对夹具 profile 做手工验收）。
+/// release 构建里这段代码不存在。
+#[cfg(debug_assertions)]
+pub const DEBUG_FIXED_PASSWORD_ENV: &str = "LIVEAGENT_DEBUG_COOKIE_IMPORT_PASSWORD";
+
+#[cfg(debug_assertions)]
+struct FixedPasswordKeyProvider(Vec<u8>);
+
+#[cfg(debug_assertions)]
+impl KeyProvider for FixedPasswordKeyProvider {
+    fn safe_storage_password(&self, _browser: BrowserKind) -> Result<Option<Vec<u8>>, String> {
+        Ok(Some(self.0.clone()))
+    }
+
+    fn dpapi_unprotect(&self, _blob: &[u8]) -> Result<Vec<u8>, String> {
+        Err("调试用固定密钥不支持 DPAPI".to_string())
+    }
+}
+
+/// 导入命令使用的密钥来源：默认访问系统密钥设施。
+pub fn import_key_provider() -> std::sync::Arc<dyn KeyProvider> {
+    #[cfg(debug_assertions)]
+    if let Some(password) = std::env::var_os(DEBUG_FIXED_PASSWORD_ENV).filter(|v| !v.is_empty()) {
+        return std::sync::Arc::new(FixedPasswordKeyProvider(
+            password.to_string_lossy().into_owned().into_bytes(),
+        ));
+    }
+    std::sync::Arc::new(SystemKeyProvider)
+}
+
 #[cfg(target_os = "macos")]
 mod platform {
     use super::BrowserKind;

@@ -137,8 +137,9 @@ macro_rules! app_invoke_handler {
             commands::browser::embedded_browser_pick_element,
             commands::browser::embedded_browser_cancel_pick,
             commands::browser::embedded_browser_close,
-            commands::browser_cookie_import::browser_import_sources,
-            commands::browser_cookie_import::browser_import_cookies,
+            commands::browser::embedded_browser_clear_data,
+            commands::browser_cookie_import::embedded_browser_import_sources,
+            commands::browser_cookie_import::embedded_browser_import_cookies,
             // MCP
             commands::mcp::mcp_list_tools,
             commands::mcp::mcp_call_tool,

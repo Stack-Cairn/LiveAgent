@@ -1,6 +1,10 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import type {
+  BrowserImportSource,
+  BrowserImportSummary,
+} from "@liveagent/ui/lib/browser/browserCookieImport";
+import type {
   EmbeddedBrowserClient,
   EmbeddedBrowserFrame,
   EmbeddedBrowserListener,
@@ -72,6 +76,14 @@ export function createTauriEmbeddedBrowserClient(
     pickElement: () => invoke<EmbeddedBrowserPickedElement | null>("embedded_browser_pick_element"),
     cancelPick: () => invoke<void>("embedded_browser_cancel_pick"),
     close: () => invoke<void>("embedded_browser_close"),
+    listImportSources: () => invoke<BrowserImportSource[]>("embedded_browser_import_sources"),
+    importCookies: ({ browser, profileDir, domains }) =>
+      invoke<BrowserImportSummary>("embedded_browser_import_cookies", {
+        browser,
+        profileDir,
+        domains: domains?.length ? domains : null,
+      }),
+    clearBrowsingData: () => invoke<void>("embedded_browser_clear_data"),
     subscribe: (listener) => {
       listeners.add(listener);
       ensureListening();

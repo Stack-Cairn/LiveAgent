@@ -186,6 +186,15 @@ pub async fn embedded_browser_close(
     manager.close().await
 }
 
+/// 关闭面板浏览器并删除其 profile（cookies、缓存、导入的登录态）。
+#[tauri::command]
+pub async fn embedded_browser_clear_data(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.clear_browsing_data().await
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserExtensionInstallInfo {

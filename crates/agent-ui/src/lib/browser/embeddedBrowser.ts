@@ -3,6 +3,12 @@
 // its native embedded-browser commands; hosts without one pass no client and
 // the tool stays hidden.
 
+import type {
+  BrowserImportRequest,
+  BrowserImportSource,
+  BrowserImportSummary,
+} from "./browserCookieImport";
+
 export type EmbeddedBrowserTab = {
   id: string;
   url: string;
@@ -116,6 +122,12 @@ export type EmbeddedBrowserClient = {
   cancelPick: () => Promise<void>;
   close: () => Promise<void>;
   subscribe: (listener: EmbeddedBrowserListener) => () => void;
+  /** Lists local browser profiles that sign-in state can be imported from. */
+  listImportSources?: () => Promise<BrowserImportSource[]>;
+  /** Imports cookies from a local profile into this browser (starts it if needed). */
+  importCookies?: (request: BrowserImportRequest) => Promise<BrowserImportSummary>;
+  /** Closes the browser and deletes its profile (cookies, cache, site data). */
+  clearBrowsingData?: () => Promise<void>;
   /**
    * Host bridge into the chat composer. Absent (or returning false) when the
    * composer cannot take the content; the panel then disables the action.

@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use super::super::cdp::CdpConnection;
-use super::super::BrowserManager;
 
 /// 每批 cookie 数。`Storage.setCookies` 只要有一条字段非法就整批报错，批次
 /// 适中可把失败后的逐条重试控制在小范围。
@@ -38,33 +37,15 @@ impl CdpCaller for CdpConnection {
 }
 
 /// 导入目标：能给出"LiveAgent 自有 profile 浏览器"的 browser-level CDP 连接。
-/// 现由 `BrowserManager` 的 launcher 会话实现；内置浏览器面板落地后为其实现
-/// 此 trait 即可切换导入目标。
+/// 由内置浏览器面板（`EmbeddedBrowserManager`，独立 profile）实现；自动化工具
+/// 的 BrowserManager 可能驱动用户日常浏览器（extension 模式），不作为导入目标。
 #[async_trait]
 pub trait ImportTarget: Send + Sync {
     async fn cdp_caller(&self) -> Result<Arc<dyn CdpCaller>, String>;
 }
 
 pub(crate) const IN_APP_BROWSER_NOT_RUNNING: &str =
-    "内置浏览器未运行：请先打开 LiveAgent 的浏览器（独立 profile），再导入登录态。";
-
-#[async_trait]
-impl ImportTarget for BrowserManager {
-    async fn cdp_caller(&self) -> Result<Arc<dyn CdpCaller>, String> {
-        let guard = self.active.lock().await;
-        let active = guard
-            .as_ref()
-            .filter(|active| active.page.is_connected())
-            .ok_or_else(|| IN_APP_BROWSER_NOT_RUNNING.to_string())?;
-        // extension 模式驱动的是用户日常浏览器本身，导入既无意义也不应写入；
-        // 只接受 LiveAgent 自己拉起的独立 profile（launcher 模式）。
-        if active.launched.is_none() {
-            return Err(IN_APP_BROWSER_NOT_RUNNING.to_string());
-        }
-        let connection: Arc<dyn CdpCaller> = active.page.connection();
-        Ok(connection)
-    }
-}
+    "内置浏览器未运行：请先打开 LiveAgent 的浏览器面板，再导入登录态。";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ApplyReport {

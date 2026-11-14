@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use tokio::sync::{mpsc, Mutex};
 
 use super::cdp::{CdpConnection, CdpEvent};
+use super::cookie_import::{CdpCaller, ImportTarget};
 use super::fetch_browser_ws_url;
 use super::launcher::{discover_browser_executable, launch_browser_with, LaunchedBrowser};
 use crate::runtime::process::signal_process_tree_by_pid;
@@ -1118,6 +1119,28 @@ impl EmbeddedBrowserManager {
         Ok(())
     }
 
+    /// 清除浏览数据：关闭浏览器后删除整个面板 profile（cookies、缓存、站点
+    /// 存储、导入的登录态）。持有 lifecycle 锁，期间不会有并发启动。
+    pub async fn clear_browsing_data(&self) -> Result<(), String> {
+        let profile_dir = embedded_profile_dir()?;
+        let mut lifecycle = self.lifecycle.lock().await;
+        let core = self.core.lock().ok().and_then(|mut guard| guard.take());
+        // LaunchedBrowser::drop 同步终止进程树，之后 profile 不再被占用。
+        lifecycle.take();
+        self.record_child_pid(None);
+        let removed =
+            tauri::async_runtime::spawn_blocking(move || remove_profile_dir(&profile_dir))
+                .await
+                .map_err(|e| format!("清除浏览数据任务失败：{e}"))?;
+        drop(lifecycle);
+        if let Some(emitter) = core.and_then(|core| core.emitter.clone()) {
+            if let Ok(payload) = serde_json::to_value(self.state()) {
+                emitter(EMBEDDED_BROWSER_STATE_EVENT, payload);
+            }
+        }
+        removed
+    }
+
     /// app 真正退出时的清理钩子（Drop 不保证被调）。
     pub fn shutdown_cleanup(&self) {
         if let Ok(mut core) = self.core.lock() {
@@ -1139,6 +1162,37 @@ impl EmbeddedBrowserManager {
             *guard = pid;
         }
     }
+}
+
+/// 登录态导入的目标就是面板浏览器的 browser-level 连接：`Storage.setCookies`
+/// 不带 browserContextId 即写入默认上下文，也就是持久的面板 profile。未运行时
+/// 直接报错（不在这里隐式拉起浏览器），调用方先 `open` 再导入。
+#[async_trait::async_trait]
+impl ImportTarget for EmbeddedBrowserManager {
+    async fn cdp_caller(&self) -> Result<Arc<dyn CdpCaller>, String> {
+        let core = self
+            .live_core()
+            .ok_or_else(|| super::cookie_import::IN_APP_BROWSER_NOT_RUNNING.to_string())?;
+        let connection: Arc<dyn CdpCaller> = core.connection.clone();
+        Ok(connection)
+    }
+}
+
+/// 删除 profile 目录；浏览器刚被杀时个别文件可能还在释放，短暂重试。
+fn remove_profile_dir(dir: &std::path::Path) -> Result<(), String> {
+    let mut last_error = None;
+    for _ in 0..10 {
+        match std::fs::remove_dir_all(dir) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => last_error = Some(error),
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    Err(format!(
+        "清除浏览数据失败：{}",
+        last_error.map(|e| e.to_string()).unwrap_or_default()
+    ))
 }
 
 fn embedded_launch_args(viewport: EmbeddedViewport) -> Vec<String> {
@@ -1400,6 +1454,63 @@ fn handle_event(core: Arc<SessionCore>, event: CdpEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::browser::cookie_import::{
+        import_cookies, BrowserKind, CookieCrypto, CookieFilter, KeyProvider, SourceProfile,
+        IN_APP_BROWSER_NOT_RUNNING,
+    };
+
+    #[derive(Default)]
+    struct CountingKeys(StdMutex<usize>);
+
+    impl KeyProvider for CountingKeys {
+        fn safe_storage_password(&self, _: BrowserKind) -> Result<Option<Vec<u8>>, String> {
+            *self.0.lock().unwrap() += 1;
+            Ok(None)
+        }
+
+        fn dpapi_unprotect(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            *self.0.lock().unwrap() += 1;
+            Err("unused".to_string())
+        }
+    }
+
+    #[test]
+    fn import_target_requires_running_panel_browser_before_touching_keys() {
+        let manager = EmbeddedBrowserManager::default();
+        let tmp = tempfile::tempdir().unwrap();
+        let keys = Arc::new(CountingKeys::default());
+        let profile = SourceProfile {
+            browser: BrowserKind::Chrome,
+            browser_name: "Google Chrome".to_string(),
+            profile_dir: "Default".to_string(),
+            display_name: "Person 1".to_string(),
+            user_data_dir: tmp.path().to_path_buf(),
+            crypto: CookieCrypto::current(),
+        };
+        tauri::async_runtime::block_on(async {
+            let error = match ImportTarget::cdp_caller(&manager).await {
+                Ok(_) => panic!("a stopped panel browser must not be an import target"),
+                Err(error) => error,
+            };
+            assert_eq!(error, IN_APP_BROWSER_NOT_RUNNING);
+            let error = import_cookies(&manager, profile, keys.clone(), CookieFilter::default())
+                .await
+                .unwrap_err();
+            assert_eq!(error, IN_APP_BROWSER_NOT_RUNNING);
+        });
+        assert_eq!(*keys.0.lock().unwrap(), 0, "no key store access");
+    }
+
+    #[test]
+    fn remove_profile_dir_deletes_tree_and_tolerates_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = tmp.path().join("embedded-browser-profile");
+        std::fs::create_dir_all(profile.join("Default/Network")).unwrap();
+        std::fs::write(profile.join("Default/Network/Cookies"), b"x").unwrap();
+        remove_profile_dir(&profile).unwrap();
+        assert!(!profile.exists());
+        remove_profile_dir(&profile).unwrap();
+    }
 
     fn key(kind: &str, key: &str, code: &str, key_code: u32, modifiers: u32) -> EmbeddedKeyInput {
         EmbeddedKeyInput {
@@ -1792,6 +1903,36 @@ mod e2e_tests {
                 .unwrap();
             assert_eq!(&bytes[1..4], b"PNG");
 
+            // 登录态导入目标：经面板浏览器的 browser-level 连接写入 cookie，
+            // 页面刷新后可见。
+            let caller = ImportTarget::cdp_caller(&manager)
+                .await
+                .expect("running panel browser is an import target");
+            let applied = crate::services::browser::cookie_import::apply_cookies_via_cdp(
+                caller.as_ref(),
+                &[json!({
+                    "name": "imported_session",
+                    "value": "fixture",
+                    "url": format!("http://127.0.0.1:{port}/"),
+                })],
+            )
+            .await;
+            assert_eq!((applied.applied, applied.failed), (1, 0));
+            manager.history(None, "reload").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let (_, session_id) = core.active_session().unwrap();
+            let cookie = core
+                .call(
+                    Some(&session_id),
+                    "Runtime.evaluate",
+                    json!({ "expression": "document.cookie", "returnByValue": true }),
+                )
+                .await
+                .unwrap();
+            assert!(cookie["result"]["value"]
+                .as_str()
+                .is_some_and(|value| value.contains("imported_session=fixture")));
+
             // 标签页：新开第二页再关闭。
             let state = manager
                 .new_tab(Some(format!("http://127.0.0.1:{port}/second")))
@@ -1814,6 +1955,12 @@ mod e2e_tests {
                 .map(|status| status.success())
                 .unwrap_or(false);
             assert!(!alive, "browser process {pid} should be gone");
+
+            // 清除浏览数据：删除整个面板 profile。
+            let profile_dir = embedded_profile_dir().unwrap();
+            assert!(profile_dir.exists());
+            manager.clear_browsing_data().await.unwrap();
+            assert!(!profile_dir.exists());
         });
     }
 }

@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Camera,
+  Download,
   ExternalLink,
   Globe,
   Loader2,
@@ -10,6 +11,7 @@ import {
   Plus,
   RotateCw,
   SquareMousePointer,
+  Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -22,6 +24,7 @@ import {
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -45,12 +48,15 @@ import {
 } from "../../lib/browser/embeddedBrowser";
 import { cn } from "../../lib/shared/utils";
 import { Button, buttonVariants } from "../ui/button";
+import { useConfirmDialog } from "../ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { EmbeddedBrowserImportDialog } from "./EmbeddedBrowserImportDialog";
 
 export type EmbeddedBrowserPanelProps = {
   active: boolean;
@@ -99,6 +105,8 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
   const [hasFrame, setHasFrame] = useState(false);
   const [viewFocused, setViewFocused] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const viewRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -376,6 +384,40 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
       showNotice({ tone: "error", text: errorMessage(error) });
     }
   }, [client, showNotice]);
+
+  const importClient = useMemo(() => {
+    const listImportSources = client?.listImportSources;
+    const importCookies = client?.importCookies;
+    return listImportSources && importCookies ? { listImportSources, importCookies } : null;
+  }, [client]);
+
+  // Imported cookies only reach a page on its next request: reload what the
+  // user is looking at so they see the signed-in version.
+  const reloadAfterImport = useCallback(() => {
+    showNotice({ tone: "info", text: t("projectTools.browserImportReloaded") });
+    const tabId = activeTabIdRef.current;
+    if (!client || !tabId) return;
+    client.history("reload", tabId).then(setState, () => {});
+  }, [client, showNotice, t]);
+
+  const clearBrowsingData = useCallback(async () => {
+    if (!client?.clearBrowsingData) return;
+    const confirmed = await confirm({
+      title: t("projectTools.browserClearDataTitle"),
+      description: t("projectTools.browserClearDataDescription"),
+      confirmLabel: t("projectTools.browserClearDataConfirm"),
+      cancelLabel: t("projectTools.browserImportCancel"),
+      preferCancel: true,
+    });
+    if (!confirmed) return;
+    try {
+      await client.clearBrowsingData();
+      setState(await client.getState());
+      showNotice({ tone: "info", text: t("projectTools.browserClearDataDone") });
+    } catch (error) {
+      showNotice({ tone: "error", text: errorMessage(error) });
+    }
+  }, [client, confirm, showNotice, t]);
 
   // --- Input forwarding -------------------------------------------------
 
@@ -749,6 +791,19 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
               <X className="size-3.5" />
               {t("projectTools.browserCloseBrowser")}
             </DropdownMenuItem>
+            {importClient || client?.clearBrowsingData ? <DropdownMenuSeparator /> : null}
+            {importClient ? (
+              <DropdownMenuItem className="gap-2" onSelect={() => setImportOpen(true)}>
+                <Download className="size-3.5" />
+                {t("projectTools.browserImportMenu")}
+              </DropdownMenuItem>
+            ) : null}
+            {client?.clearBrowsingData ? (
+              <DropdownMenuItem className="gap-2" onSelect={() => void clearBrowsingData()}>
+                <Trash2 className="size-3.5" />
+                {t("projectTools.browserClearDataMenu")}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -882,6 +937,14 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
           </div>
         ) : null}
       </div>
+      {importOpen && importClient ? (
+        <EmbeddedBrowserImportDialog
+          client={importClient}
+          onClose={() => setImportOpen(false)}
+          onImported={reloadAfterImport}
+        />
+      ) : null}
+      {confirmDialog}
     </div>
   );
 }
