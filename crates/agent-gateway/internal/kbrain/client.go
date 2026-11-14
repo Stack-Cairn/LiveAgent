@@ -128,7 +128,8 @@ type Message struct {
 	CreatedAt    time.Time         `json:"created_at,omitempty"`
 	// Origin is "background" on a user-role notice K-brain delivered on its own
 	// (a wait result, a process exit, a background task report).
-	Origin string `json:"origin,omitempty"`
+	Origin   string `json:"origin,omitempty"`
+	Authored bool   `json:"authored,omitempty"`
 }
 
 // OriginBackground marks a user-role message the user did not write.

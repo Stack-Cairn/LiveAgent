@@ -15,6 +15,18 @@ const toolPreview = loader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
 const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
 const askShared = loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
+test("final projection keeps notices and their continuation, without merging repeated prompts", () => {
+  const user = (id, extra = {}) => ({ kind: "user", text: "same prompt", attachments: [], messageRef: { messageId: id }, ...extra });
+  const assistant = (text) => ({ kind: "assistant", rounds: [{ round: 1, blocks: [{ kind: "text", text }] }] });
+  const state = { transcript: { items: [user("u1"), assistant("before"), user("notice", { backgroundNotice: true, text: "cancelled report" }), assistant("after"), user("u2"), assistant("second reply")] } };
+  const entries = buildGatewayFinalProjectionEntries({ state, userMessage: { role: "user", id: "u1", content: "same prompt" }, runId: "r1" });
+  assert.deepEqual(entries.map((e) => e.text), ["same prompt", "before", "cancelled report", "after"]);
+  assert.equal(entries[2].backgroundNotice, true);
+  assert.equal(entries[2].messageId, "notice");
+  const missing = buildGatewayFinalProjectionEntries({ state, userMessage: { role: "user", id: "missing", content: "same prompt" }, runId: "missing" });
+  assert.deepEqual(missing.map((e) => e.text), ["same prompt"], "an absent identity must not select a different same-text input");
+});
+
 test("gateway runtime snapshot projects live rounds into chat entries", () => {
   const entries = buildGatewayRuntimeSnapshotEntries({
     userMessage: {

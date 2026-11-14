@@ -50,6 +50,36 @@ func TestHistoryMessagesJSONMarksBackgroundNotices(t *testing.T) {
 	}
 }
 
+func TestHistoryMessagesJSONPreservesUserNoticeQuotes(t *testing.T) {
+	text := "[subagent sub-1 cancelled] Review history\n\ncontext canceled"
+	messages := []Message{
+		{ID: "user-first", Role: "user", Content: []ContentBlock{{Type: "text", Text: text}}},
+		{ID: "user-second", Role: "user", Content: []ContentBlock{{Type: "text", Text: text}}},
+		{ID: "notice-third", Role: "user", Origin: OriginBackground, Content: []ContentBlock{{Type: "text", Text: text}}},
+		{Role: "user", Content: []ContentBlock{{Type: "text", Text: text}}},
+		{Role: "user", Origin: "user", Content: []ContentBlock{{Type: "text", Text: text}}},
+	}
+	raw, err := historyMessagesJSON(messages, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != len(messages) {
+		t.Fatalf("message count = %d, want %d", len(out), len(messages))
+	}
+	for i, want := range []bool{false, false, true, true, false} {
+		if got := out[i]["liveAgentBackgroundNotice"] == true; got != want {
+			t.Errorf("entry %d background notice = %v, want %v", i, got, want)
+		}
+		if out[i]["messageIndex"] != float64(i) {
+			t.Errorf("entry %d lost canonical offset: %v", i, out[i])
+		}
+	}
+}
+
 // K-brain 0.107.17 and earlier saved these notices without origin (#1211).
 func TestHistoryMessagesJSONMarksLegacyBackgroundNotices(t *testing.T) {
 	cases := []struct {

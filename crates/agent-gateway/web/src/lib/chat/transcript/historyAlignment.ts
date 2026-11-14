@@ -26,7 +26,7 @@ export function groupHistoryEntriesIntoTurns(entries: ChatEntry[]): HistoryTurn[
   const turns: HistoryTurn[] = [];
   let current: HistoryTurn | null = null;
   for (const entry of entries) {
-    if (entry.kind === "user") {
+    if (entry.kind === "user" && !entry.backgroundNotice) {
       if (current) {
         turns.push(current);
       }
@@ -123,6 +123,49 @@ function enrichUserSlot(user: UserChatEntry, historyUser: UserChatEntry): UserCh
   return next;
 }
 
+// Quiet refreshes have no revision cursor. Only accept payload extensions for
+// content already shown after a background notice; a same-sized older snapshot
+// cannot establish that its prose or tool result is newer.
+function isPayloadExtension(current: unknown, incoming: unknown): boolean {
+  if (current === incoming) return true;
+  if (typeof current === "string" && typeof incoming === "string") {
+    return incoming.startsWith(current);
+  }
+  if (Array.isArray(current) && Array.isArray(incoming)) {
+    return (
+      incoming.length >= current.length &&
+      current.every((value, index) => isPayloadExtension(value, incoming[index]))
+    );
+  }
+  if (current && incoming && typeof current === "object" && typeof incoming === "object") {
+    const incomingRecord = incoming as Record<string, unknown>;
+    return Object.entries(current).every(
+      ([key, value]) => value === undefined || isPayloadExtension(value, incomingRecord[key]),
+    );
+  }
+  return false;
+}
+
+function mergeNoticeContinuation(current: ChatEntry[], incoming: ChatEntry[]): ChatEntry[] {
+  const currentIndexes = new Map(current.map((entry, index) => [entry.id, index]));
+  const merged: ChatEntry[] = [];
+  let cursor = 0;
+  for (const entry of incoming) {
+    const index = currentIndexes.get(entry.id);
+    if (index === undefined) {
+      merged.push(entry);
+      continue;
+    }
+    if (index < cursor) continue;
+    merged.push(...current.slice(cursor, index));
+    const previous = current[index];
+    merged.push(isPayloadExtension(previous, entry) ? entry : previous);
+    cursor = index + 1;
+  }
+  merged.push(...current.slice(cursor));
+  return merged;
+}
+
 // Upgrades a stream turn's payloads with their persisted twins (the live
 // path trims large arguments/results; history carries the full content).
 // Matching is by tool-call identity, falling back to same-kind ordinal —
@@ -155,6 +198,43 @@ function enrichTurnFromHistory(turn: Turn, historyTurn: HistoryTurn): Turn {
     };
   }
 
+  // A settled run can gain a background continuation after its stream closed.
+  // Preserve its streamed prefix and merge the continuation by stable slots.
+  // Snapshots may lag in either entry count or payload length.
+  const noticeId = (entry: ChatEntry) =>
+    entry.kind === "user" && entry.backgroundNotice ? stableUserMessageId(entry) : "";
+  const historyNoticeIndex = historyTurn.entries.findIndex((entry) => noticeId(entry) !== "");
+  const currentNoticeIndex = next.entries.findIndex((entry) => noticeId(entry) !== "");
+  if (
+    next.phase === "settled" &&
+    next.user &&
+    historyTurn.user &&
+    stableUserMessageId(next.user) !== "" &&
+    stableUserMessageId(next.user) === stableUserMessageId(historyTurn.user) &&
+    historyNoticeIndex >= 0 &&
+    (currentNoticeIndex < 0 ||
+      noticeId(next.entries[currentNoticeIndex]) ===
+        noticeId(historyTurn.entries[historyNoticeIndex]))
+  ) {
+    const boundary = currentNoticeIndex < 0 ? next.entries.length : currentNoticeIndex;
+    const current = next.entries.slice(boundary);
+    const rebuilt = rebuildTurnFromSnapshot(
+      { ...next, entries: current },
+      historyTurn.entries.slice(historyNoticeIndex),
+    );
+    const entries = [
+      ...next.entries.slice(0, boundary),
+      ...mergeNoticeContinuation(current, rebuilt.entries),
+    ];
+    if (safeStringify(entries) !== safeStringify(next.entries)) {
+      next = { ...next, entries, contentConfirmed: true };
+    }
+  }
+  // The generic tool enrichment below is for the streamed prefix. Continuation
+  // payloads already passed the extension check above, or are awaiting an
+  // overlapping snapshot; never overwrite them through the ordinal fallback.
+  const continuationIndex = next.entries.findIndex((entry) => noticeId(entry) !== "");
+
   const historyToolCalls = historyTurn.entries.filter(
     (entry): entry is Extract<ChatEntry, { kind: "tool_call" }> => entry.kind === "tool_call",
   );
@@ -168,7 +248,11 @@ function enrichTurnFromHistory(turn: Turn, historyTurn: HistoryTurn): Turn {
   let entries: ChatEntry[] | null = null;
   let toolCallOrdinal = 0;
   let toolResultOrdinal = 0;
-  for (let index = 0; index < next.entries.length; index += 1) {
+  for (
+    let index = 0;
+    index < (continuationIndex < 0 ? next.entries.length : continuationIndex);
+    index += 1
+  ) {
     const entry = next.entries[index];
     if (!entry) continue;
 
@@ -486,7 +570,7 @@ function alignEnrich(params: {
   turns: Turn[];
   entries: ChatEntry[];
 }): AlignResult {
-  const unchanged: AlignResult = {
+  let unchanged: AlignResult = {
     historyEntries: params.historyEntries,
     turns: params.turns,
     changed: false,
@@ -498,11 +582,81 @@ function alignEnrich(params: {
     return unchanged;
   }
 
-  const historyTurns = groupHistoryEntriesIntoTurns(params.entries);
+  // Origin may arrive after the first projection. Correct only exact message
+  // identities, including in a suffix window, before counting user turns.
+  const knownNoticeIds = new Set(
+    [
+      ...params.historyEntries,
+      ...params.entries,
+      ...params.turns.flatMap((turn) => [...(turn.user ? [turn.user] : []), ...turn.entries]),
+    ].flatMap((entry) =>
+      entry.kind === "user" && entry.backgroundNotice && stableUserMessageId(entry)
+        ? [stableUserMessageId(entry)]
+        : [],
+    ),
+  );
+  const applyKnownOrigins = (entries: ChatEntry[]) => {
+    let changed = false;
+    const corrected = entries.map((entry) => {
+      if (
+        entry.kind === "user" &&
+        !entry.backgroundNotice &&
+        knownNoticeIds.has(stableUserMessageId(entry))
+      ) {
+        changed = true;
+        return { ...entry, backgroundNotice: true };
+      }
+      return entry;
+    });
+    return changed ? corrected : entries;
+  };
+  const historyEntries = applyKnownOrigins(params.historyEntries);
+  let incomingEntries = applyKnownOrigins(params.entries);
+  if (historyEntries !== params.historyEntries) {
+    unchanged = { ...unchanged, historyEntries, changed: true };
+  }
+  const historyTurns = groupHistoryEntriesIntoTurns(incomingEntries);
+  // A paged suffix can start at a known notice, outside its real input. Recover
+  // that input only through an exact notice identity, preserving the prefix and
+  // applying the same extension checks used for complete history windows.
+  const headless = historyTurns[0];
+  const anchor = headless?.user === null ? headless.entries[0] : undefined;
+  if (anchor?.kind === "user" && anchor.backgroundNotice && stableUserMessageId(anchor)) {
+    const candidates = [...groupHistoryEntriesIntoTurns(historyEntries), ...params.turns].filter(
+      (turn) => turn.user !== null,
+    );
+    const matches = candidates.flatMap((turn) => {
+      const index = turn.entries.findIndex(
+        (entry) =>
+          entry.kind === "user" &&
+          entry.backgroundNotice &&
+          stableUserMessageId(entry) === stableUserMessageId(anchor),
+      );
+      return index < 0 ? [] : [{ turn, index }];
+    });
+    if (matches.length === 1) {
+      const { turn, index } = matches[0];
+      const seed: Turn = {
+        key: "history-notice-anchor",
+        runId: "",
+        clientRequestId: "",
+        phase: "settled",
+        folded: false,
+        user: turn.user,
+        entries: turn.entries,
+      };
+      const enriched = enrichTurnFromHistory(seed, {
+        user: turn.user,
+        entries: [...turn.entries.slice(0, index), ...headless.entries],
+      });
+      historyTurns[0] = { user: turn.user, entries: enriched.entries };
+      incomingEntries = flattenHistoryTurns(historyTurns);
+    }
+  }
   const historyWithUser = historyTurns.filter((turn) => turn.user !== null);
   const storeWithUser = params.turns.filter((turn) => turn.user !== null);
-  const regionUserCount = params.historyEntries.reduce(
-    (count, entry) => (entry.kind === "user" ? count + 1 : count),
+  const regionUserCount = historyEntries.reduce(
+    (count, entry) => (entry.kind === "user" && !entry.backgroundNotice ? count + 1 : count),
     0,
   );
 
@@ -510,7 +664,7 @@ function alignEnrich(params: {
     return unchanged;
   }
   if (historyWithUser.length > regionUserCount + storeWithUser.length) {
-    return replaceAll(params.entries, params.turns, historyTurns);
+    return replaceAll(incomingEntries, params.turns, historyTurns);
   }
 
   // messageRef guard: conflicting persisted identities mean the store turns
@@ -521,7 +675,7 @@ function alignEnrich(params: {
     const storeRef = storeTurn?.user?.messageRef?.messageId;
     const historyRef = historyTurn?.user?.messageRef?.messageId;
     if (storeRef && historyRef && storeRef !== historyRef) {
-      return replaceAll(params.entries, params.turns, historyTurns);
+      return replaceAll(incomingEntries, params.turns, historyTurns);
     }
   }
 
@@ -545,7 +699,7 @@ function alignEnrich(params: {
     if (turns === params.turns) {
       return unchanged;
     }
-    return { historyEntries: params.historyEntries, turns, changed: true };
+    return { historyEntries, turns, changed: true };
   }
 
   // Full window: everything older than the paired turns renders from
@@ -560,7 +714,15 @@ function alignEnrich(params: {
 
   const historyChanged =
     nextHistoryEntries.length !== params.historyEntries.length ||
-    nextHistoryEntries.some((entry, index) => params.historyEntries[index]?.id !== entry.id);
+    nextHistoryEntries.some((entry, index) => {
+      const previous = params.historyEntries[index];
+      return (
+        previous?.id !== entry.id ||
+        (entry.kind === "user" &&
+          previous?.kind === "user" &&
+          entry.backgroundNotice !== previous.backgroundNotice)
+      );
+    });
 
   if (!historyChanged && turns === params.turns) {
     return unchanged;

@@ -30,7 +30,7 @@ export type GatewayRuntimeSnapshotEntry = SharedChatEntry<
   ToolCall,
   ToolResultMessage,
   GatewayAssistantMeta,
-  { messageId: string }
+  { messageId: string; backgroundNotice?: boolean }
 >;
 
 export type GatewayRuntimeSnapshotInput = {
@@ -242,6 +242,10 @@ function buildUserEntry(
     text,
     attachments,
     messageId,
+    ...((message as Message & { liveAgentBackgroundNotice?: boolean }).liveAgentBackgroundNotice ===
+    true
+      ? { backgroundNotice: true }
+      : {}),
   };
 }
 
@@ -283,7 +287,7 @@ export function buildGatewayFinalProjectionEntries(
   let userIndex = input.state.transcript.items.findIndex(
     (item) => item.kind === "user" && item.messageRef?.messageId === userMessageId,
   );
-  if (userIndex < 0 && userEntry) {
+  if (userIndex < 0 && userEntry && !userMessageId) {
     for (let index = input.state.transcript.items.length - 1; index >= 0; index -= 1) {
       const item = input.state.transcript.items[index];
       if (
@@ -305,7 +309,17 @@ export function buildGatewayFinalProjectionEntries(
     const item = input.state.transcript.items[index];
     if (!item) continue;
     if (item.kind === "user") {
-      break;
+      if (!item.backgroundNotice) break;
+      const messageId = item.messageRef?.messageId || item.key;
+      entries.push({
+        id: messageId,
+        kind: "user",
+        text: item.text,
+        attachments: item.attachments,
+        messageId,
+        backgroundNotice: true,
+      });
+      continue;
     }
     if (item.kind !== "assistant") {
       continue;

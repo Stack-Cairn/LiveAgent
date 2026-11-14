@@ -100,6 +100,17 @@ const idleLive = {
   isSettled: false,
 };
 
+test("background notices never replace the real user as a reply retry target", () => {
+  const user = userItem("u1");
+  const notice = { ...userItem("n1", "cancelled report"), backgroundNotice: true };
+  const snapshot = createTranscriptRowModel().build([
+    user, assistantItem("a1", [round("r1", "before")]), notice,
+    assistantItem("a2", [round("r2", "after")]),
+  ], idleLive);
+  assert.equal(footerRows(snapshot).length, 2);
+  for (const row of footerRows(snapshot)) assert.equal(row.unit.retryTarget, user);
+});
+
 test("background work traces only derive elapsed time from real history clocks", () => {
   const end = Date.parse("2026-10-19T10:00:00Z");
   for (const start of [0, 2, 3, NaN, end + 1000, end - 8000]) {
