@@ -127,6 +127,11 @@ impl PageSession {
             .await
     }
 
+    /// browser-level CDP 连接（供 cookie 导入等不依附页面 session 的调用复用）。
+    pub(crate) fn connection(&self) -> Arc<CdpConnection> {
+        Arc::clone(&self.connection)
+    }
+
     pub(crate) fn is_connected(&self) -> bool {
         !self.connection.is_closed()
     }

@@ -10,6 +10,7 @@
 
 mod bridge;
 mod cdp;
+pub mod cookie_import;
 pub mod embedded;
 mod launcher;
 mod page;

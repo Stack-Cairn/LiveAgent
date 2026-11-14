@@ -84,6 +84,10 @@ chardetng = "0.1.17"
 # MCP OAuth（docs/design/mcp-oauth.md）：token 只进 OS keystore；PKCE/state 熵源。
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 getrandom = "0.3.4"
+# 浏览器登录态导入（services/browser/cookie_import）：解密 Chromium Cookies。
+aes = "0.9.1"
+cbc = "0.2.1"
+aes-gcm = { version = "0.11.0", default-features = false, features = ["aes", "alloc"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSettings", "UNNotificationSound", "UNNotificationTrigger", "UNNotificationResponse"] }
@@ -118,6 +122,8 @@ windows-sys = { version = "0.61", features = [
     # （MIB_IPFORWARDROW 需要 WinSock 特性）。
     "Win32_NetworkManagement_IpHelper",
     "Win32_Networking_WinSock",
+    # 浏览器登录态导入：DPAPI 解封 Chromium os_crypt 密钥（CryptUnprotectData）。
+    "Win32_Security_Cryptography",
 ] }
 
 [dev-dependencies]
