@@ -10,6 +10,7 @@
 
 mod bridge;
 mod cdp;
+pub mod embedded;
 mod launcher;
 mod page;
 mod snapshot;

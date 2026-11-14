@@ -13,7 +13,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { NO_LEASED_RIGHT_DOCK_TOOLS, type RightDockLeasedToolKind } from "./rightDockModel";
+import {
+  anyRightDockStandaloneToolAvailable,
+  NO_LEASED_RIGHT_DOCK_TOOLS,
+  type RightDockLeasedToolKind,
+  rightDockStandaloneToolAvailable,
+  rightDockToolOffered,
+} from "./rightDockModel";
 import { RIGHT_DOCK_TOOL_DEFINITIONS, type RightDockSingletonTabKind } from "./rightDockRegistry";
 
 export type RightDockToolDragStartEvent = {
@@ -42,6 +48,7 @@ type RightDockCreateMenuProps = RightDockLauncherActions & {
   terminalDisabledMessage?: string;
   projectReady: boolean;
   tunnelAvailable: boolean;
+  browserAvailable?: boolean;
   creating: boolean;
 };
 
@@ -52,6 +59,7 @@ type RightDockChooserProps = RightDockLauncherActions & {
   tunnelDisabledMessage?: string;
   projectReady: boolean;
   tunnelAvailable: boolean;
+  browserAvailable?: boolean;
   creating: boolean;
   loading: boolean;
   error: string | null;
@@ -77,6 +85,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
     terminalDisabledMessage,
     projectReady,
     tunnelAvailable,
+    browserAvailable = false,
     creating,
     onCreateTerminal,
     onOpenNewTerminalInWorkbench,
@@ -84,6 +93,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
     onOpenBackgroundTasks,
   } = props;
   const { t } = useLocale();
+  const availability = { tunnelAvailable, browserAvailable };
 
   const terminalItem =
     shellOptions.length > 1 ? (
@@ -125,7 +135,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       {/* Native trigger button styled via buttonVariants: Base UI Trigger
           renders a plain <button>, so this stays identical on GUI and web. */}
       <DropdownMenuTrigger
-        disabled={!(projectReady || tunnelAvailable) || creating}
+        disabled={!(projectReady || anyRightDockStandaloneToolAvailable(availability)) || creating}
         title={t("projectTools.newProjectTool")}
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
@@ -147,19 +157,25 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
             {t("workbench.openNewTerminalInSplit")}
           </DropdownMenuItem>
         ) : null}
-        {RIGHT_DOCK_TOOL_DEFINITIONS.filter((definition) => !leasedTools.has(definition.kind)).map(
-          (definition) => (
-            <DropdownMenuItem
-              key={definition.kind}
-              onSelect={() => onStartTool(definition.kind)}
-              disabled={definition.projectRequired ? !projectReady : !tunnelAvailable}
-              className="gap-2"
-            >
-              {definition.icon("size-3.5")}
-              {t(definition.createTitleKey)}
-            </DropdownMenuItem>
-          ),
-        )}
+        {RIGHT_DOCK_TOOL_DEFINITIONS.filter(
+          (definition) =>
+            !leasedTools.has(definition.kind) &&
+            rightDockToolOffered(definition.kind, availability),
+        ).map((definition) => (
+          <DropdownMenuItem
+            key={definition.kind}
+            onSelect={() => onStartTool(definition.kind)}
+            disabled={
+              definition.projectRequired
+                ? !projectReady
+                : !rightDockStandaloneToolAvailable(definition.kind, availability)
+            }
+            className="gap-2"
+          >
+            {definition.icon("size-3.5")}
+            {t(definition.createTitleKey)}
+          </DropdownMenuItem>
+        ))}
         {leasedTools.has("backgroundTasks") ? null : (
           <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2">
             <Cpu className="size-3.5" />
@@ -180,6 +196,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
     tunnelDisabledMessage,
     projectReady,
     tunnelAvailable,
+    browserAvailable = false,
     creating,
     loading,
     error,
@@ -191,6 +208,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
   } = props;
   const { t } = useLocale();
   const terminalTileDisabled = !terminalReady || creating;
+  const availability = { tunnelAvailable, browserAvailable };
   // Drag-out arms on primary-button mouse/pen only; touch keeps scrolling the
   // chooser (same rule as the terminal tile and dock tab drag-out).
   const toolDragHandler = (kind: RightDockLeasedToolKind, disabled: boolean) =>
@@ -227,21 +245,28 @@ export function RightDockChooser(props: RightDockChooserProps) {
             }
           : undefined,
     },
-    ...RIGHT_DOCK_TOOL_DEFINITIONS.filter((definition) => !leasedTools.has(definition.kind)).map(
-      (definition) => {
-        const disabled = definition.projectRequired ? !projectReady : !tunnelAvailable;
-        return {
-          key: definition.kind,
-          title: t(definition.createTitleKey),
-          description: t(definition.descriptionKey),
-          icon: definition.icon("size-4.5"),
-          disabled,
-          titleAttr: definition.projectRequired ? disabledMessage : tunnelDisabledMessage,
-          onClick: () => onStartTool(definition.kind),
-          onPointerDown: toolDragHandler(definition.kind, disabled),
-        };
-      },
-    ),
+    ...RIGHT_DOCK_TOOL_DEFINITIONS.filter(
+      (definition) =>
+        !leasedTools.has(definition.kind) && rightDockToolOffered(definition.kind, availability),
+    ).map((definition) => {
+      const disabled = definition.projectRequired
+        ? !projectReady
+        : !rightDockStandaloneToolAvailable(definition.kind, availability);
+      return {
+        key: definition.kind,
+        title: t(definition.createTitleKey),
+        description: t(definition.descriptionKey),
+        icon: definition.icon("size-4.5"),
+        disabled,
+        titleAttr: definition.projectRequired
+          ? disabledMessage
+          : definition.kind === "tunnel"
+            ? tunnelDisabledMessage
+            : undefined,
+        onClick: () => onStartTool(definition.kind),
+        onPointerDown: toolDragHandler(definition.kind, disabled),
+      };
+    }),
     ...(leasedTools.has("backgroundTasks")
       ? []
       : [

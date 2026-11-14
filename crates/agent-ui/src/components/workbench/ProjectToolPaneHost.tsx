@@ -11,6 +11,7 @@ import { ensureManagedProcessInit } from "../../lib/managed-process/store";
 import type { TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import type { ProjectToolWorkbenchSurface } from "../../lib/workbench/types";
 import { BackgroundTasksPanel } from "../project-tools/BackgroundTasksPanel";
+import { EmbeddedBrowserPanel } from "../project-tools/EmbeddedBrowserPanel";
 import { FileTreePaneSurface } from "../project-tools/file-tree/index";
 import { GitReviewPanel } from "../project-tools/git-review/index";
 import { LocalTunnelPanel } from "../project-tools/LocalTunnelPanel";
@@ -104,7 +105,7 @@ function findWorkspaceProject(
 
 /**
  * Pane host for the singleton project tools (file tree, git review, tunnel,
- * SSH, background tasks). Layout only stores `{ kind, project }`; the host
+ * SSH, background tasks, browser). Layout only stores `{ kind, project }`; the host
  * resolves the live project and provides the dock tool context so the shared
  * panels render identically to their dock incarnation. A pane always counts
  * as `active` — nothing hides behind a tab here.
@@ -259,6 +260,15 @@ export function ProjectToolPaneHost(props: ProjectToolPaneHostProps) {
       break;
     case "backgroundTasks":
       body = <BackgroundTasksPanel active />;
+      break;
+    case "browser":
+      body = (
+        <EmbeddedBrowserPanel
+          active
+          client={clients.browser ?? null}
+          onOpenExternal={openExternal}
+        />
+      );
       break;
   }
 

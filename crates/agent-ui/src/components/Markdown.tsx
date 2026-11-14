@@ -30,6 +30,7 @@ import {
   Streamdown,
   type StreamdownTranslations,
 } from "streamdown";
+import { tryOpenInAppBrowser } from "../lib/browser/inAppLinkRouter";
 import {
   type ChatFileLink,
   decodeChatFileLinkPayload,
@@ -456,8 +457,12 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
         onContextMenu={(event) => {
           if (!incomplete) showChatUrlContextMenu(event, href);
         }}
-        onClick={() => {
+        onClick={(event) => {
           if (incomplete) return;
+          // Local dev server links open in the built-in browser pane when the
+          // host has one; modifier-clicks keep the external browser path.
+          const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+          if (!modified && tryOpenInAppBrowser(href)) return;
           if (shouldSkipExternalLinkConfirmation()) {
             void openExternalLink(href, () => window.open(href, "_blank", "noreferrer"));
           } else {

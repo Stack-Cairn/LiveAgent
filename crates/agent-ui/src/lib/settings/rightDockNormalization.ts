@@ -15,6 +15,7 @@ export const RIGHT_DOCK_SINGLETON_TAB_IDS = {
   gitReview: "tool:gitReview",
   tunnel: "tool:tunnel",
   sshTunnel: "tool:sshTunnel",
+  browser: "tool:browser",
 } as const satisfies Record<RightDockToolKind, string>;
 
 const RIGHT_DOCK_TOOL_KIND_BY_TAB_ID = new Map<string, RightDockToolKind>(

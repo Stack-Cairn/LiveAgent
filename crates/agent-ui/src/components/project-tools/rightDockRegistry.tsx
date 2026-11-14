@@ -1,7 +1,8 @@
-import { FolderTree, GitBranch, Globe, Key } from "@liveagent/ui/components/IconSet";
+import { AppWindow, FolderTree, GitBranch, Globe, Key } from "@liveagent/ui/components/IconSet";
 import { FileTreePanel } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { GitReviewPanel } from "@liveagent/ui/components/project-tools/git-review/index";
 import type { ReactNode } from "react";
+import { EmbeddedBrowserPanel } from "./EmbeddedBrowserPanel";
 import { LocalTunnelPanel } from "./LocalTunnelPanel";
 import { type RightDockToolContextValue, useRightDockToolContext } from "./RightDockContext";
 import type { RightDockSingletonTabKind } from "./rightDockModel";
@@ -85,6 +86,18 @@ function SshTunnelTool(props: RightDockToolRenderInput) {
   );
 }
 
+function BrowserTool(props: RightDockToolRenderInput) {
+  const { active } = props;
+  const context = useRightDockToolContext();
+  return (
+    <EmbeddedBrowserPanel
+      active={active}
+      client={context.clients.browser ?? null}
+      onOpenExternal={context.openExternal}
+    />
+  );
+}
+
 function projectToolAvailable(context: RightDockToolContextValue) {
   return context.projectPathKey.trim() !== "";
 }
@@ -137,6 +150,18 @@ export const RIGHT_DOCK_TOOL_DEFINITIONS: readonly RightDockToolDefinition[] = [
     containerActiveClassName: "flex flex-col",
     isAvailable: projectToolAvailable,
     render: (input) => <SshTunnelTool active={input.active} />,
+  },
+  {
+    kind: "browser",
+    titleKey: "projectTools.browserTitle",
+    createTitleKey: "projectTools.newBrowser",
+    descriptionKey: "projectTools.browserDescription",
+    closeKey: "projectTools.closeBrowserTab",
+    projectRequired: false,
+    icon: (className) => <AppWindow className={className} />,
+    containerActiveClassName: "flex flex-col",
+    isAvailable: (context) => Boolean(context.clients.browser),
+    render: (input) => <BrowserTool active={input.active} />,
   },
 ];
 

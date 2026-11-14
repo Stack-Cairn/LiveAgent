@@ -128,11 +128,48 @@ export function orderRightDockVisibleTabs(
 }
 
 export function rightDockTabRequiresProject(kind: RightDockSingletonTabKind) {
-  return kind !== "tunnel";
+  return kind !== "tunnel" && kind !== "browser";
+}
+
+/** Host capabilities for the tools that work without a project. */
+export type RightDockStandaloneToolAvailability = {
+  tunnelAvailable: boolean;
+  browserAvailable?: boolean;
+};
+
+/**
+ * Whether a project-independent tool can start on this host. Project tools
+ * are gated by `projectReady` instead and always return false here.
+ */
+export function rightDockStandaloneToolAvailable(
+  kind: RightDockSingletonTabKind,
+  availability: RightDockStandaloneToolAvailability,
+) {
+  if (kind === "tunnel") return availability.tunnelAvailable;
+  if (kind === "browser") return Boolean(availability.browserAvailable);
+  return false;
+}
+
+/**
+ * Tools a host cannot provide at all are left out of launchers instead of
+ * showing a disabled entry (the browser has no web UI counterpart).
+ */
+export function rightDockToolOffered(
+  kind: RightDockSingletonTabKind,
+  availability: RightDockStandaloneToolAvailability,
+) {
+  return kind !== "browser" || Boolean(availability.browserAvailable);
+}
+
+export function anyRightDockStandaloneToolAvailable(
+  availability: RightDockStandaloneToolAvailability,
+) {
+  return availability.tunnelAvailable || Boolean(availability.browserAvailable);
 }
 
 export function getRightDockVisibleTabs(options: {
   backgroundTasksVisible: boolean;
+  browserAvailable?: boolean;
   /** Tools whose surface lives in a workbench pane: no dock tab for them. */
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
@@ -142,6 +179,7 @@ export function getRightDockVisibleTabs(options: {
 }) {
   const {
     backgroundTasksVisible,
+    browserAvailable = false,
     leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     localSessions,
     projectPathKey,
@@ -157,6 +195,7 @@ export function getRightDockVisibleTabs(options: {
     if (leasedTools.has(kind)) continue;
     if (!projectState.tools[kind]) continue;
     if (kind === "tunnel" && !tunnelAvailable) continue;
+    if (kind === "browser" && !browserAvailable) continue;
     if (rightDockTabRequiresProject(kind) && !projectPathKey) continue;
     nextTabs.push({ id: rightDockSingletonTabId(kind), kind });
   }

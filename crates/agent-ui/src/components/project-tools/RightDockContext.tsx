@@ -15,6 +15,7 @@ import type {
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { createContext, useContext } from "react";
 import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
+import type { EmbeddedBrowserClient } from "../../lib/browser/embeddedBrowser";
 import type { TerminalClient, TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import type { FileTreeExternalRoot } from "./file-tree/model";
@@ -25,6 +26,8 @@ export type RightDockToolClients = {
   git?: GitClient | null;
   textGeneration?: ProjectToolTextGenerationClient | null;
   tunnel?: LocalTunnelClient | null;
+  /** Embedded browser pane; absent on hosts without one (web UI). */
+  browser?: EmbeddedBrowserClient | null;
   workspaceActivity?: WorkspaceActivityClient | null;
 };
 

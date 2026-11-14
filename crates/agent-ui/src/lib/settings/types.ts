@@ -89,7 +89,13 @@ export type ChatSidebarSettings = {
   recentCollapsed: boolean;
 };
 
-export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel"] as const;
+export const RIGHT_DOCK_TOOL_KINDS = [
+  "fileTree",
+  "gitReview",
+  "tunnel",
+  "sshTunnel",
+  "browser",
+] as const;
 
 export type RightDockToolKind = (typeof RIGHT_DOCK_TOOL_KINDS)[number];
 

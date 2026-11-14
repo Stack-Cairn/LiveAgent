@@ -11,6 +11,7 @@ export const PROJECT_TOOL_SURFACE_TITLE_KEYS: Readonly<Record<ProjectToolSurface
   tunnel: "projectTools.tunnelTitle",
   sshTunnel: "projectTools.sshTunnelTitle",
   backgroundTasks: "projectTools.backgroundTasksTitle",
+  browser: "projectTools.browserTitle",
 };
 
 export function projectToolSurfaceTitleKey(kind: ProjectToolSurfaceKind): string {

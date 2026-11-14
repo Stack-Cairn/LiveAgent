@@ -20,11 +20,21 @@ type EventWaiter = (String, Option<String>, oneshot::Sender<Value>);
 /// 请求 id → 响应通道。
 type PendingMap = HashMap<u64, oneshot::Sender<Result<Value, String>>>;
 
+/// 持续订阅收到的一条 CDP 事件（嵌入式浏览器面板的 screencast 帧、标签状态等
+/// 需要长期监听，一次性等待者不够用）。
+#[derive(Clone, Debug)]
+pub(crate) struct CdpEvent {
+    pub method: String,
+    pub session_id: Option<String>,
+    pub params: Value,
+}
+
 pub(crate) struct CdpConnection {
     next_id: AtomicU64,
     outbound: mpsc::UnboundedSender<Message>,
     pending: Arc<Mutex<PendingMap>>,
     event_waiters: Arc<Mutex<Vec<EventWaiter>>>,
+    subscribers: Arc<Mutex<Vec<mpsc::UnboundedSender<CdpEvent>>>>,
     closed: Arc<Mutex<bool>>,
 }
 
@@ -52,6 +62,7 @@ impl CdpConnection {
             outbound: outbound_tx,
             pending: Arc::new(Mutex::new(HashMap::new())),
             event_waiters: Arc::new(Mutex::new(Vec::new())),
+            subscribers: Arc::new(Mutex::new(Vec::new())),
             closed: Arc::new(Mutex::new(false)),
         });
 
@@ -91,6 +102,10 @@ impl CdpConnection {
         if let Ok(mut waiters) = self.event_waiters.lock() {
             waiters.clear();
         }
+        // 丢弃发送端，订阅方的 recv() 随之返回 None，监听循环自然退出。
+        if let Ok(mut subscribers) = self.subscribers.lock() {
+            subscribers.clear();
+        }
     }
 
     pub(crate) fn is_closed(&self) -> bool {
@@ -127,6 +142,16 @@ impl CdpConnection {
                 .and_then(Value::as_str)
                 .map(str::to_string);
             let params = value.get("params").cloned().unwrap_or(Value::Null);
+            if let Ok(mut subscribers) = self.subscribers.lock() {
+                if !subscribers.is_empty() {
+                    let event = CdpEvent {
+                        method: method.to_string(),
+                        session_id: session_id.clone(),
+                        params: params.clone(),
+                    };
+                    subscribers.retain(|sender| sender.send(event.clone()).is_ok());
+                }
+            }
             if let Ok(mut waiters) = self.event_waiters.lock() {
                 // 先清掉接收端已放弃（超时/提前返回）的等待者：既防 Vec 泄漏，
                 // 也避免这些僵尸条目被后续同名事件"命中"。
@@ -196,6 +221,20 @@ impl CdpConnection {
         let (tx, rx) = oneshot::channel();
         if let Ok(mut waiters) = self.event_waiters.lock() {
             waiters.push((method.to_string(), session_id.map(str::to_string), tx));
+        }
+        rx
+    }
+
+    /// 注册持续事件订阅：此后每条事件都会推给返回的 receiver，直到连接关闭
+    ///（receiver 收到 None）或调用方丢弃 receiver。
+    pub(crate) fn subscribe(&self) -> mpsc::UnboundedReceiver<CdpEvent> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        // 先拿订阅表锁再查 closed：mark_closed 先置位再清表，这个顺序保证
+        // 不会把发送端塞进一张已清空、再也不会被清理的表里。
+        if let Ok(mut subscribers) = self.subscribers.lock() {
+            if !self.is_closed() {
+                subscribers.push(tx);
+            }
         }
         rx
     }
