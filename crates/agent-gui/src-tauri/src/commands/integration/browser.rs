@@ -4,6 +4,10 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Manager, State};
 
+use crate::services::browser::embedded::{
+    EmbeddedBrowserCdpEndpoint, EmbeddedBrowserManager, EmbeddedBrowserState, EmbeddedKeyInput,
+    EmbeddedMouseInput, EmbeddedViewport,
+};
 use crate::services::browser::types::{
     BrowserActionArgs, BrowserActionResponse, BrowserStatusResponse,
 };
@@ -34,6 +38,161 @@ pub async fn browser_status(
 pub async fn browser_close(state: State<'_, Arc<BrowserManager>>) -> Result<(), String> {
     let manager = Arc::clone(&state);
     manager.close().await
+}
+
+// ---- 嵌入式浏览器面板（右侧停靠区 / 工作台 Browser 面板）----
+// 与上面的 Browser 自动化工具相互独立：独立 profile、独立进程。
+
+#[tauri::command]
+pub async fn embedded_browser_status(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<EmbeddedBrowserState, String> {
+    Ok(state.state())
+}
+
+/// 面板 CDP 端点（未运行时为 null），供 Agent 附着到面板当前页面。
+#[tauri::command]
+pub async fn embedded_browser_cdp_endpoint(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<Option<EmbeddedBrowserCdpEndpoint>, String> {
+    Ok(state.cdp_endpoint())
+}
+
+#[tauri::command]
+pub async fn embedded_browser_open(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    url: Option<String>,
+    viewport: Option<EmbeddedViewport>,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.open(url, viewport).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_navigate(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    tab_id: Option<String>,
+    url: String,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.navigate(tab_id, url).await
+}
+
+/// `action`：back / forward / reload / stop。
+#[tauri::command]
+pub async fn embedded_browser_history(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    tab_id: Option<String>,
+    action: String,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.history(tab_id, action.trim()).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_resize(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    viewport: EmbeddedViewport,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.resize(viewport).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_new_tab(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    url: Option<String>,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.new_tab(url).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_close_tab(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    tab_id: String,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.close_tab(tab_id).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_activate_tab(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    tab_id: String,
+) -> Result<EmbeddedBrowserState, String> {
+    let manager = Arc::clone(&state);
+    manager.activate_tab(tab_id).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_mouse(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    input: EmbeddedMouseInput,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.mouse(input).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_key(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    input: EmbeddedKeyInput,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.key(input).await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_insert_text(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+    text: String,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.insert_text(text).await
+}
+
+/// 活动标签页视口 PNG（base64）。
+#[tauri::command]
+pub async fn embedded_browser_screenshot(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<String, String> {
+    let manager = Arc::clone(&state);
+    manager.screenshot().await
+}
+
+/// 等待用户在面板中点选元素；取消返回 null。
+#[tauri::command]
+pub async fn embedded_browser_pick_element(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<Option<serde_json::Value>, String> {
+    let manager = Arc::clone(&state);
+    manager.pick_element().await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_cancel_pick(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.cancel_pick_element().await
+}
+
+#[tauri::command]
+pub async fn embedded_browser_close(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.close().await
+}
+
+/// 关闭面板浏览器并删除其 profile（cookies、缓存、导入的登录态）。
+#[tauri::command]
+pub async fn embedded_browser_clear_data(
+    state: State<'_, Arc<EmbeddedBrowserManager>>,
+) -> Result<(), String> {
+    let manager = Arc::clone(&state);
+    manager.clear_browsing_data().await
 }
 
 #[derive(Debug, Serialize)]

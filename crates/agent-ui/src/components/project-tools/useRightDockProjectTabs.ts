@@ -21,6 +21,7 @@ import {
 
 type UseRightDockProjectTabsOptions = {
   backgroundTasksVisible: boolean;
+  browserAvailable?: boolean;
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
   projectPathKey: string;
@@ -35,6 +36,7 @@ type UseRightDockProjectTabsOptions = {
 export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions) {
   const {
     backgroundTasksVisible,
+    browserAvailable = false,
     leasedTools,
     localSessions,
     onProjectStateChange,
@@ -48,10 +50,12 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
   const gitReviewInitialized = Boolean(projectPathKey && projectState.tools.gitReview);
   const tunnelInitialized = Boolean(projectState.tools.tunnel && tunnelAvailable);
   const sshTunnelInitialized = Boolean(projectPathKey && projectState.tools.sshTunnel);
+  const browserInitialized = Boolean(projectState.tools.browser && browserAvailable);
   const visibleTabs = useMemo(
     () =>
       getRightDockVisibleTabs({
         backgroundTasksVisible,
+        browserAvailable,
         leasedTools,
         localSessions,
         projectPathKey,
@@ -60,6 +64,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
       }),
     [
       backgroundTasksVisible,
+      browserAvailable,
       leasedTools,
       localSessions,
       projectPathKey,
@@ -150,6 +155,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
 
   return {
     activateTab,
+    browserInitialized,
     canReorderTabs: orderedProjectTabIds.length > 1,
     closeToolTab,
     commitTabOrder,

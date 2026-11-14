@@ -121,6 +121,25 @@ macro_rules! app_invoke_handler {
             commands::browser::browser_close,
             commands::browser::browser_extension_install_info,
             commands::browser::browser_extension_reveal_dir,
+            commands::browser::embedded_browser_status,
+            commands::browser::embedded_browser_cdp_endpoint,
+            commands::browser::embedded_browser_open,
+            commands::browser::embedded_browser_navigate,
+            commands::browser::embedded_browser_history,
+            commands::browser::embedded_browser_resize,
+            commands::browser::embedded_browser_new_tab,
+            commands::browser::embedded_browser_close_tab,
+            commands::browser::embedded_browser_activate_tab,
+            commands::browser::embedded_browser_mouse,
+            commands::browser::embedded_browser_key,
+            commands::browser::embedded_browser_insert_text,
+            commands::browser::embedded_browser_screenshot,
+            commands::browser::embedded_browser_pick_element,
+            commands::browser::embedded_browser_cancel_pick,
+            commands::browser::embedded_browser_close,
+            commands::browser::embedded_browser_clear_data,
+            commands::browser_cookie_import::embedded_browser_import_sources,
+            commands::browser_cookie_import::embedded_browser_import_cookies,
             // MCP
             commands::mcp::mcp_list_tools,
             commands::mcp::mcp_call_tool,
@@ -915,6 +934,9 @@ pub fn run() {
     ));
     let stt_manager = Arc::new(services::stt::SttManager::default());
     let browser_manager = Arc::new(services::browser::BrowserManager::default());
+    // 嵌入式浏览器面板：与 Browser 自动化工具独立的 headless 浏览器会话。
+    let embedded_browser_manager =
+        Arc::new(services::browser::embedded::EmbeddedBrowserManager::default());
     // 扩展桥接：接受 LiveAgent 浏览器扩展的反向连接，Browser 工具优先驱动
     // 用户日常浏览器（复用登录态）；未连接时回退独立 profile 启动。
     if !runtime::data_home::isolation_requested()
@@ -984,6 +1006,7 @@ pub fn run() {
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .manage(stt_manager)
         .manage(Arc::clone(&browser_manager))
+        .manage(Arc::clone(&embedded_browser_manager))
         .on_page_load(|webview, payload| {
             if webview.label() != MAIN_WINDOW_LABEL
                 || !matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
@@ -1006,6 +1029,7 @@ pub fn run() {
             let managed_process_registry = Arc::clone(&managed_process_registry);
             let git_clone_task_registry = Arc::clone(&git_clone_task_registry);
             let provider_usage_service = Arc::clone(&provider_usage_service);
+            let embedded_browser_manager = Arc::clone(&embedded_browser_manager);
             #[cfg(target_os = "macos")]
             let hide_after_fullscreen_exit = Arc::clone(&hide_after_fullscreen_exit);
             move |app| {
@@ -1034,6 +1058,12 @@ pub fn run() {
                 if let Err(error) = commands::browser::sync_bundled_browser_extension(app.handle())
                 {
                     eprintln!("failed to sync browser extension: {error}");
+                }
+                {
+                    let handle = app.handle().clone();
+                    embedded_browser_manager.set_emitter(Arc::new(move |event, payload| {
+                        let _ = handle.emit(event, payload);
+                    }));
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
@@ -1161,12 +1191,15 @@ pub fn run() {
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
                 browser_manager.shutdown_cleanup();
+                embedded_browser_manager.shutdown_cleanup();
                 power_activity.clear_all();
             }
         }
         tauri::RunEvent::Exit => {
             // Native macOS termination can bypass ExitRequested; Drop is not guaranteed.
             unregister_host_bridge(_app);
+            // headless 面板浏览器没有可见窗口，漏杀会一直残留：这里再兜底一次。
+            embedded_browser_manager.shutdown_cleanup();
             if let Some(backend) =
                 _app.try_state::<Arc<services::kbrain_backend::KBrainBackendState>>()
             {

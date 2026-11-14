@@ -58,6 +58,8 @@ export const MIN_SSH_TUNNEL_PANE_WIDTH = 280;
 export const MIN_SSH_TUNNEL_PANE_HEIGHT = 200;
 export const MIN_BACKGROUND_TASKS_PANE_WIDTH = 260;
 export const MIN_BACKGROUND_TASKS_PANE_HEIGHT = 180;
+export const MIN_BROWSER_PANE_WIDTH = 320;
+export const MIN_BROWSER_PANE_HEIGHT = 240;
 // Unsupported placeholders only show a short message; keep them small enough
 // to never block a restore.
 export const MIN_UNSUPPORTED_PANE_WIDTH = 160;
@@ -83,6 +85,8 @@ export function surfaceMinSize(surface: WorkbenchSurfaceSpec): SurfaceMinSize {
         minWidth: MIN_BACKGROUND_TASKS_PANE_WIDTH,
         minHeight: MIN_BACKGROUND_TASKS_PANE_HEIGHT,
       };
+    case "browser":
+      return { minWidth: MIN_BROWSER_PANE_WIDTH, minHeight: MIN_BROWSER_PANE_HEIGHT };
     case "localTerminal":
     case "sshTerminal":
       return { minWidth: MIN_TERMINAL_PANE_WIDTH, minHeight: MIN_TERMINAL_PANE_HEIGHT };

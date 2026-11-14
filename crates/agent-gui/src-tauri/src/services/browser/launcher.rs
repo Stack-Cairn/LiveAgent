@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -110,7 +110,21 @@ impl Drop for LaunchedBrowser {
 /// `DevToolsActivePort` 文件解析实际端口（Chromium 启动成功后写出）。
 pub(crate) fn launch_browser(executable: &PathBuf) -> Result<LaunchedBrowser, String> {
     let profile_dir = automation_profile_dir()?;
-    fs::create_dir_all(&profile_dir).map_err(|e| format!("创建浏览器 profile 目录失败：{e}"))?;
+    launch_browser_with(
+        executable,
+        &profile_dir,
+        &["--new-window".to_string(), "about:blank".to_string()],
+    )
+}
+
+/// 指定 profile 目录与额外参数启动浏览器（嵌入式浏览器面板以 headless 方式
+/// 复用此路径，profile 与自动化工具互相隔离）。
+pub(crate) fn launch_browser_with(
+    executable: &PathBuf,
+    profile_dir: &Path,
+    extra_args: &[String],
+) -> Result<LaunchedBrowser, String> {
+    fs::create_dir_all(profile_dir).map_err(|e| format!("创建浏览器 profile 目录失败：{e}"))?;
     // 端口文件是上次会话的残留时会读到失效端口，启动前先清掉。
     let port_file = profile_dir.join("DevToolsActivePort");
     let _ = fs::remove_file(&port_file);
@@ -123,8 +137,7 @@ pub(crate) fn launch_browser(executable: &PathBuf) -> Result<LaunchedBrowser, St
         .arg("--no-default-browser-check")
         .arg("--disable-sync")
         .arg("--disable-features=TranslateUI")
-        .arg("--new-window")
-        .arg("about:blank")
+        .args(extra_args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -158,7 +171,7 @@ pub(crate) fn launch_browser(executable: &PathBuf) -> Result<LaunchedBrowser, St
 }
 
 fn wait_for_devtools_port(
-    port_file: &PathBuf,
+    port_file: &Path,
     child: &mut Child,
     timeout: Duration,
 ) -> Result<u16, String> {

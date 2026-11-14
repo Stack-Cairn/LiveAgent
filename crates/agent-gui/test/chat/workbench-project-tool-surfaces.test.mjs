@@ -28,6 +28,7 @@ const {
   isWorkbenchLayoutValid,
   leasedProjectToolKinds,
   MIN_BACKGROUND_TASKS_PANE_WIDTH,
+  MIN_BROWSER_PANE_WIDTH,
   MIN_GIT_REVIEW_PANE_WIDTH,
   MIN_SSH_TUNNEL_PANE_HEIGHT,
   MIN_TUNNEL_PANE_HEIGHT,
@@ -85,6 +86,7 @@ test("every project tool has a stable per-scope identity and label key", () => {
     "tunnel",
     "sshTunnel",
     "backgroundTasks",
+    "browser",
   ]);
   for (const kind of PROJECT_TOOL_SURFACE_KINDS) {
     const surface = { kind, project: PROJECT };
@@ -102,6 +104,11 @@ test("every project tool has a stable per-scope identity and label key", () => {
     projectToolSurfaceIdentityKey("backgroundTasks", PROJECT.projectPathKey),
     projectToolSurfaceIdentityKey("backgroundTasks", OTHER_PROJECT.projectPathKey),
   );
+  // 内置浏览器同样是整窗口单例(一个浏览器会话)。
+  assert.equal(
+    projectToolSurfaceIdentityKey("browser", PROJECT.projectPathKey),
+    projectToolSurfaceIdentityKey("browser", OTHER_PROJECT.projectPathKey),
+  );
   assert.notEqual(
     projectToolSurfaceIdentityKey("gitReview", PROJECT.projectPathKey),
     projectToolSurfaceIdentityKey("gitReview", OTHER_PROJECT.projectPathKey),
@@ -117,6 +124,7 @@ test("project tool surfaces resolve their own hard minimum sizes", () => {
     surfaceMinSize({ kind: "backgroundTasks", project: PROJECT }).minWidth,
     MIN_BACKGROUND_TASKS_PANE_WIDTH,
   );
+  assert.equal(surfaceMinSize({ kind: "browser", project: PROJECT }).minWidth, MIN_BROWSER_PANE_WIDTH);
 });
 
 test("reducer opens each tool once per scope and rejects duplicates", () => {
@@ -154,6 +162,13 @@ test("reducer opens each tool once per scope and rejects duplicates", () => {
   });
   assert.equal(otherTasks.ok, false);
   assert.equal(otherTasks.error.code, "duplicate-surface");
+  const otherBrowser = apply(layout, {
+    type: "OPEN_PANE",
+    pane: toolPane("pane-other-browser", "browser", OTHER_PROJECT),
+    target: { kind: "pane-edge", paneId: "pane-root", edge: "bottom" },
+  });
+  assert.equal(otherBrowser.ok, false);
+  assert.equal(otherBrowser.error.code, "duplicate-surface");
 
   const incomplete = apply(layout, {
     type: "OPEN_PANE",
@@ -401,6 +416,25 @@ test("closing a tool pane closes the tool in the dock instead of handing the tab
   // Tools that were never in the dock, and unknown projects, are no-ops.
   assert.equal(releaseProjectToolFromDock(afterTasks, "tunnel", key), afterTasks);
   assert.equal(releaseProjectToolFromDock(afterTasks, "gitReview", ""), afterTasks);
+});
+
+test("closing a browser pane closes every dock projection of the window-wide browser", () => {
+  const base = settings.normalizeSettings({});
+  const key = "/workspace/app";
+  const otherKey = "/workspace/other";
+  let state = settings.openRightDockSingletonTab(base, key, "browser");
+  state = settings.openRightDockSingletonTab(state, otherKey, "browser");
+  state = settings.openRightDockSingletonTab(state, key, "gitReview");
+  const after = releaseProjectToolFromDock(state, "browser", key);
+  assert.deepEqual(
+    Object.keys(settings.getRightDockProjectState(after.customSettings, key).tools),
+    ["gitReview"],
+  );
+  assert.deepEqual(
+    Object.keys(settings.getRightDockProjectState(after.customSettings, otherKey).tools),
+    [],
+  );
+  assert.equal(releaseProjectToolFromDock(after, "browser", key), after);
 });
 
 test("closing a derived background-tasks pane snapshots visible processes", () => {

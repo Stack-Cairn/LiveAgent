@@ -43,6 +43,20 @@ export function releaseProjectToolFromDock(
     }
     return next;
   }
+  if (tool === "browser") {
+    // One embedded browser per window: a dock tab in any project would show
+    // the same session, so releasing the pane closes every projection.
+    const projectKeys = new Set(Object.keys(prev.customSettings.rightDock.projects));
+    const originProjectKey = workspaceProjectPathKey(projectPathKey);
+    if (originProjectKey) projectKeys.add(originProjectKey);
+    let next = prev;
+    for (const key of projectKeys) {
+      next = updateRightDockProjectState(next, key, (current) =>
+        closeRightDockToolTabState(current, "browser", null),
+      );
+    }
+    return next;
+  }
   return updateRightDockProjectState(prev, projectPathKey, (current) => {
     return closeRightDockToolTabState(current, tool, null);
   });

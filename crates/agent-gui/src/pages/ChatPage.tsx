@@ -38,6 +38,14 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
+import {
+  base64ToBytes,
+  type EmbeddedBrowserClient,
+  type EmbeddedBrowserScreenshot,
+  embeddedBrowserScreenshotFileName,
+  isBlankBrowserTab,
+} from "@liveagent/ui/lib/browser/embeddedBrowser";
+import { setInAppBrowserLinkHandler } from "@liveagent/ui/lib/browser/inAppLinkRouter";
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
 import {
   type CommandPaletteAction,
@@ -140,6 +148,7 @@ import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspac
 import { PaneLoadingSkeleton } from "../components/app/PaneLoadingSkeleton";
 import { isMacOsTauri, MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import { WindowsTitleBar } from "../components/WindowsTitleBar";
+import { createTauriEmbeddedBrowserClient } from "../lib/browser/tauriEmbeddedBrowserClient";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,
@@ -481,6 +490,24 @@ function ChatPageContent(props: ChatPageProps) {
     remote: settings.remote,
   });
   const tauriTunnelClient = useMemo<LocalTunnelClient>(() => createTauriTunnelClient(), []);
+  // Composer hooks are created further down; the browser client reads them
+  // through this ref so the client itself stays referentially stable.
+  const embeddedBrowserComposerRef = useRef<{
+    insertMarkdown: (markdown: string) => boolean;
+    attachScreenshot: (screenshot: EmbeddedBrowserScreenshot) => Promise<boolean>;
+  } | null>(null);
+  const embeddedBrowserClient = useMemo<EmbeddedBrowserClient | null>(
+    () =>
+      isKBrainBrowserHost()
+        ? null
+        : createTauriEmbeddedBrowserClient({
+            insertIntoComposer: (markdown) =>
+              embeddedBrowserComposerRef.current?.insertMarkdown(markdown) ?? false,
+            attachScreenshotToComposer: async (screenshot) =>
+              (await embeddedBrowserComposerRef.current?.attachScreenshot(screenshot)) ?? false,
+          }),
+    [],
+  );
 
   // The only page-level subscription to the sidebar list: ChatPage's own
   // render needs (draft detection, pending-item effect, workspace root).
@@ -974,6 +1001,21 @@ function ChatPageContent(props: ChatPageProps) {
     setErrorMessage,
     addNotify,
   });
+  embeddedBrowserComposerRef.current = {
+    insertMarkdown: (markdown) =>
+      handleRightDockInsertComposerSegments([{ type: "text", text: markdown }]),
+    attachScreenshot: async (screenshot) => {
+      // Uploads land in the conversation workdir, so this needs agent mode
+      // with a project (the same rule as pasting an image).
+      if (!isAgentMode || !displayedConversationWorkdir.trim()) return false;
+      const file = new File([base64ToBytes(screenshot.data)], embeddedBrowserScreenshotFileName(), {
+        type: "image/png",
+      });
+      await importReadableFiles([file]);
+      composerRef.current?.focus();
+      return true;
+    },
+  };
   function resetVisibleTransientState(targetConversationId = currentConversationIdRef.current) {
     if (currentConversationIdRef.current !== targetConversationId) {
       return;
@@ -3906,6 +3948,7 @@ function ChatPageContent(props: ChatPageProps) {
       case "tunnel":
       case "sshTunnel":
       case "backgroundTasks":
+      case "browser":
         return t(projectToolSurfaceTitleKey(surface.kind));
       case "localTerminal":
         return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
@@ -4018,6 +4061,7 @@ function ChatPageContent(props: ChatPageProps) {
         textGeneration: projectToolTextGenerationClient,
         // 浏览器宿主没有 `gateway_tunnel_*`：不注入 client，内网穿透入口直接置灰。
         tunnel: projectToolTunnelClient,
+        browser: embeddedBrowserClient,
         workspaceActivity: tauriWorkspaceActivityClient,
       },
       capabilities: {
@@ -4080,6 +4124,7 @@ function ChatPageContent(props: ChatPageProps) {
     [
       codeReviewSkill,
       effectiveTheme,
+      embeddedBrowserClient,
       gitReviewFocusRequest,
       handleChangedFileReveal,
       handleGitReviewFocusRequestHandled,
@@ -4116,6 +4161,40 @@ function ChatPageContent(props: ChatPageProps) {
       leasedProjectToolKinds(workbench.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS),
     [terminalProjectPathKey, workbench.layout],
   );
+
+  // Local dev server links in chat open in the embedded browser: reuse a
+  // blank active tab, otherwise add a tab; reveal the dock tab unless a
+  // workbench pane already shows the browser.
+  const inAppBrowserLinkRef = useRef<(url: string) => boolean>(() => false);
+  inAppBrowserLinkRef.current = (url) => {
+    const client = embeddedBrowserClient;
+    if (!client || projectToolsUserDisabledMessage) return false;
+    const leased = leasedDockTools.has("browser");
+    if (!leased && !terminalProjectPathKey) return false;
+    setActiveView("chat");
+    if (!leased) {
+      setRightDockOpen(true);
+      setSettings((prev) => openRightDockSingletonTab(prev, terminalProjectPathKey, "browser"));
+    }
+    void (async () => {
+      const state = await client.getState();
+      const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId);
+      if (!state.running) {
+        await client.open({ url });
+      } else if (isBlankBrowserTab(activeTab)) {
+        await client.navigate(url, state.activeTabId ?? undefined);
+      } else {
+        await client.newTab(url);
+      }
+    })().catch((error) => {
+      addNotify("warning", error instanceof Error ? error.message : String(error));
+    });
+    return true;
+  };
+  useEffect(() => {
+    if (!embeddedBrowserClient) return;
+    return setInAppBrowserLinkHandler((url) => inAppBrowserLinkRef.current(url));
+  }, [embeddedBrowserClient]);
 
   const chatContent = sessionWorkbench.enabled ? (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
@@ -4687,6 +4766,7 @@ function ChatPageContent(props: ChatPageProps) {
                 settings.remote.gatewayUrl,
                 settings.remote.gatewayPort,
               )}
+              browserClient={embeddedBrowserClient}
               workspaceActivityClient={tauriWorkspaceActivityClient}
               onProjectStateChange={handleRightDockProjectStateChange}
               onFileTreeStateChange={handleRightDockFileTreeStateChange}

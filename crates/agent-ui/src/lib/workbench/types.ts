@@ -26,15 +26,17 @@ export const PROJECT_TOOL_SURFACE_KINDS = [
   "tunnel",
   "sshTunnel",
   "backgroundTasks",
+  "browser",
 ] as const;
 
 export type ProjectToolSurfaceKind = (typeof PROJECT_TOOL_SURFACE_KINDS)[number];
 
 /**
  * Distributive so `switch (surface.kind)` narrows per tool. Background tasks
- * carry the project they were opened from only for focus→dock project
- * context; their identity is window-wide (the managed-process registry is
- * global, so a second pane would just mirror the first).
+ * and the browser carry the project they were opened from only for
+ * focus→dock project context; their identity is window-wide (the
+ * managed-process registry and the embedded browser are global, so a second
+ * pane would just mirror the first).
  */
 export type ProjectToolWorkbenchSurface = {
   [K in ProjectToolSurfaceKind]: { kind: K; project: ProjectRef };
@@ -48,6 +50,12 @@ export type BackgroundTasksWorkbenchSurface = Extract<
   ProjectToolWorkbenchSurface,
   { kind: "backgroundTasks" }
 >;
+export type BrowserWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "browser" }>;
+
+/** Tools backed by one window-wide resource: identity ignores the project. */
+export function isWindowScopedProjectToolKind(kind: ProjectToolSurfaceKind): boolean {
+  return kind === "backgroundTasks" || kind === "browser";
+}
 
 const PROJECT_TOOL_SURFACE_KIND_SET: ReadonlySet<string> = new Set(PROJECT_TOOL_SURFACE_KINDS);
 
@@ -64,14 +72,14 @@ export function isProjectToolSurface(
 /**
  * Identity key of a project tool without building a surface first. Hosts use
  * it for lease lookups (`findPaneIdBySurfaceKey`) and drop de-duplication.
- * Background tasks ignore the project (window singleton); the trailing colon
- * keeps the key shape `${kind}:${scope}` uniform.
+ * Window-scoped tools (background tasks, browser) ignore the project; the
+ * trailing colon keeps the key shape `${kind}:${scope}` uniform.
  */
 export function projectToolSurfaceIdentityKey(
   kind: ProjectToolSurfaceKind,
   projectPathKey: string,
 ): string {
-  return kind === "backgroundTasks" ? "backgroundTasks:" : `${kind}:${projectPathKey.trim()}`;
+  return isWindowScopedProjectToolKind(kind) ? `${kind}:` : `${kind}:${projectPathKey.trim()}`;
 }
 
 export type LocalTerminalLaunchSpec = {
@@ -134,6 +142,7 @@ export function surfaceIdentityKey(surface: WorkbenchSurfaceSpec): string {
     case "tunnel":
     case "sshTunnel":
     case "backgroundTasks":
+    case "browser":
       return projectToolSurfaceIdentityKey(surface.kind, surface.project.projectPathKey);
     case "localTerminal":
     case "sshTerminal":
