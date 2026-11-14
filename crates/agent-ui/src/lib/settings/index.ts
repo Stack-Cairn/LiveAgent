@@ -27,6 +27,7 @@ import {
   resolveKBrainRequestFormat,
   resolveProviderApi,
 } from "@liveagent/ui/lib/providers/providerCapabilities";
+import { webSearchUsableForRun } from "@liveagent/ui/lib/providers/webSearchFallback";
 import {
   normalizeApiKey,
   normalizeBaseUrl,
@@ -534,6 +535,8 @@ export function normalizeChatRuntimeControlsForProvider(
     providerId?: ProviderId;
     requestFormat?: CodexRequestFormat;
     modelId?: string;
+    /** K-brain's per-provider native search flag; the local API rule applies without it. */
+    nativeWebSearchSupported?: boolean;
   },
 ): ChatRuntimeControls {
   const controls = normalizeChatRuntimeControls(input);
@@ -546,12 +549,17 @@ export function normalizeChatRuntimeControlsForProvider(
   return {
     ...controls,
     reasoning,
+    // Search stays on where the API searches natively or K-brain offers its web_search
+    // fallback (capability web_search_fallback with a configured search service).
     nativeWebSearchEnabled:
       controls.nativeWebSearchEnabled &&
       (!params.providerId ||
-        providerSupportsNativeWebSearch(
-          params.providerId,
-          resolveProviderApi(params.providerId, params.requestFormat),
+        webSearchUsableForRun(
+          params.nativeWebSearchSupported ??
+            providerSupportsNativeWebSearch(
+              params.providerId,
+              resolveProviderApi(params.providerId, params.requestFormat),
+            ),
         )),
   };
 }
@@ -1323,6 +1331,9 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? { promptCacheRetention: "long" as const }
       : {}),
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
+    ...(typeof obj.nativeWebSearchSupported === "boolean"
+      ? { nativeWebSearchSupported: obj.nativeWebSearchSupported }
+      : {}),
     useSystemProxy: obj.useSystemProxy === true,
     ...((): { retryPolicy?: ProviderRetryPolicy } => {
       const retryPolicy = normalizeProviderRetryPolicy(obj.retryPolicy);

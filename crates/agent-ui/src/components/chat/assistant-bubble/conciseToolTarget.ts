@@ -18,6 +18,7 @@ import {
   getFileOperationDisplay,
   getToolDisplayName,
   isWebFetchToolName,
+  isWebSearchToolName,
   LSP_TOOL_NAME,
 } from "./assistantBubbleUtils";
 
@@ -85,6 +86,10 @@ export function getConciseToolTarget(item: ToolTraceItem): ConciseToolTarget {
   if (isWebFetchToolName(rawName)) {
     const url = stringArgument(args, "url", "uri");
     if (url) return target(conciseUrl(url), summary() || url);
+  }
+  if (isWebSearchToolName(rawName)) {
+    const query = stringArgument(args, "query");
+    if (query) return target(truncateColumns(collapseWhitespace(query)), summary() || query);
   }
   if (isSshManagerToolName(rawName)) {
     const ssh = summarizeSshManagerCall(args);

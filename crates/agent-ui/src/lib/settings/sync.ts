@@ -59,6 +59,14 @@ export type GatewaySettingsSyncPayload = {
    * may leave a field out, which K-brain keeps.
    */
   kbrainMemoryOrganizer?: import("@liveagent/ui/pages/settings/kbrainSettingsAdapter").KBrainMemoryOrganizerConfig;
+  /**
+   * K-brain's web search fallback service (capability web_search_fallback); absent on
+   * backends without it. Never carries the API key; an update carries only the edited
+   * fields, a new key, or clearApiKey.
+   */
+  kbrainWebSearch?:
+    | import("@liveagent/ui/lib/providers/webSearchFallback").KBrainWebSearchSettings
+    | import("@liveagent/ui/lib/providers/webSearchFallback").KBrainWebSearchUpdate;
   system: AppSettings["system"];
   customProviders: GatewaySettingsSyncProvider[];
   mcp: AppSettings["mcp"];

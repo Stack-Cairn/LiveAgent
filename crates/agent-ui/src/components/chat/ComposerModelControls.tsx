@@ -1,3 +1,4 @@
+import { loadWebSearchFallbackState } from "@liveagent/adapters/webSearchFallback";
 import {
   type ChatRuntimeControls,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
@@ -48,6 +49,11 @@ import {
   sortModelOptionGroups,
 } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
+import { useWebSearchFallbackState } from "@liveagent/ui/lib/providers/useWebSearchFallbackState";
+import {
+  resolveWebSearchToggle,
+  webSearchServiceLabel,
+} from "@liveagent/ui/lib/providers/webSearchFallback";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
 
@@ -116,7 +122,7 @@ export type ComposerModelControlsProps = {
   disabled?: boolean;
   onSelectModel: (selection: SelectedModel) => void;
   onSelectExecutionMode: (mode: "text" | "tools") => void;
-  onOpenSettings: (section?: "providers", providerId?: string) => void;
+  onOpenSettings: (section?: "providers" | "webSearch", providerId?: string) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   /** 受控开关（/model 指令从外部打开）；缺省时弹层自管开关。 */
   open?: boolean;
@@ -156,6 +162,17 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const { t } = useLocale();
   const [uncontrolledModelPickerOpen, setUncontrolledModelPickerOpen] = useState(false);
   const isModelPickerOpen = open ?? uncontrolledModelPickerOpen;
+  // Without native search the switch depends on the backend's search service; re-read it
+  // whenever the menu opens so a service configured meanwhile shows up.
+  const webSearchFallback = useWebSearchFallbackState(
+    loadWebSearchFallbackState,
+    !nativeWebSearchSupported,
+    isModelPickerOpen,
+  );
+  const webSearch = resolveWebSearchToggle({
+    nativeSupported: nativeWebSearchSupported,
+    fallback: webSearchFallback,
+  });
   const setIsModelPickerOpen = (next: boolean) => {
     if (open === undefined) setUncontrolledModelPickerOpen(next);
     onOpenChange?.(next);
@@ -423,17 +440,53 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                 htmlFor={`${executionModeRadioName}-web`}
                 className="flex h-8 cursor-pointer items-center justify-between gap-2"
               >
-                <span>{t("chat.runtime.webSearch")}</span>
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="shrink-0">{t("chat.runtime.webSearch")}</span>
+                  {webSearch.via === "fallback" && (
+                    <span
+                      className="min-w-0 truncate text-[11px] text-muted-foreground"
+                      data-testid="composer-web-search-via"
+                    >
+                      {webSearch.fallbackProvider
+                        ? t("chat.runtime.webSearchVia").replace(
+                            "{provider}",
+                            webSearchServiceLabel(webSearch.fallbackProvider),
+                          )
+                        : t("chat.runtime.webSearchViaService")}
+                    </span>
+                  )}
+                </span>
                 <Switch
                   id={`${executionModeRadioName}-web`}
-                  checked={nativeWebSearchSupported && chatRuntimeControls.nativeWebSearchEnabled}
-                  disabled={disabled || !nativeWebSearchSupported}
+                  checked={webSearch.usable && chatRuntimeControls.nativeWebSearchEnabled}
+                  disabled={disabled || !webSearch.usable}
                   aria-label={t("chat.runtime.webSearch")}
+                  aria-describedby={
+                    webSearch.usable ? undefined : `${executionModeRadioName}-web-hint`
+                  }
                   onCheckedChange={(checked) =>
                     onChatRuntimeControlsChange({ nativeWebSearchEnabled: checked })
                   }
                 />
               </label>
+              {!webSearch.usable && (
+                <button
+                  type="button"
+                  id={`${executionModeRadioName}-web-hint`}
+                  data-testid="composer-web-search-hint"
+                  onClick={() => {
+                    setIsModelPickerOpen(false);
+                    onOpenSettings("webSearch");
+                  }}
+                  className={cn(
+                    "-mx-1 mb-1 block w-[calc(100%+0.5rem)] rounded-md px-1 py-0.5 text-left",
+                    "text-[11px] leading-4 text-muted-foreground",
+                    "hover:bg-settings-active/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
+                >
+                  {t("chat.runtime.webSearchUnavailableHint")}
+                </button>
+              )}
             </fieldset>
           </div>
         ) : (

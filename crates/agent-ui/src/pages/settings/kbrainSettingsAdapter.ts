@@ -1,10 +1,13 @@
 import type { KBrainHealth } from "@liveagent/ui/lib/kbrain/health";
+import type { KBrainWebSearchSettings } from "@liveagent/ui/lib/providers/webSearchFallback";
 export type KBrainSettingsProvider = {
   id: string;
   name: string;
   api: string;
   baseUrl: string;
   apiKeyConfigured: boolean;
+  /** Read-only (capability web_search_fallback): the provider's API searches natively. */
+  nativeWebSearchSupported?: boolean;
   activeModels: string[];
   models: KBrainSettingsModel[];
 };
@@ -44,6 +47,12 @@ export type KBrainSettingsDocument = {
   computer?: KBrainComputerConfig;
   memory?: KBrainMemoryConfig;
   memoryOrganizer?: KBrainMemoryOrganizerConfig;
+  /**
+   * The web search fallback service; absent on backends without
+   * `capabilities.web_search_fallback`. Never carries the API key. Read it with
+   * readWebSearchSettings, which checks the shape.
+   */
+  webSearch?: KBrainWebSearchSettings;
   mode: "kbrain";
   defaultModel: string;
   defaultProvider: string;

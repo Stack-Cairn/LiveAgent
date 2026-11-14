@@ -524,6 +524,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       providerId: provider.type,
       requestFormat: provider.requestFormat,
       modelId: model,
+      nativeWebSearchSupported: provider.nativeWebSearchSupported,
     });
     const selectedModel: SelectedModel = {
       ...effectiveSelectedModel.selectedModel,

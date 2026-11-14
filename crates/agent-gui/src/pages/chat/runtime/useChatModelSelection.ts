@@ -2,6 +2,7 @@ import {
   useCatalogLiveVersion,
   useThinkingLiveVersion,
 } from "@liveagent/ui/lib/models/useThinkingLive";
+import { useWebSearchFallbackVersion } from "@liveagent/ui/lib/providers/useWebSearchFallbackState";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
@@ -188,11 +189,18 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
       providerId: currentChatProvider?.type,
       requestFormat: currentChatProvider?.requestFormat,
       modelId: currentChatModelId,
+      nativeWebSearchSupported: currentChatProvider?.nativeWebSearchSupported,
     }),
-    [currentChatModelId, currentChatProvider?.requestFormat, currentChatProvider?.type],
+    [
+      currentChatModelId,
+      currentChatProvider?.nativeWebSearchSupported,
+      currentChatProvider?.requestFormat,
+      currentChatProvider?.type,
+    ],
   );
   // 运行期思考档位补充到达会改变档位列表/恒开判定，版本号计入依赖使 memo 跟进。
   const thinkingLiveVersion = useThinkingLiveVersion();
+  const webSearchFallbackVersion = useWebSearchFallbackVersion();
   // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。
   const chatRuntimeReasoningOptions = useMemo(
     () => getChatRuntimeReasoningLevelsForProvider(chatRuntimeReasoningParams),
@@ -206,14 +214,19 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
   );
   // normalizeChatRuntimeControlsForProvider 会按模型档位表钳制当前选中档：档位表
   // 随运行期补充变化时，选中档必须同步重钳，否则出现「选中档不在选项里」。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 与 webSearchFallbackVersion 是刻意的失效信号：运行期档位补充或联网搜索回退状态到达后重算。
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(
         applyConversationThinking(settings.chatRuntimeControls, activeSelectedModel),
         chatRuntimeReasoningParams,
       ),
-    [chatRuntimeReasoningParams, settings.chatRuntimeControls, thinkingLiveVersion],
+    [
+      chatRuntimeReasoningParams,
+      settings.chatRuntimeControls,
+      thinkingLiveVersion,
+      webSearchFallbackVersion,
+    ],
   );
   const handleChatRuntimeControlsChange = useCallback(
     (patch: Partial<ChatRuntimeControls>) => {

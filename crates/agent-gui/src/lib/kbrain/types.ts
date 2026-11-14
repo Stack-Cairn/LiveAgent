@@ -43,6 +43,8 @@ export type KBrainSettingsDocument = {
   defaultProvider?: string;
   providers: KBrainSettingsProvider[];
   models?: KBrainSettingsModel[];
+  /** Web search fallback service (capability web_search_fallback); never carries the key. */
+  webSearch?: unknown;
 };
 
 export type KBrainProviderUpdate = Omit<CustomProvider, "apiKey"> & {

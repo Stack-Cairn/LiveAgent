@@ -4,6 +4,7 @@ import {
   useCatalogLiveVersion,
   useThinkingLiveVersion,
 } from "@liveagent/ui/lib/models/useThinkingLive";
+import { useWebSearchFallbackVersion } from "@liveagent/ui/lib/providers/useWebSearchFallbackState";
 import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useMemo } from "react";
@@ -96,7 +97,8 @@ export function useGatewayChatConfiguration({
   );
   // normalizeChatRuntimeControlsForProvider 会按模型档位表钳制当前选中档：档位表
   // 随运行期补充变化时，选中档必须同步重钳，否则出现「选中档不在选项里」。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档。
+  const webSearchFallbackVersion = useWebSearchFallbackVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 与 webSearchFallbackVersion 是刻意的失效信号：运行期档位补充或联网搜索回退状态到达后重算。
   const chatRuntimeControlsForCurrentProvider = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(
@@ -105,14 +107,17 @@ export function useGatewayChatConfiguration({
           providerId: currentChatProvider?.type,
           requestFormat: currentChatProvider?.requestFormat,
           modelId: activeSelectedModel?.model,
+          nativeWebSearchSupported: currentChatProvider?.nativeWebSearchSupported,
         },
       ),
     [
       activeSelectedModel,
+      currentChatProvider?.nativeWebSearchSupported,
       currentChatProvider?.requestFormat,
       currentChatProvider?.type,
       settings.chatRuntimeControls,
       thinkingLiveVersion,
+      webSearchFallbackVersion,
     ],
   );
   const handleChatRuntimeControlsChange = useCallback(

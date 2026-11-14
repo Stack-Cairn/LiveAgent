@@ -2569,4 +2569,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "projectTools.terminalInputPaused.backpressure": "终端连接较慢，已暂停输入以避免输入队列过大。",
   "chat.stt.start": "开始语音输入",
   "chat.stt.stop": "停止语音输入",
+  "chat.runtime.webSearchUnavailableHint":
+    "当前模型接口不支持原生联网搜索，可在 设置 → 联网搜索 配置搜索服务",
+  "chat.runtime.webSearchVia": "经由 {provider}",
+  "chat.runtime.webSearchViaService": "经由搜索服务",
 } as const satisfies Record<string, string>;

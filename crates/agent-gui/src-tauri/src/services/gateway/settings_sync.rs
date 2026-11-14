@@ -25,7 +25,7 @@ impl GatewayController {
     }
 
     /// The settings.get answer: the snapshot plus K-brain's memory switch, memory organizer
-    /// schedule and AI approval reviewer taken from the same K-brain settings read, so a successful answer always
+    /// schedule, AI approval reviewer and web search service taken from the same K-brain settings read, so a successful answer always
     /// carries them for a backend that has them. Neither is cached or synced as LiveAgent
     /// settings.
     pub(crate) async fn settings_get_snapshot(&self) -> Result<Value, String> {
@@ -47,6 +47,12 @@ impl GatewayController {
                 map.insert(
                     super::kbrain_ai_approval::AI_APPROVAL_FIELD.to_string(),
                     approval,
+                );
+            }
+            if let Some(web_search) = super::kbrain_web_search::web_search_from_settings(&backend) {
+                map.insert(
+                    super::kbrain_web_search::KBRAIN_WEB_SEARCH_FIELD.to_string(),
+                    web_search,
                 );
             }
         }

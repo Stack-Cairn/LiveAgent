@@ -352,7 +352,10 @@ export type ChatComposerBarProps = {
   onComposerBusyChange: (isBusy: boolean) => void;
   onSelectModel: (selection: SelectedModel) => void;
   onSelectExecutionMode: (mode: "text" | "tools") => void;
-  onOpenSettings: (section?: "providers" | "stt" | "systemTools", providerId?: string) => void;
+  onOpenSettings: (
+    section?: "providers" | "stt" | "systemTools" | "webSearch",
+    providerId?: string,
+  ) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   /** Select a folder to mount as a read-only project root. */

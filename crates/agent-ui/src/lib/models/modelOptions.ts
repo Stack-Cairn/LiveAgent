@@ -31,6 +31,8 @@ export type ModelOptionsSettings<TProviderType extends string = string> = {
     name: string;
     type: TProviderType;
     requestFormat?: string;
+    /** K-brain's per-provider answer (capability web_search_fallback); local rule otherwise. */
+    nativeWebSearchSupported?: boolean;
     activeModels: readonly string[];
     models?: readonly {
       id: string;
@@ -124,10 +126,12 @@ export function buildModelOptions<TProviderType extends string>(
         model,
         value: toModelValue(provider.id, model),
         label: configured?.displayName?.trim() || model,
-        nativeWebSearchSupported: providerSupportsNativeWebSearch(
-          provider.type,
-          resolveProviderApi(provider.type, provider.requestFormat),
-        ),
+        nativeWebSearchSupported:
+          provider.nativeWebSearchSupported ??
+          providerSupportsNativeWebSearch(
+            provider.type,
+            resolveProviderApi(provider.type, provider.requestFormat),
+          ),
         reasoning: Boolean(catalog?.thinking),
         vision: (configured?.inputModalities ?? catalog?.inputModalities)?.includes("image"),
         contextWindow:

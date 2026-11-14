@@ -53,6 +53,7 @@ mod history_sync;
 mod kbrain_history;
 mod kbrain_ai_approval;
 mod kbrain_memory;
+mod kbrain_web_search;
 mod managed_process;
 mod settings_sync;
 mod sftp;

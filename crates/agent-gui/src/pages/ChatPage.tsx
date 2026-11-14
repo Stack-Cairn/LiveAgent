@@ -3668,6 +3668,7 @@ function ChatPageContent(props: ChatPageProps) {
         providerId: paneProvider?.type,
         requestFormat: paneProvider?.requestFormat,
         modelId: paneSelectedModel?.model,
+        nativeWebSearchSupported: paneProvider?.nativeWebSearchSupported,
       },
     );
     const paneReasoningOptions = getChatRuntimeReasoningLevelsForProvider({

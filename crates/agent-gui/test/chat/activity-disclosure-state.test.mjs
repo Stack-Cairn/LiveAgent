@@ -85,6 +85,7 @@ const env = await createDomTestEnv({
       getToolDisplayName: (name) => name,
       getToolTraceKey: (item, index) => item.toolCall.id ?? String(index),
       isWebFetchToolName: (name) => name === "web_fetch" || name === "WebFetch",
+      isWebSearchToolName: (name) => name === "web_search",
       LSP_TOOL_NAME: "lsp",
       hasActiveUserInteraction: (items, runningToolCallIds) =>
         items.some(

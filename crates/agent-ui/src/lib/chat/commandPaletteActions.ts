@@ -41,6 +41,7 @@ export const SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS: readonly CommandPaletteSe
   { id: "mcp", labelKey: "settings.navMcp" },
   { id: "memory", labelKey: "settings.navMemory" },
   { id: "systemTools", labelKey: "settings.navSystemTools" },
+  { id: "webSearch", labelKey: "settings.navWebSearch" },
   { id: "stt", labelKey: "settings.navStt" },
   { id: "hooks", labelKey: "settings.navHooks" },
   { id: "cron", labelKey: "settings.navCron" },

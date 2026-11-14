@@ -11,6 +11,7 @@ export type SectionId =
   | "skills"
   | "mcp"
   | "systemTools"
+  | "webSearch"
   | "permissions"
   | "stt"
   | "providers"

@@ -3,6 +3,10 @@ import {
   readSandboxSetupResponse,
   type SandboxSetupOutcome,
 } from "@liveagent/ui/lib/kbrain/sandboxSetup";
+import {
+  recordWebSearchFallbackState,
+  webSearchFallbackStateFrom,
+} from "@liveagent/ui/lib/providers/webSearchFallback";
 import type {
   KBrainComputerStatus,
   KBrainSettingsAdapter,
@@ -97,11 +101,18 @@ export async function setUpKBrainSandbox(): Promise<SandboxSetupOutcome> {
   return readSandboxSetupResponse(response);
 }
 
+// Every settings document read here also updates the web search fallback state the
+// composer and the run gate use.
+function recordWebSearch(document: KBrainSettingsDocument): KBrainSettingsDocument {
+  recordWebSearchFallbackState(webSearchFallbackStateFrom(document));
+  return document;
+}
+
 export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
   isKbrain: true,
   runtimeConnection: getKBrainRuntimeConnection,
   getConnection: getKBrainRuntimeConnection,
-  getSettings: () => request<KBrainSettingsDocument>("/v1/settings"),
+  getSettings: () => request<KBrainSettingsDocument>("/v1/settings").then(recordWebSearch),
   getComputerStatus: () => request<KBrainComputerStatus>("/v1/computer"),
   getHealth: getKBrainHealth,
   getCapabilities: () => getKBrainHealth().then((health) => health.capabilities),
@@ -109,7 +120,7 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
     request<KBrainSettingsDocument>("/v1/settings", {
       method: "PUT",
       body: JSON.stringify(update),
-    }),
+    }).then(recordWebSearch),
   listPermissionRules: async ({ workspace }) => {
     const list = await rulesRequest<{ project_root?: string; rules?: WirePermissionRule[] }>(
       `/v1/permissions/rules${rulesQuery({ workspace })}`,

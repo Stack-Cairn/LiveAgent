@@ -43,6 +43,7 @@ import {
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
+import { useWebSearchFallbackVersion } from "@liveagent/ui/lib/providers/useWebSearchFallbackState";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { toTrajectoryMessages } from "@liveagent/ui/lib/trajectory/transcriptMessages";
 import {
@@ -517,7 +518,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   // 运行期思考档位补充到达会改变档位列表/恒开判定/当前档钳制，版本号计入依赖使
   // memo 跟进。
   const thinkingLiveVersion = useThinkingLiveVersion();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重钳当前档；selection 按字段比较，避免每次解析出新对象触发重算。
+  const webSearchFallbackVersion = useWebSearchFallbackVersion();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 与 webSearchFallbackVersion 是刻意的失效信号，运行期档位补充或联网搜索回退状态到达后重算；selection 按字段比较，避免每次解析出新对象触发重算。
   const paneRuntimeControls = useMemo(
     () =>
       normalizeChatRuntimeControlsForProvider(
@@ -526,16 +528,19 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           providerId: selectedProvider?.type,
           requestFormat: selectedProvider?.requestFormat,
           modelId: selection?.model,
+          nativeWebSearchSupported: selectedProvider?.nativeWebSearchSupported,
         },
       ),
     [
       context.settings.chatRuntimeControls,
+      selectedProvider?.nativeWebSearchSupported,
       selectedProvider?.requestFormat,
       selectedProvider?.type,
       selection?.model,
       selection?.thinkingEnabled,
       selection?.reasoning,
       thinkingLiveVersion,
+      webSearchFallbackVersion,
     ],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: thinkingLiveVersion 是刻意的失效信号，运行期档位补充到达后重算。

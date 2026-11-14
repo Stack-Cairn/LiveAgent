@@ -10,6 +10,7 @@ import {
   Clock3,
   Cloud,
   Cpu,
+  Globe,
   Key,
   Mic,
   Settings2,
@@ -34,6 +35,7 @@ import { SshSection } from "./SshSection";
 import { SttSection } from "./SttSection";
 import { SystemSettingsForm } from "./SystemSettingsForm";
 import { SystemToolsSection } from "./SystemToolsSection";
+import { WebSearchSection } from "./WebSearchSection";
 
 const EMPTY_SERVICES = {};
 const STT_SELECTED_PROVIDER_CACHE = new WeakMap<
@@ -179,6 +181,23 @@ export function SettingsPage(props: SettingsPageProps) {
           </div>
         ),
       },
+      // The search service K-brain falls back to when a model API cannot search natively.
+      ...(props.settingsHost?.kbrain
+        ? [
+            {
+              id: "webSearch",
+              groupKey: "settings.groupIntelligence",
+              groupOrder: 25,
+              order: 22,
+              labelKey: "settings.navWebSearch",
+              icon: <Globe className={extension.iconClassName} />,
+              render: () =>
+                props.settingsHost?.kbrain ? (
+                  <WebSearchSection kbrain={props.settingsHost.kbrain} />
+                ) : null,
+            } satisfies SettingsSectionDefinition<void>,
+          ]
+        : []),
       // Only hosts that can reach the K-brain rules API get the page.
       ...(props.settingsHost?.kbrain?.listPermissionRules
         ? [

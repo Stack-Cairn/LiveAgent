@@ -8,6 +8,10 @@ import {
 import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import {
+  recordWebSearchFallbackState,
+  webSearchFallbackStateFrom,
+} from "@liveagent/ui/lib/providers/webSearchFallback";
+import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncUpdatePayload,
   type GatewaySettingsSyncUpdatePayload,
@@ -284,6 +288,13 @@ export function useGatewaySettingsSync(params: {
   const applyGatewaySettings = useCallback(
     (payload: GatewaySettingsSyncUpdatePayload) => {
       if (Object.hasOwn(payload, "projectPrompts")) backendPromptResourcesRef.current = true;
+      // The web search fallback rides along on settings.get answers from desktops whose
+      // K-brain has it; the composer and the send path gate web search on it.
+      if (Object.hasOwn(payload, "kbrainWebSearch")) {
+        recordWebSearchFallbackState(
+          webSearchFallbackStateFrom({ webSearch: payload.kbrainWebSearch }),
+        );
+      }
       // Automation snapshots ride along on the settings-sync channel but are
       // desktop-owned state with their own revision — feed them straight into
       // the automation store instead of the settings state.

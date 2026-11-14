@@ -1805,4 +1805,56 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.stt.saving": "Saving…",
   "settings.stt.testing": "Testing…",
   "settings.stt.saveAndTest": "Save and test connection",
+  "settings.navWebSearch": "Web Search",
+  "settings.webSearch.title": "Web search",
+  "settings.webSearch.description":
+    "When a model's API cannot search the web natively (such as OpenAI Chat Completions–compatible APIs), K-brain gives the model a web_search tool backed by the service configured here. APIs with native search are unaffected.",
+  "settings.webSearch.upgrade":
+    "This K-brain backend has no web search fallback. Update LiveAgent to configure it.",
+  "settings.webSearch.provider": "Search service",
+  "settings.webSearch.providerHint":
+    "Used when web search is on and the model's API cannot search natively.",
+  "settings.webSearch.providerNone": "None",
+  "settings.webSearch.service.bocha": "Bocha",
+  "settings.webSearch.apiKey": "API key",
+  "settings.webSearch.apiKeyHint":
+    "Stored only in K-brain's configuration and never shown again. Leave empty to keep the saved key.",
+  "settings.webSearch.apiKeyPlaceholder": "Enter API key",
+  "settings.webSearch.apiKeyConfiguredConfig": "Configured (from config)",
+  "settings.webSearch.apiKeyConfiguredEnv": "Configured (from environment variable)",
+  "settings.webSearch.apiKeyEnvNote":
+    "A key in the environment takes precedence over the key saved here.",
+  "settings.webSearch.apiKeyClear": "Clear",
+  "settings.webSearch.apiKeyWillClear": "The saved key will be removed when you save",
+  "settings.webSearch.apiKeyUndoClear": "Undo",
+  "settings.webSearch.baseUrl": "Base URL",
+  "settings.webSearch.baseUrlHint": "Optional; leave empty for the service's official endpoint.",
+  "settings.webSearch.baseUrlHintSearxng":
+    "Required: your SearXNG instance. Enable json under search.formats in its settings.yml.",
+  "settings.webSearch.baseUrlInvalid": "The base URL must be an http or https URL.",
+  "settings.webSearch.baseUrlRequired": "SearXNG needs a base URL.",
+  "settings.webSearch.maxResults": "Results per search",
+  "settings.webSearch.maxResultsHint": "How many results each search returns (1–10, default 5).",
+  "settings.webSearch.maxResultsInvalid": "Results per search must be a whole number from 1 to 10.",
+  "settings.webSearch.statusAvailable":
+    "Available: with web search on, models without native search search through {provider}.",
+  "settings.webSearch.statusAvailableEnv":
+    "Available: the search service is set by environment variables.",
+  "settings.webSearch.statusNoProvider": "Off: choose a search service.",
+  "settings.webSearch.statusBaseUrlRequired": "Off: SearXNG needs a base URL.",
+  "settings.webSearch.statusApiKeyRequired": "Off: enter an API key for {provider}.",
+  "settings.webSearch.statusOther": "Unavailable: {reason}",
+  "settings.webSearch.help": "Get an API key:",
+  "settings.webSearch.helpSearxng": "SearXNG (self-hosted, no key)",
+  "settings.webSearch.privacy":
+    "When searching, K-brain sends the model's search queries to the selected service.",
+  "settings.webSearch.webNotice": "Settings are saved to the K-brain of the connected desktop.",
+  "settings.webSearch.save": "Save",
+  "settings.webSearch.reload": "Reload",
+  "settings.webSearch.loading": "Loading…",
+  "settings.webSearch.saving": "Saving…",
+  "settings.webSearch.saved": "Saved",
+  "settings.webSearch.unsaved": "Unsaved changes",
+  "settings.webSearch.discard": "Discard unsaved changes and reload?",
+  "settings.webSearch.connectionChanged": "The K-brain connection changed. Reload before saving.",
 } as const satisfies Record<string, string>;

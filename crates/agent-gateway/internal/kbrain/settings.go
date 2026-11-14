@@ -18,8 +18,11 @@ type gatewaySettingsProjection struct {
 	// KBrainMemoryOrganizer is K-brain's organizer schedule {enabled,intervalHours};
 	// absent on backends without capabilities.memory_organizer_settings.
 	KBrainMemoryOrganizer json.RawMessage `json:"kbrainMemoryOrganizer,omitempty"`
-	CustomProviders       []any           `json:"customProviders"`
-	SelectedModel         map[string]any  `json:"selectedModel"`
+	// KBrainWebSearch is K-brain's web search fallback service (never its API key);
+	// absent on backends without capabilities.web_search_fallback.
+	KBrainWebSearch json.RawMessage `json:"kbrainWebSearch,omitempty"`
+	CustomProviders []any           `json:"customProviders"`
+	SelectedModel   map[string]any  `json:"selectedModel"`
 }
 
 type kbrainSettingsDocument struct {
@@ -27,6 +30,7 @@ type kbrainSettingsDocument struct {
 	Computer        json.RawMessage  `json:"computer,omitempty"`
 	Memory          json.RawMessage  `json:"memory,omitempty"`
 	MemoryOrganizer json.RawMessage  `json:"memoryOrganizer,omitempty"`
+	WebSearch       json.RawMessage  `json:"webSearch,omitempty"`
 	DefaultModel    string           `json:"defaultModel"`
 	DefaultProvider string           `json:"defaultProvider"`
 	Providers       []kbrainProvider `json:"providers"`
@@ -34,28 +38,31 @@ type kbrainSettingsDocument struct {
 }
 
 type kbrainProvider struct {
-	ID                   string         `json:"id"`
-	Name                 string         `json:"name"`
-	Type                 string         `json:"type,omitempty"`
-	API                  string         `json:"api"`
-	BaseURL              string         `json:"baseUrl"`
-	IsFullURL            bool           `json:"isFullUrl,omitempty"`
-	ModelsURL            string         `json:"modelsUrl,omitempty"`
-	APIKeyConfigured     bool           `json:"apiKeyConfigured"`
-	CustomHeaders        []any          `json:"customHeaders,omitempty"`
-	ModelOrder           []string       `json:"modelOrder,omitempty"`
-	ActiveModels         []string       `json:"activeModels"`
-	RequestFormat        string         `json:"requestFormat,omitempty"`
-	Reasoning            string         `json:"reasoning,omitempty"`
-	PromptCachingEnabled *bool          `json:"promptCachingEnabled,omitempty"`
-	PromptCacheHintMode  string         `json:"promptCacheHintMode,omitempty"`
-	PromptCacheRetention string         `json:"promptCacheRetention,omitempty"`
-	NativeWebSearch      bool           `json:"nativeWebSearchEnabled"`
-	UseSystemProxy       bool           `json:"useSystemProxy,omitempty"`
-	RetryPolicy          map[string]any `json:"retryPolicy,omitempty"`
-	UsageQuery           map[string]any `json:"usageQuery,omitempty"`
-	Metadata             map[string]any `json:"metadata,omitempty"`
-	Models               []kbrainModel  `json:"models"`
+	ID                   string   `json:"id"`
+	Name                 string   `json:"name"`
+	Type                 string   `json:"type,omitempty"`
+	API                  string   `json:"api"`
+	BaseURL              string   `json:"baseUrl"`
+	IsFullURL            bool     `json:"isFullUrl,omitempty"`
+	ModelsURL            string   `json:"modelsUrl,omitempty"`
+	APIKeyConfigured     bool     `json:"apiKeyConfigured"`
+	CustomHeaders        []any    `json:"customHeaders,omitempty"`
+	ModelOrder           []string `json:"modelOrder,omitempty"`
+	ActiveModels         []string `json:"activeModels"`
+	RequestFormat        string   `json:"requestFormat,omitempty"`
+	Reasoning            string   `json:"reasoning,omitempty"`
+	PromptCachingEnabled *bool    `json:"promptCachingEnabled,omitempty"`
+	PromptCacheHintMode  string   `json:"promptCacheHintMode,omitempty"`
+	PromptCacheRetention string   `json:"promptCacheRetention,omitempty"`
+	NativeWebSearch      bool     `json:"nativeWebSearchEnabled"`
+	// NativeWebSearchSupported is K-brain's read-only answer whether the provider's
+	// API searches natively; nil on backends without capabilities.web_search_fallback.
+	NativeWebSearchSupported *bool          `json:"nativeWebSearchSupported,omitempty"`
+	UseSystemProxy           bool           `json:"useSystemProxy,omitempty"`
+	RetryPolicy              map[string]any `json:"retryPolicy,omitempty"`
+	UsageQuery               map[string]any `json:"usageQuery,omitempty"`
+	Metadata                 map[string]any `json:"metadata,omitempty"`
+	Models                   []kbrainModel  `json:"models"`
 }
 
 type kbrainModel struct {
@@ -165,7 +172,7 @@ func providerPayload(provider kbrainProvider) map[string]any {
 	if ptype == "gemini" || ptype == "xai" || ptype == "deepseek" {
 		promptCaching = false
 	}
-	return map[string]any{
+	out := map[string]any{
 		"id":                     provider.ID,
 		"name":                   provider.Name,
 		"type":                   ptype,
@@ -189,6 +196,10 @@ func providerPayload(provider kbrainProvider) map[string]any {
 		"usageQuery":             provider.UsageQuery,
 		"metadata":               provider.Metadata,
 	}
+	if provider.NativeWebSearchSupported != nil {
+		out["nativeWebSearchSupported"] = *provider.NativeWebSearchSupported
+	}
+	return out
 }
 
 func settingsProjectionForGateway(raw json.RawMessage) (json.RawMessage, error) {
@@ -210,7 +221,7 @@ func settingsProjectionForGateway(raw json.RawMessage) (json.RawMessage, error) 
 			"providerType":     providerTypeByID[document.DefaultProvider],
 		}
 	}
-	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory, KBrainMemoryOrganizer: document.MemoryOrganizer})
+	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory, KBrainMemoryOrganizer: document.MemoryOrganizer, KBrainWebSearch: document.WebSearch})
 }
 
 func decodeSettingsDocument(raw json.RawMessage) (kbrainSettingsDocument, error) {
@@ -236,7 +247,7 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 	}
 	for key := range input {
 		switch key {
-		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts", "kbrainMemory", "kbrainMemoryOrganizer":
+		case "selectedModel", "customProviders", "deleteProviders", "providerApiKeyUpdates", "providerUsageQuerySecretUpdates", "computer", "aiApproval", "mcp", "skills", "agents", "projectPrompts", "kbrainMemory", "kbrainMemoryOrganizer", "kbrainWebSearch":
 		default:
 			return nil, fmt.Errorf("unsupported Gateway settings field %q: non-provider settings persistence is unavailable", key)
 		}
@@ -284,6 +295,13 @@ func settingsUpdateForKBrain(raw json.RawMessage, previous ...json.RawMessage) (
 			return nil, err
 		}
 		update["memoryOrganizer"] = value
+	}
+	if webSearch, ok := input["kbrainWebSearch"]; ok {
+		value, err := webSearchUpdate(webSearch)
+		if err != nil {
+			return nil, err
+		}
+		update["webSearch"] = value
 	}
 	if selectedRaw, ok := input["selectedModel"]; ok {
 		var selected map[string]json.RawMessage
@@ -563,7 +581,7 @@ func providerModelPresent(provider map[string]any, modelID string) bool {
 
 func kbrainProviderUpdate(provider map[string]json.RawMessage) (map[string]any, error) {
 	out := map[string]any{}
-	allowed := []string{"id", "name", "type", "api", "baseUrl", "apiKey", "apiKeyConfigured", "clearApiKey", "models", "activeModels", "modelOrder", "modelsUrl", "isFullUrl", "customHeaders", "requestFormat", "reasoning", "promptCachingEnabled", "promptCacheHintMode", "promptCacheRetention", "nativeWebSearchEnabled", "useSystemProxy", "retryPolicy", "usageQuery", "metadata"}
+	allowed := []string{"id", "name", "type", "api", "baseUrl", "apiKey", "apiKeyConfigured", "clearApiKey", "models", "activeModels", "modelOrder", "modelsUrl", "isFullUrl", "customHeaders", "requestFormat", "reasoning", "promptCachingEnabled", "promptCacheHintMode", "promptCacheRetention", "nativeWebSearchEnabled", "nativeWebSearchSupported", "useSystemProxy", "retryPolicy", "usageQuery", "metadata"}
 	allowedSet := map[string]bool{}
 	for _, key := range allowed {
 		allowedSet[key] = true
@@ -578,6 +596,8 @@ func kbrainProviderUpdate(provider map[string]json.RawMessage) (map[string]any, 
 		}
 		out[key] = decoded
 	}
+	// Read-only in K-brain's document; a WebUI echoes it back with the provider.
+	delete(out, "nativeWebSearchSupported")
 	id, _ := out["id"].(string)
 	if id == "" || strings.TrimSpace(id) != id {
 		return nil, errors.New("provider id must be non-empty without surrounding whitespace")
@@ -720,6 +740,53 @@ func memoryOrganizerUpdate(raw json.RawMessage) (map[string]any, error) {
 	}
 	if object.IntervalHours != nil {
 		out["intervalHours"] = *object.IntervalHours
+	}
+	return out, nil
+}
+
+// webSearchUpdate validates the WebUI's kbrainWebSearch and returns K-brain's webSearch
+// update. Only the editable fields are forwarded: provider, apiKey (a new key; "" keeps
+// the stored one), clearApiKey, baseUrl and maxResults. The read-only fields of a GET
+// body (apiKeyConfigured, apiKeySource, available, reason, providers) are dropped.
+// K-brain checks the provider name, the URL and the 0-10 range.
+func webSearchUpdate(raw json.RawMessage) (map[string]any, error) {
+	invalid := errors.New("kbrainWebSearch must be an object with string provider, apiKey and baseUrl, boolean clearApiKey and numeric maxResults")
+	var object struct {
+		Provider    *string  `json:"provider"`
+		APIKey      *string  `json:"apiKey"`
+		ClearAPIKey *bool    `json:"clearApiKey"`
+		BaseURL     *string  `json:"baseUrl"`
+		MaxResults  *float64 `json:"maxResults"`
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &shape); err != nil || shape == nil {
+		return nil, invalid
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, invalid
+	}
+	out := map[string]any{}
+	if object.Provider != nil {
+		out["provider"] = strings.TrimSpace(*object.Provider)
+	}
+	key := ""
+	if object.APIKey != nil {
+		key = strings.TrimSpace(*object.APIKey)
+	}
+	if key != "" {
+		out["apiKey"] = key
+	}
+	if object.ClearAPIKey != nil && *object.ClearAPIKey {
+		if key != "" {
+			return nil, errors.New("cannot replace and clear the web search API key together")
+		}
+		out["clearApiKey"] = true
+	}
+	if object.BaseURL != nil {
+		out["baseUrl"] = strings.TrimSpace(*object.BaseURL)
+	}
+	if object.MaxResults != nil {
+		out["maxResults"] = *object.MaxResults
 	}
 	return out, nil
 }

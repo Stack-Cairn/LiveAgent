@@ -1,6 +1,12 @@
 import { Keyboard, MonitorSmartphone } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import {
+  type KBrainWebSearchSettings,
+  type KBrainWebSearchUpdate,
+  recordWebSearchFallbackState,
+  webSearchFallbackStateFrom,
+} from "@liveagent/ui/lib/providers/webSearchFallback";
+import {
   configureResourceHostCapabilities,
   kbrainResourceHostCapabilities,
 } from "@liveagent/ui/lib/resourceHost";
@@ -10,6 +16,7 @@ import type {
   KBrainMemoryConfig,
   KBrainMemoryOrganizerConfig,
   KBrainSettingsAdapter,
+  KBrainSettingsDocument,
   PermissionRule,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
 import { ShortcutCommandsSection } from "@liveagent/ui/pages/settings/ShortcutCommandsSection";
@@ -70,7 +77,7 @@ const computerSettingsAdapter: KBrainSettingsAdapter = {
   getConnection: () => null,
   async getSettings() {
     const document = await getGatewayWebSocketClient(loadToken().trim()).getSettings();
-    return {
+    const projected: KBrainSettingsDocument = {
       mode: "kbrain",
       defaultModel: "",
       defaultProvider: "",
@@ -84,17 +91,25 @@ const computerSettingsAdapter: KBrainSettingsAdapter = {
       computer: document.computer,
       memory: document.kbrainMemory,
       memoryOrganizer: document.kbrainMemoryOrganizer,
+      // readWebSearchSettings checks the shape wherever it is read.
+      ...(document.kbrainWebSearch
+        ? { webSearch: document.kbrainWebSearch as KBrainWebSearchSettings }
+        : {}),
     };
+    recordWebSearchFallbackState(webSearchFallbackStateFrom(projected));
+    return projected;
   },
   async updateSettings(update) {
-    // Gateway carries the K-brain memory switch as `kbrainMemory` and the organizer
-    // schedule as `kbrainMemoryOrganizer`: its `memory` key is LiveAgent's own settings.
-    const { memory, memoryOrganizer, ...rest } = update as Omit<
+    // Gateway carries the K-brain memory switch as `kbrainMemory`, the organizer
+    // schedule as `kbrainMemoryOrganizer` and the web search service as
+    // `kbrainWebSearch`: its `memory` key is LiveAgent's own settings.
+    const { memory, memoryOrganizer, webSearch, ...rest } = update as Omit<
       GatewaySettingsSyncUpdatePayload,
-      "kbrainMemoryOrganizer"
+      "kbrainMemoryOrganizer" | "kbrainWebSearch"
     > & {
       memory?: KBrainMemoryConfig;
       memoryOrganizer?: Partial<KBrainMemoryOrganizerConfig>;
+      webSearch?: KBrainWebSearchUpdate;
     };
     await getGatewayWebSocketClient(loadToken().trim()).updateSettings({
       ...rest,
@@ -103,6 +118,7 @@ const computerSettingsAdapter: KBrainSettingsAdapter = {
       ...(memoryOrganizer
         ? { kbrainMemoryOrganizer: memoryOrganizer as KBrainMemoryOrganizerConfig }
         : {}),
+      ...(webSearch ? { kbrainWebSearch: webSearch } : {}),
     });
     return this.getSettings();
   },

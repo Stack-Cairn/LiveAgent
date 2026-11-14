@@ -31,7 +31,7 @@ export type SendChatFn = (
 
 export type ModelProviderSource = Pick<
   CustomProvider,
-  "id" | "name" | "type" | "requestFormat" | "activeModels"
+  "id" | "name" | "type" | "requestFormat" | "activeModels" | "nativeWebSearchSupported"
 >;
 
 export type TunnelManagerToolChange = {

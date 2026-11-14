@@ -96,10 +96,20 @@ export function isWebFetchToolName(name: string) {
   return name === "web_fetch" || name === "WebFetch";
 }
 
+/**
+ * K-brain's `web_search` fallback tool (capability web_search_fallback): a third-party
+ * search service queried for models whose API cannot search natively. It shows as an
+ * ordinary tool row; provider-native search runs render as hosted search instead.
+ */
+export function isWebSearchToolName(name: string) {
+  return name === "web_search";
+}
+
 export function getToolActivityCategory(name: string): ToolActivityCategory {
   if (isTaskToolName(name)) return "other";
   if (subagentControlAction(name)) return "agent";
   if (isWebFetchToolName(name)) return "fetch";
+  if (isWebSearchToolName(name)) return "search";
   switch (name) {
     case "Read":
     case "Image":
@@ -209,7 +219,7 @@ export function getToolMeta(name: string): {
       ? { Icon: Hand, accent: "var(--tool-bash-accent)", category: "cua" }
       : { Icon: Plug, accent: "var(--tool-list-accent)", category: "mcp" };
   }
-  if (isWebFetchToolName(name)) {
+  if (isWebFetchToolName(name) || isWebSearchToolName(name)) {
     return { Icon: Globe, accent: "var(--tool-search-accent)", category: "web" };
   }
   switch (name) {

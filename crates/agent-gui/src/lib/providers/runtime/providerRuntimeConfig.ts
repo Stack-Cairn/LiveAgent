@@ -1,8 +1,4 @@
 import {
-  providerSupportsNativeWebSearch,
-  resolveProviderApi,
-} from "@liveagent/ui/lib/providers/providerCapabilities";
-import {
   type ChatRuntimeControls,
   type CustomProvider,
   findProviderModelConfig,
@@ -29,7 +25,10 @@ export function createProviderRuntimeConfig(
     requestFormat: provider.requestFormat,
     modelId: model,
   };
-  const controls = normalizeChatRuntimeControlsForProvider(controlsInput, reasoningParams);
+  const controls = normalizeChatRuntimeControlsForProvider(controlsInput, {
+    ...reasoningParams,
+    nativeWebSearchSupported: provider.nativeWebSearchSupported,
+  });
   const reasoningSupported = getChatRuntimeReasoningLevelsForProvider(reasoningParams).length > 0;
   const backend = getProviderRuntimeBackend();
   return {
@@ -49,12 +48,9 @@ export function createProviderRuntimeConfig(
     promptCachingEnabled: provider.promptCachingEnabled,
     promptCacheHintMode: provider.promptCacheHintMode,
     promptCacheRetention: provider.promptCacheRetention,
-    nativeWebSearchEnabled:
-      controls.nativeWebSearchEnabled &&
-      providerSupportsNativeWebSearch(
-        provider.type,
-        resolveProviderApi(provider.type, provider.requestFormat),
-      ),
+    // Already gated by normalizeChatRuntimeControlsForProvider: on where the API searches
+    // natively or K-brain's web_search fallback is available.
+    nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     useSystemProxy: provider.useSystemProxy,
     ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),
     modelConfig: findProviderModelConfig(provider, model),

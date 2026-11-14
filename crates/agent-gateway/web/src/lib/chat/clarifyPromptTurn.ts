@@ -55,6 +55,7 @@ export async function executeClarifyPromptTurn(
             providerId: provider.type,
             requestFormat: provider.requestFormat,
             modelId: model,
+            nativeWebSearchSupported: provider.nativeWebSearchSupported,
           })
         : fallback.runtimeControls,
     },

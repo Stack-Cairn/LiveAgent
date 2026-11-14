@@ -2717,4 +2717,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "The terminal connection is slow. Input is paused to keep the input queue from growing too large.",
   "chat.stt.start": "Start voice input",
   "chat.stt.stop": "Stop voice input",
+  "chat.runtime.webSearchUnavailableHint":
+    "This model's API has no native web search. Set up a search service in Settings → Web Search",
+  "chat.runtime.webSearchVia": "via {provider}",
+  "chat.runtime.webSearchViaService": "via search service",
 } as const satisfies Record<string, string>;

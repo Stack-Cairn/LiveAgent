@@ -4,6 +4,10 @@ import {
   resolveKBrainRequestFormat,
   resolveProviderApi,
 } from "@liveagent/ui/lib/providers/providerCapabilities";
+import {
+  recordWebSearchFallbackState,
+  webSearchFallbackStateFrom,
+} from "@liveagent/ui/lib/providers/webSearchFallback";
 import { type AppSettings, type CustomProvider, normalizeCustomProvider } from "../settings";
 import { createKBrainClient } from "./client";
 import { getKBrainRuntimeConnection } from "./runtimeConnection";
@@ -93,7 +97,13 @@ function settingsUpdateFromProviders(
   const previousById = new Map(previousProviders.map((provider) => [provider.id, provider]));
   const withInputModalities = resolvePushedInputModalities(providersInput);
   const providers = providersInput.map((provider) => {
-    const { apiKey, apiKeyConfigured: _configured, ...metadata } = provider;
+    // nativeWebSearchSupported is K-brain's read-only answer; it is not a setting.
+    const {
+      apiKey,
+      apiKeyConfigured: _configured,
+      nativeWebSearchSupported: _native,
+      ...metadata
+    } = provider;
     const clearApiKey =
       !apiKey.trim() &&
       provider.apiKeyConfigured === false &&
@@ -211,6 +221,7 @@ export function getKBrainSettingsClient() {
 export async function loadKBrainProviderSettings(): Promise<KBrainSettingsDocument> {
   const document = await getKBrainSettingsClient().getSettings();
   appProvidersFromKBrain(document);
+  recordWebSearchFallbackState(webSearchFallbackStateFrom(document));
   return document;
 }
 
@@ -219,6 +230,7 @@ export async function saveKBrainProviderSettings(
 ): Promise<KBrainSettingsDocument> {
   const document = await getKBrainSettingsClient().updateSettings(update);
   appProvidersFromKBrain(document);
+  recordWebSearchFallbackState(webSearchFallbackStateFrom(document));
   if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
     window.dispatchEvent(new Event(KBRAIN_SETTINGS_CHANGED_EVENT));
   }
