@@ -10,6 +10,7 @@
 
 mod bridge;
 mod cdp;
+pub mod cookie_import;
 mod launcher;
 mod page;
 mod snapshot;

@@ -121,6 +121,8 @@ macro_rules! app_invoke_handler {
             commands::browser::browser_close,
             commands::browser::browser_extension_install_info,
             commands::browser::browser_extension_reveal_dir,
+            commands::browser_cookie_import::browser_import_sources,
+            commands::browser_cookie_import::browser_import_cookies,
             // MCP
             commands::mcp::mcp_list_tools,
             commands::mcp::mcp_call_tool,
