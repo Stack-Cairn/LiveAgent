@@ -148,7 +148,7 @@ async function runTurn({ mode, capability = true }) {
       runtime: {}, selectedModel: {}, providerId: "fixture", model: "fixture",
       cancellation: { userStop: new AbortController() },
       buildPreparedContext: () => ({ messages: [{ role: "user", content: "ship it" }] }),
-      getNextConversationState: () => ({ messages: [] }),
+      getNextConversationState: () => ({ segments: [{ messages: [{ role: "user", id: "user-1", content: "ship it" }] }] }),
       batchLiveRoundsUpdate: (apply) => { apply([]); },
       gatewayBridgeEvents: { queueEvent: (event) => events.push(event), queueToken() {}, queueToolStatus() {}, emitError: (error) => assert.fail(error) },
       hookLifecycle: { startAgent() {}, startTurn() {}, ensureMessageEnded() {}, endTurn() {}, endAgent() {} },

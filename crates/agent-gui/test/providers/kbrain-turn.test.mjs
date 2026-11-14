@@ -604,7 +604,7 @@ test("busy deadline releases status without accepting or resubmitting after fail
         queueMicrotask(() => t.mock.timers.tick(180_001));
       }
     },
-  }), /session is still busy/);
+  }), /该会话上一轮仍在运行/);
   assert.equal(accepted, 0);
   assert.equal(statuses.at(-1), null, "terminal failure must release the busy indicator");
   assert.equal(calls.length, 2);
