@@ -424,3 +424,38 @@ export function base64ToBytes(data: string): Uint8Array<ArrayBuffer> {
   }
   return bytes;
 }
+
+export type BrowserLoadErrorKind =
+  | "certificate"
+  | "dns"
+  | "refused"
+  | "timeout"
+  | "offline"
+  | "other";
+
+/** Classifies a Chromium `net::ERR_*` navigation error so the pane can explain it. */
+export function classifyBrowserLoadError(
+  errorText: string | null | undefined,
+): BrowserLoadErrorKind {
+  const code = (errorText ?? "").toUpperCase();
+  if (code.includes("ERR_CERT_") || code.includes("ERR_SSL_") || code.includes("ERR_BAD_SSL")) {
+    return "certificate";
+  }
+  if (code.includes("ERR_NAME_NOT_RESOLVED") || code.includes("ERR_NAME_RESOLUTION_FAILED")) {
+    return "dns";
+  }
+  if (code.includes("ERR_INTERNET_DISCONNECTED") || code.includes("ERR_NETWORK_CHANGED")) {
+    return "offline";
+  }
+  if (code.includes("TIMED_OUT")) return "timeout";
+  if (
+    code.includes("ERR_CONNECTION_REFUSED") ||
+    code.includes("ERR_CONNECTION_RESET") ||
+    code.includes("ERR_CONNECTION_CLOSED") ||
+    code.includes("ERR_ADDRESS_UNREACHABLE") ||
+    code.includes("ERR_EMPTY_RESPONSE")
+  ) {
+    return "refused";
+  }
+  return "other";
+}

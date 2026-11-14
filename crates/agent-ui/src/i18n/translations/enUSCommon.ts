@@ -1480,6 +1480,16 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "projectTools.browserInvalidAddress": "Only http and https addresses can be opened",
   "projectTools.browserLoadErrorTitle": "This page could not be loaded",
   "projectTools.browserRetry": "Try again",
+  "projectTools.browserLoadErrorHint.certificate":
+    "This site's security certificate doesn't match the address or isn't trusted, so the connection may not be private. The built-in browser blocked it. Check that the address is spelled correctly.",
+  "projectTools.browserLoadErrorHint.dns":
+    "The server for this site couldn't be found. Check that the address is spelled correctly.",
+  "projectTools.browserLoadErrorHint.refused":
+    "The server refused the connection. If this is a local dev server, make sure it is running on this port.",
+  "projectTools.browserLoadErrorHint.timeout":
+    "The connection timed out. Check your network or try again later.",
+  "projectTools.browserLoadErrorHint.offline": "There is no network connection.",
+  "projectTools.browserLoadErrorHint.other": "Something went wrong while loading the page.",
   "projectTools.browserUnavailableTitle": "No browser found",
   "projectTools.browserUnavailableHint":
     "Install Google Chrome, Chromium or Microsoft Edge to use the built-in browser.",

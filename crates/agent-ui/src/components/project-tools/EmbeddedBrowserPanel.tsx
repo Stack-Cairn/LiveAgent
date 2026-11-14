@@ -29,10 +29,12 @@ import {
   useState,
 } from "react";
 import {
+  type BrowserLoadErrorKind,
   browserAddressDisplay,
   browserTabLabel,
   cdpModifiers,
   cdpMouseButton,
+  classifyBrowserLoadError,
   EMBEDDED_BROWSER_MAX_TABS,
   EMPTY_EMBEDDED_BROWSER_STATE,
   type EmbeddedBrowserClient,
@@ -65,6 +67,15 @@ export type EmbeddedBrowserPanelProps = {
 };
 
 type Notice = { tone: "info" | "error"; text: string };
+
+const LOAD_ERROR_HINT_KEYS = {
+  certificate: "projectTools.browserLoadErrorHint.certificate",
+  dns: "projectTools.browserLoadErrorHint.dns",
+  refused: "projectTools.browserLoadErrorHint.refused",
+  timeout: "projectTools.browserLoadErrorHint.timeout",
+  offline: "projectTools.browserLoadErrorHint.offline",
+  other: "projectTools.browserLoadErrorHint.other",
+} as const satisfies Record<BrowserLoadErrorKind, string>;
 
 const NOTICE_TIMEOUT_MS = 2600;
 const MULTI_CLICK_INTERVAL_MS = 450;
@@ -877,20 +888,37 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
             <div className="text-sm font-medium text-foreground">
               {t("projectTools.browserLoadErrorTitle")}
             </div>
-            <div className="max-w-80 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <div className="max-w-80 text-xs leading-relaxed text-muted-foreground">
+              {t(LOAD_ERROR_HINT_KEYS[classifyBrowserLoadError(loadError)])}
+            </div>
+            <div className="max-w-80 break-all font-mono text-[11px] leading-relaxed text-muted-foreground/80">
               {activeTab?.url ? <div>{activeTab.url}</div> : null}
               <div>{loadError}</div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-1 h-7 gap-1.5 rounded-lg px-3 text-xs"
-              onClick={retryLoad}
-            >
-              <RotateCw className="size-3.5" />
-              {t("projectTools.browserRetry")}
-            </Button>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 rounded-lg px-3 text-xs"
+                onClick={retryLoad}
+              >
+                <RotateCw className="size-3.5" />
+                {t("projectTools.browserRetry")}
+              </Button>
+              {onOpenExternal && activeTab?.url ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-lg px-3 text-xs"
+                  onClick={() => onOpenExternal(activeTab.url)}
+                >
+                  <ExternalLink className="size-3.5" />
+                  {t("projectTools.browserOpenExternal")}
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : blank ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-8 text-center">

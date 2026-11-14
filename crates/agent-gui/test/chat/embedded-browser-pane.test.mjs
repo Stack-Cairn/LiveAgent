@@ -336,3 +336,23 @@ test("browser pane host commands are not routed away as backend-owned commands",
     assert.equal(host.kBrainOwnedDesktopCommand(command), false, command);
   }
 });
+
+test("navigation errors are classified for the error page hint", () => {
+  const cases = {
+    "net::ERR_CERT_COMMON_NAME_INVALID": "certificate",
+    "net::ERR_CERT_AUTHORITY_INVALID": "certificate",
+    "net::ERR_SSL_PROTOCOL_ERROR": "certificate",
+    "net::ERR_NAME_NOT_RESOLVED": "dns",
+    "net::ERR_CONNECTION_REFUSED": "refused",
+    "net::ERR_CONNECTION_RESET": "refused",
+    "net::ERR_CONNECTION_TIMED_OUT": "timeout",
+    "net::ERR_TIMED_OUT": "timeout",
+    "net::ERR_INTERNET_DISCONNECTED": "offline",
+    "net::ERR_ABORTED": "other",
+  };
+  for (const [text, kind] of Object.entries(cases)) {
+    assert.equal(browser.classifyBrowserLoadError(text), kind, text);
+  }
+  assert.equal(browser.classifyBrowserLoadError(null), "other");
+  assert.equal(browser.classifyBrowserLoadError(""), "other");
+});

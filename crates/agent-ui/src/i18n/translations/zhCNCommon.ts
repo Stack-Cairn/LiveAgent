@@ -1408,6 +1408,14 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "projectTools.browserInvalidAddress": "仅支持打开 http 和 https 地址",
   "projectTools.browserLoadErrorTitle": "无法加载此页面",
   "projectTools.browserRetry": "重试",
+  "projectTools.browserLoadErrorHint.certificate":
+    "这个网站的安全证书与地址不匹配或不受信任，连接可能不安全，内置浏览器已阻止访问。请检查地址是否拼写正确。",
+  "projectTools.browserLoadErrorHint.dns": "找不到这个网站的服务器。请检查地址是否拼写正确。",
+  "projectTools.browserLoadErrorHint.refused":
+    "服务器拒绝了连接。如果是本地开发服务器，请确认它已经启动并监听这个端口。",
+  "projectTools.browserLoadErrorHint.timeout": "连接超时。请检查网络或稍后重试。",
+  "projectTools.browserLoadErrorHint.offline": "当前没有网络连接。",
+  "projectTools.browserLoadErrorHint.other": "加载页面时出错。",
   "projectTools.browserUnavailableTitle": "未找到浏览器",
   "projectTools.browserUnavailableHint":
     "请安装 Google Chrome、Chromium 或 Microsoft Edge 以使用内置浏览器。",

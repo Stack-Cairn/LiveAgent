@@ -549,6 +549,24 @@ impl SessionCore {
     }
 }
 
+/// `Page.frameNavigated` 的主 frame 是否真的到达了页面：Chromium 的网络错误页
+/// 也会提交一次导航，但带 `unreachableUrl`（url 为 chrome-error://），此时
+/// 应保留 `Page.navigate` 记下的错误，让面板显示错误说明。
+fn navigation_reached_page(params: &Value) -> bool {
+    let Some(frame) = params.get("frame") else {
+        return false;
+    };
+    let unreachable = frame
+        .get("unreachableUrl")
+        .and_then(Value::as_str)
+        .is_some_and(|url| !url.is_empty());
+    let error_page = frame
+        .get("url")
+        .and_then(Value::as_str)
+        .is_some_and(|url| url.starts_with("chrome-error://"));
+    !unreachable && !error_page
+}
+
 fn history_flags(history: &Value) -> (bool, bool) {
     let current = history
         .get("currentIndex")
@@ -1318,11 +1336,11 @@ fn handle_event(core: Arc<SessionCore>, event: CdpEvent) {
             let tab_id = {
                 let mut model = core.model();
                 match model.find_by_session_mut(session) {
+                    // 不在这里清错误：导航失败后 Chromium 还会加载自己的错误页，
+                    // 那次加载同样触发 frameStartedLoading，会把刚记下的错误抹掉。
+                    // 错误改由成功的主 frame 导航（frameNavigated）清除。
                     Some(tab) if tab.state.id == frame_id => {
                         tab.state.loading = loading;
-                        if loading {
-                            tab.state.error = None;
-                        }
                         Some(tab.state.id.clone())
                     }
                     _ => None,
@@ -1358,6 +1376,11 @@ fn handle_event(core: Arc<SessionCore>, event: CdpEvent) {
             let Some(tab_id) = core.model().tab_of_session(&session) else {
                 return;
             };
+            if event.method == "Page.frameNavigated" && navigation_reached_page(params) {
+                if let Some(tab) = core.model().find_mut(&tab_id) {
+                    tab.state.error = None;
+                }
+            }
             tauri::async_runtime::spawn(async move {
                 core.refresh_history(&tab_id, &session).await;
                 core.emit_state();
@@ -1655,6 +1678,24 @@ mod tests {
 
         assert!(build_mouse_params(&mouse("drag", 0.0, 0.0)).is_err());
         assert!(build_mouse_params(&mouse("move", f64::NAN, 0.0)).is_err());
+    }
+
+    #[test]
+    fn only_real_page_navigations_clear_load_errors() {
+        assert!(navigation_reached_page(
+            &json!({ "frame": { "id": "T", "url": "http://localhost:5173/" } })
+        ));
+        assert!(!navigation_reached_page(&json!({
+            "frame": {
+                "id": "T",
+                "url": "chrome-error://chromewebdata/",
+                "unreachableUrl": "http://localhost:9871/"
+            }
+        })));
+        assert!(!navigation_reached_page(
+            &json!({ "frame": { "id": "T", "url": "chrome-error://chromewebdata/" } })
+        ));
+        assert!(!navigation_reached_page(&json!({})));
     }
 
     #[test]
