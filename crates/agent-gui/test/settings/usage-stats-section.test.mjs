@@ -245,6 +245,10 @@ test("the desktop adapter checks the capability, then asks K-brain for the stats
     assert.equal(answer.stats.totals.total, 1_200_000);
     assert.deepEqual(requests.at(-1), ["GET", "http://kb/v1/usage/stats?days=371&tz=Asia%2FShanghai", "Bearer tok"]);
 
+    // Capability advertised but no route: the update notice, as through the Gateway.
+    statsResponse = () => new Response("404 page not found", { status: 404 });
+    assert.deepEqual(await kbrainSettingsAdapter.getUsageStats(query), { available: false });
+
     statsResponse = () => new Response(JSON.stringify({ error: "usage index is rebuilding" }), { status: 503 });
     await assert.rejects(kbrainSettingsAdapter.getUsageStats(query), (error) => error.message === "usage index is rebuilding");
   } finally {

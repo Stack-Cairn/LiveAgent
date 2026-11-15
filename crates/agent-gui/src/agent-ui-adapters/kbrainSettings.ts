@@ -17,6 +17,16 @@ import type {
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
 import { getKBrainRuntimeConnection } from "../lib/kbrain/runtimeConnection";
 
+/** A K-brain answer outside 2xx; `status` lets a caller tell "no such route" apart. */
+class KBrainHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function send(path: string, init?: RequestInit): Promise<Response> {
   const connection = getKBrainRuntimeConnection();
   if (!connection) throw new Error("K-brain backend connection is not ready");
@@ -30,7 +40,10 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     },
   });
   if (!response.ok)
-    throw new Error((await response.text()) || `K-brain request failed (${response.status})`);
+    throw new KBrainHttpError(
+      (await response.text()) || `K-brain request failed (${response.status})`,
+      response.status,
+    );
   return response;
 }
 
@@ -49,7 +62,9 @@ async function rulesRequest<T>(path: string, init?: RequestInit): Promise<T> {
       const parsed = JSON.parse(text) as { error?: unknown };
       if (typeof parsed.error === "string" && parsed.error) message = parsed.error;
     } catch {}
-    throw new Error(message);
+    throw error instanceof KBrainHttpError
+      ? new KBrainHttpError(message, error.status)
+      : new Error(message);
   }
 }
 
@@ -144,14 +159,20 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
       { method: "DELETE" },
     );
   },
-  // Read-only; an older K-brain without the capability gets the page's update notice.
+  // Read-only; an older K-brain without the capability (or without the route, even if
+  // it claims the capability) gets the page's update notice, like the Gateway relays.
   getUsageStats: async ({ days, timezone }) => {
     const health = await getKBrainHealth();
     if (!supportsUsageStats(health.capabilities)) return { available: false };
-    const stats = await rulesRequest<unknown>(
-      `/v1/usage/stats${rulesQuery({ days: String(days), tz: timezone })}`,
-    );
-    return { available: true, stats };
+    try {
+      const stats = await rulesRequest<unknown>(
+        `/v1/usage/stats${rulesQuery({ days: String(days), tz: timezone })}`,
+      );
+      return { available: true, stats };
+    } catch (error) {
+      if (error instanceof KBrainHttpError && error.status === 404) return { available: false };
+      throw error;
+    }
   },
 };
 
