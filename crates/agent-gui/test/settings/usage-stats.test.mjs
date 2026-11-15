@@ -96,7 +96,7 @@ test("heatmap weeks start on Sunday and end with today's week", () => {
     ["2026-11-19", true, 0], ["2026-11-20", true, 0], ["2026-11-21", true, 0],
   ]);
   assert.equal(map.weeks[0].start, usage.addDays("2026-11-15", -51 * 7));
-  assert.deepEqual(last.cells.map((cell) => cell.level), [0, 3, 0, 4, 0, 0, 0]);
+  assert.deepEqual(last.cells.map((cell) => cell.level), [0, 1, 0, 4, 0, 0, 0]);
 });
 
 test("weekly and cumulative heatmaps give a whole column its week's value", () => {
@@ -109,14 +109,53 @@ test("weekly and cumulative heatmaps give a whole column its week's value", () =
   assert.equal(new Set(a.cells.map((cell) => cell.total)).size, 1);
   assert.equal(a.cells[0].total, 6);
   assert.equal(a.cells[0].level, 4);
+  assert.equal(c.cells[0].level, 1);
   assert.equal(c.cells.at(-1).future, true);
 
   const cumulative = usage.buildHeatmap(daily, "2026-11-17", "cumulative");
   assert.deepEqual(cumulative.weeks.slice(-3).map((week) => [week.cumulativeTotal, week.cumulativeTurns]), [[6, 3], [12, 6], [13, 7]]);
   assert.equal(cumulative.weeks.at(-1).cells[0].total, 13);
   assert.equal(cumulative.weeks.at(-1).cells[0].level, 4);
-  assert.equal(cumulative.weeks.at(-3).cells[0].level, 2);
+  assert.equal(cumulative.weeks.at(-2).cells[0].level, 2);
+  assert.equal(cumulative.weeks.at(-3).cells[0].level, 1);
   assert.equal(cumulative.weeks[0].cells[0].level, 0);
+});
+
+test("heat levels are quartiles of the days with usage, so one outlier doesn't wash out the rest", () => {
+  // Eight ordinary days and one day 100x larger.
+  const values = [10, 20, 30, 40, 50, 60, 70, 80, 8000];
+  const scale = plain(usage.heatScale([0, 0, ...values]));
+  assert.deepEqual(scale, { p25: 30, p50: 50, p75: 70, max: 8000 });
+  assert.deepEqual(values.map((value) => usage.heatLevel(value, scale)), [1, 1, 1, 2, 2, 3, 3, 4, 4]);
+  assert.equal(usage.heatLevel(0, scale), 0);
+  // A share of the maximum would have put every ordinary day on level 1.
+  const daily = values.map((value, index) => day(usage.addDays("2026-11-07", index), value));
+  const map = usage.buildHeatmap(daily, "2026-11-15", "daily");
+  const levels = map.weeks.flatMap((week) => week.cells).filter((cell) => cell.total > 0).map((cell) => cell.level);
+  assert.deepEqual(levels, [1, 1, 1, 2, 2, 3, 3, 4, 4]);
+});
+
+test("heat levels with ties and few values: the top value is always full strength", () => {
+  const level = (values, value) => usage.heatLevel(value, usage.heatScale(values));
+  // Everything equal (including a single active day): all on the top step.
+  assert.deepEqual([5, 5, 5].map((value) => level([5, 5, 5], value)), [4, 4, 4]);
+  assert.equal(level([7], 7), 4);
+  // Two values: the smaller one lightest, the larger one darkest.
+  assert.deepEqual([level([3, 5], 3), level([3, 5], 5)], [1, 4]);
+  // Ties at the top stay on the top step; ties at the bottom stay on the lowest.
+  assert.deepEqual([1, 5].map((value) => level([1, 5, 5, 5], value)), [1, 4]);
+  assert.deepEqual([1, 5].map((value) => level([1, 1, 1, 5], value)), [1, 4]);
+  // Nothing with usage: no scale, every cell empty.
+  assert.deepEqual(plain(usage.heatScale([0, 0])), { p25: 0, p50: 0, p75: 0, max: 0 });
+  assert.equal(level([], 3), 0);
+});
+
+test("weekly heat levels take one sample per week, not one per drawn cell", () => {
+  // Three full weeks of 10, 20, 30 and the current week (today = Sunday) with 40.
+  const daily = [day("2026-10-25", 10), day("2026-11-01", 20), day("2026-11-08", 30), day("2026-11-15", 40)];
+  const weekly = usage.buildHeatmap(daily, "2026-11-15", "weekly");
+  assert.deepEqual(plain(weekly.scale), { p25: 17.5, p50: 25, p75: 32.5, max: 40 });
+  assert.deepEqual(weekly.weeks.slice(-4).map((week) => week.cells[0].level), [1, 2, 3, 4]);
 });
 
 test("month labels sit on the column holding the 1st; only the last 12 are kept", () => {

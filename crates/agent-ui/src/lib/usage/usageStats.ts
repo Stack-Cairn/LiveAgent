@@ -367,12 +367,47 @@ export type HeatmapWeek = {
 
 export type MonthLabel = { column: number; span: number; year: number; month: number };
 
-export type Heatmap = { weeks: HeatmapWeek[]; monthLabels: MonthLabel[]; max: number };
+export type Heatmap = { weeks: HeatmapWeek[]; monthLabels: MonthLabel[]; scale: HeatScale };
 
-/** 0 for nothing, else 1…levels by share of the largest value. */
-export function heatLevel(value: number, max: number, levels = HEATMAP_LEVELS): number {
-  if (!(value > 0) || !(max > 0)) return 0;
-  return Math.min(levels, Math.max(1, Math.ceil((value / max) * levels)));
+/** Quartile cut points of the values with usage; see {@link heatScale}. */
+export type HeatScale = { p25: number; p50: number; p75: number; max: number };
+
+/** The q-quantile (0…1) of ascending `sorted`, interpolating between neighbours. */
+function quantile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * q;
+  const below = Math.floor(position);
+  const lower = sorted[below] ?? 0;
+  const upper = sorted[Math.min(below + 1, sorted.length - 1)] ?? lower;
+  return lower + (upper - lower) * (position - below);
+}
+
+/**
+ * Quartiles of the positive values, so one huge day doesn't wash out the rest of
+ * the map the way a share of the maximum would. Zeros don't count.
+ */
+export function heatScale(values: readonly number[]): HeatScale {
+  const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return { p25: 0, p50: 0, p75: 0, max: 0 };
+  return {
+    p25: quantile(sorted, 0.25),
+    p50: quantile(sorted, 0.5),
+    p75: quantile(sorted, 0.75),
+    max: sorted[sorted.length - 1] ?? 0,
+  };
+}
+
+/**
+ * 0 for nothing; otherwise ≤p25 → 1, ≤p50 → 2, ≤p75 → 3, above → 4. The largest
+ * value is always 4, so ties at the top (and a map where every value is the same)
+ * show at full strength instead of dropping to a lighter step.
+ */
+export function heatLevel(value: number, scale: HeatScale): number {
+  if (!(value > 0) || !(scale.max > 0)) return 0;
+  if (value >= scale.max) return HEATMAP_LEVELS;
+  if (value <= scale.p25) return 1;
+  if (value <= scale.p50) return 2;
+  if (value <= scale.p75) return 3;
+  return 4;
 }
 
 /**
@@ -421,10 +456,15 @@ export function buildHeatmap(
     mode === "daily" ? cell.total : mode === "weekly" ? week.total : week.cumulativeTotal;
   const turnsOf = (week: HeatmapWeek, cell: HeatmapCell) =>
     mode === "daily" ? cell.turns : mode === "weekly" ? week.turns : week.cumulativeTurns;
-  let max = 0;
+  // One sample per day (daily) or per week (weekly, cumulative), not per drawn cell,
+  // so a week's seven copies of its value don't weigh seven times.
+  const samples: number[] = [];
   for (const week of columns) {
-    for (const cell of week.cells) if (!cell.future) max = Math.max(max, value(week, cell));
+    const past = week.cells.filter((cell) => !cell.future);
+    if (mode === "daily") for (const cell of past) samples.push(cell.total);
+    else if (past.length > 0) samples.push(mode === "weekly" ? week.total : week.cumulativeTotal);
   }
+  const scale = heatScale(samples);
   for (const week of columns) {
     week.cells = week.cells.map((cell) =>
       cell.future
@@ -433,11 +473,11 @@ export function buildHeatmap(
             ...cell,
             total: value(week, cell),
             turns: turnsOf(week, cell),
-            level: heatLevel(value(week, cell), max),
+            level: heatLevel(value(week, cell), scale),
           },
     );
   }
-  return { weeks: columns, monthLabels: monthLabels(columns.map((week) => week.start)), max };
+  return { weeks: columns, monthLabels: monthLabels(columns.map((week) => week.start)), scale };
 }
 
 /**
