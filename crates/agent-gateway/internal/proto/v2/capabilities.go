@@ -25,3 +25,8 @@ const ProxyDetectV1Capability = "PROXY_DETECT_V1"
 // permission_rules agent request (Settings → Permissions: list, add and delete
 // K-brain's remembered permission rules).
 const PermissionRulesV1Capability = "PERMISSION_RULES_V1"
+
+// UsageStatsV1Capability identifies desktop runtimes that handle the
+// usage_stats agent request (Settings → Usage: read-only token usage
+// aggregated by K-brain across sessions).
+const UsageStatsV1Capability = "USAGE_STATS_V1"

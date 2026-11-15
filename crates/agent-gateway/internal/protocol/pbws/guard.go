@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/liveagent/agent-gateway/internal/chatcmd"
+	"github.com/liveagent/agent-gateway/internal/kbrain"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -28,6 +29,7 @@ const (
 	errComposerGoalUnsupported     = "/goal is not available on a direct K-brain target"
 	errProxyDetectUnsupported      = "desktop app does not support proxy detection; update LiveAgent on the desktop"
 	errPermissionRulesUnsupported  = "desktop app does not support permission rules; update LiveAgent on the desktop"
+	errUsageStatsUnsupported       = "desktop app does not support usage statistics; update LiveAgent on the desktop"
 )
 
 func requireComposerCommands(sm session.AgentView) error {
@@ -133,6 +135,12 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 			return errors.New(errPermissionRulesUnsupported)
 		}
 		return vetPermissionRules(payload.PermissionRules)
+	// 用量统计（设置 → 用量统计）：只读；只发给声明了 USAGE_STATS_V1 的桌面端，理由同上。
+	case *gatewayv2.GatewayEnvelope_UsageStats:
+		if !sm.SupportsCapability(gatewayv2.UsageStatsV1Capability) {
+			return errors.New(errUsageStatsUnsupported)
+		}
+		return vetUsageStats(payload.UsageStats)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -194,6 +202,15 @@ func vetCuaDriver(req *gatewayv2.CuaDriverRequest) error {
 	default:
 		return errors.New("unsupported cua_driver action")
 	}
+}
+
+// 用量统计：天数与时区先在网关校验（时区只放行 IANA 名字符），桌面端与直连 K-brain 的 relay 共用同一规则。
+func vetUsageStats(req *gatewayv2.UsageStatsRequest) error {
+	if req == nil {
+		return errors.New("invalid usage_stats request")
+	}
+	_, err := kbrain.UsageStatsQuery(req.GetDays(), req.GetTimezone())
+	return err
 }
 
 // 权限规则：只放行 list/add/delete，参数是 JSON 对象且限长（解释器命令的建议规则

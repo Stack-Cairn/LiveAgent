@@ -78,6 +78,7 @@ message GatewayEnvelope {
     ProxyDetectRequest proxy_detect = 109;
     HistoryResyncRequest history_resync = 110;
     PermissionRulesRequest permission_rules = 111;
+    UsageStatsRequest usage_stats = 112;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -172,6 +173,7 @@ message AgentEnvelope {
     HistorySyncStatus history_sync_status = 117;
     HistorySyncSnapshot history_sync_snapshot = 118;
     PermissionRulesResponse permission_rules_resp = 119;
+    UsageStatsResponse usage_stats_resp = 120;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1362,6 +1364,22 @@ message PermissionRulesRequest {
 message PermissionRulesResponse {
   // K-brain 的应答 JSON 原样返回：list 为 {project_root?, rules[]}，add 为新规则，delete 为 {ok}。
   string result_json = 1;
+}
+
+// 设置 → 用量统计：K-brain 跨会话的 token 用量（GET /v1/usage/stats，capability usage_stats）。
+// 只读；桌面端或直连 K-brain 的网关只转发 days 和 tz 两个查询参数。
+message UsageStatsRequest {
+  // 统计最近多少天（含今天），1-1100（与 K-brain 一致）；0 取默认 371。
+  int32 days = 1;
+  // IANA 时区名（浏览器的 resolvedOptions().timeZone），按它划分日期；空串由 K-brain 用本机时区。
+  string timezone = 2;
+}
+
+message UsageStatsResponse {
+  // K-brain 的应答 JSON 原样返回（generatedAt/timezone/days/totals/summary/daily/models）。
+  // unsupported 为 true 时为空：K-brain 没有 capabilities.usage_stats，设置页显示“需更新”。
+  string result_json = 1;
+  bool unsupported = 2;
 }
 
 message FsRoot {

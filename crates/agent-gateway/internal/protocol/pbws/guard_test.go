@@ -539,6 +539,49 @@ func TestVetAgentRequestPermissionRulesRequiresDesktopCapability(t *testing.T) {
 	}
 }
 
+// 用量统计（设置 → 用量统计）：只读请求，天数限于 1..1100（0 取默认），时区只放行 IANA 名字符。
+func TestVetAgentRequestUsageStatsChecksRangeAndTimezone(t *testing.T) {
+	manager := session.NewManager()
+	agent := session.NewAgentSession(session.AuthSnapshot{AgentID: "agent-1", SessionID: "session-1"})
+	agent.SetCapabilities([]string{gatewayv2.UsageStatsV1Capability})
+	manager.SetSession(agent)
+	t.Cleanup(func() { manager.ClearSession(agent) })
+	view := manager.AgentView("agent-1")
+	for _, req := range []*gatewayv2.UsageStatsRequest{
+		{Days: 371, Timezone: "Asia/Shanghai"},
+		{Days: 7, Timezone: "America/Argentina/Buenos_Aires"},
+		{Days: 30, Timezone: "Etc/GMT+8"},
+		{},
+	} {
+		env := &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_UsageStats{UsageStats: req}}
+		if err := vetAgentRequest(view, env); err != nil {
+			t.Fatalf("vetAgentRequest(%+v) error = %v", req, err)
+		}
+	}
+	for _, req := range []*gatewayv2.UsageStatsRequest{
+		{Days: -3},
+		{Days: 5000},
+		{Days: 30, Timezone: "UTC&days=1"},
+		{Days: 30, Timezone: "Asia/Shang hai"},
+	} {
+		env := &gatewayv2.GatewayEnvelope{Payload: &gatewayv2.GatewayEnvelope_UsageStats{UsageStats: req}}
+		if err := vetAgentRequest(view, env); err == nil {
+			t.Fatalf("vetAgentRequest(%+v) expected rejection", req)
+		}
+	}
+}
+
+// 旧桌面端不认识 usage_stats 载荷臂；网关要立即拒绝并提示更新桌面端。
+func TestVetAgentRequestUsageStatsRequiresDesktopCapability(t *testing.T) {
+	env := &gatewayv2.GatewayEnvelope{
+		Payload: &gatewayv2.GatewayEnvelope_UsageStats{UsageStats: &gatewayv2.UsageStatsRequest{Days: 371}},
+	}
+	err := vetAgentRequest(permissionRulesAgentView(t), env)
+	if err == nil || !strings.Contains(err.Error(), "update LiveAgent") {
+		t.Fatalf("vetAgentRequest() error = %v, want capability rejection", err)
+	}
+}
+
 func permissionRulesAgentView(t *testing.T) session.AgentView {
 	t.Helper()
 	manager := session.NewManager()

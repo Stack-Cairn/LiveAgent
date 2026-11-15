@@ -7,6 +7,7 @@ import {
   recordWebSearchFallbackState,
   webSearchFallbackStateFrom,
 } from "@liveagent/ui/lib/providers/webSearchFallback";
+import { supportsUsageStats } from "@liveagent/ui/lib/usage/usageStats";
 import type {
   KBrainComputerStatus,
   KBrainSettingsAdapter,
@@ -15,6 +16,16 @@ import type {
   PermissionRuleList,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
 import { getKBrainRuntimeConnection } from "../lib/kbrain/runtimeConnection";
+
+/** A K-brain answer outside 2xx; `status` lets a caller tell "no such route" apart. */
+class KBrainHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 
 async function send(path: string, init?: RequestInit): Promise<Response> {
   const connection = getKBrainRuntimeConnection();
@@ -29,7 +40,10 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     },
   });
   if (!response.ok)
-    throw new Error((await response.text()) || `K-brain request failed (${response.status})`);
+    throw new KBrainHttpError(
+      (await response.text()) || `K-brain request failed (${response.status})`,
+      response.status,
+    );
   return response;
 }
 
@@ -37,7 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await (await send(path, init)).json()) as T;
 }
 
-// The rules API answers errors as {"error": "..."}; show the message, not the JSON.
+// The rules and usage APIs answer errors as {"error": "..."}; show the message, not the JSON.
 async function rulesRequest<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     return await request<T>(path, init);
@@ -48,7 +62,9 @@ async function rulesRequest<T>(path: string, init?: RequestInit): Promise<T> {
       const parsed = JSON.parse(text) as { error?: unknown };
       if (typeof parsed.error === "string" && parsed.error) message = parsed.error;
     } catch {}
-    throw new Error(message);
+    throw error instanceof KBrainHttpError
+      ? new KBrainHttpError(message, error.status)
+      : new Error(message);
   }
 }
 
@@ -142,6 +158,21 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
       `/v1/permissions/rules/${encodeURIComponent(id)}${rulesQuery({ scope, workspace })}`,
       { method: "DELETE" },
     );
+  },
+  // Read-only; an older K-brain without the capability (or without the route, even if
+  // it claims the capability) gets the page's update notice, like the Gateway relays.
+  getUsageStats: async ({ days, timezone }) => {
+    const health = await getKBrainHealth();
+    if (!supportsUsageStats(health.capabilities)) return { available: false };
+    try {
+      const stats = await rulesRequest<unknown>(
+        `/v1/usage/stats${rulesQuery({ days: String(days), tz: timezone })}`,
+      );
+      return { available: true, stats };
+    } catch (error) {
+      if (error instanceof KBrainHttpError && error.status === 404) return { available: false };
+      throw error;
+    }
   },
 };
 
