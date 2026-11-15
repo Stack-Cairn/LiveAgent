@@ -19,7 +19,7 @@ import (
 // aggregate an unbounded history.
 const (
 	UsageStatsDefaultDays = 371
-	UsageStatsMaxDays     = 731
+	UsageStatsMaxDays     = 1100
 	usageStatsMaxTimezone = 64
 	usageStatsMaxAnswer   = 8 << 20
 )

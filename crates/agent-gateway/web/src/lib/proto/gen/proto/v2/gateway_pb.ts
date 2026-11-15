@@ -5992,7 +5992,7 @@ export const PermissionRulesResponseSchema: GenMessage<PermissionRulesResponse> 
  */
 export type UsageStatsRequest = Message<"liveagent.gateway.v2.UsageStatsRequest"> & {
   /**
-   * 统计最近多少天（含今天），1-731；0 取默认 371。
+   * 统计最近多少天（含今天），1-1100（与 K-brain 一致）；0 取默认 371。
    *
    * @generated from field: int32 days = 1;
    */

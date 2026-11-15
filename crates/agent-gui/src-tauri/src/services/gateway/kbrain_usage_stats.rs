@@ -20,7 +20,7 @@ use crate::services::kbrain_backend::{KBrainBackendConnection, KBrainBackendStat
 /// 52 full weeks plus the current one, the heatmap's range.
 pub(crate) const DEFAULT_DAYS: i32 = 371;
 /// Two years; a larger range is refused before K-brain aggregates it.
-pub(crate) const MAX_DAYS: i32 = 731;
+pub(crate) const MAX_DAYS: i32 = 1100;
 const MAX_TIMEZONE_LEN: usize = 64;
 const MAX_ANSWER_BYTES: u64 = 8 << 20;
 const CAPABILITY: &str = "usage_stats";
@@ -226,6 +226,8 @@ mod tests {
             usage_stats_query(7, "Etc/GMT+8"),
             Ok("?days=7&tz=Etc%2FGMT%2B8".to_string())
         );
+        // K-brain accepts up to 1100 days.
+        assert_eq!(usage_stats_query(1100, ""), Ok("?days=1100".to_string()));
         for (days, timezone) in [
             (-1, ""),
             (MAX_DAYS + 1, ""),

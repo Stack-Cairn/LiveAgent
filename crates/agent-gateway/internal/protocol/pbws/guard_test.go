@@ -539,7 +539,7 @@ func TestVetAgentRequestPermissionRulesRequiresDesktopCapability(t *testing.T) {
 	}
 }
 
-// 用量统计（设置 → 用量统计）：只读请求，天数限于 1..731（0 取默认），时区只放行 IANA 名字符。
+// 用量统计（设置 → 用量统计）：只读请求，天数限于 1..1100（0 取默认），时区只放行 IANA 名字符。
 func TestVetAgentRequestUsageStatsChecksRangeAndTimezone(t *testing.T) {
 	manager := session.NewManager()
 	agent := session.NewAgentSession(session.AuthSnapshot{AgentID: "agent-1", SessionID: "session-1"})

@@ -12896,7 +12896,7 @@ func (x *PermissionRulesResponse) GetResultJson() string {
 // 只读；桌面端或直连 K-brain 的网关只转发 days 和 tz 两个查询参数。
 type UsageStatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 统计最近多少天（含今天），1-731；0 取默认 371。
+	// 统计最近多少天（含今天），1-1100（与 K-brain 一致）；0 取默认 371。
 	Days int32 `protobuf:"varint,1,opt,name=days,proto3" json:"days,omitempty"`
 	// IANA 时区名（浏览器的 resolvedOptions().timeZone），按它划分日期；空串由 K-brain 用本机时区。
 	Timezone      string `protobuf:"bytes,2,opt,name=timezone,proto3" json:"timezone,omitempty"`

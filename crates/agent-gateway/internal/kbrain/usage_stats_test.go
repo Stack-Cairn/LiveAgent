@@ -97,6 +97,19 @@ func TestUsageStatsRelayReportsMissingCapabilityAsUnsupported(t *testing.T) {
 	}
 }
 
+func TestUsageStatsQueryAllowsKBrainRange(t *testing.T) {
+	// K-brain accepts 1..1100 days; 0 means the default range.
+	for days, want := range map[int32]string{0: "?days=371", 1: "?days=1", 1100: "?days=1100"} {
+		got, err := UsageStatsQuery(days, "")
+		if err != nil || got != want {
+			t.Fatalf("UsageStatsQuery(%d) = %q, %v; want %q", days, got, err, want)
+		}
+	}
+	if _, err := UsageStatsQuery(1101, ""); err == nil {
+		t.Fatal("UsageStatsQuery(1101) error = nil")
+	}
+}
+
 func TestUsageStatsRelayRejectsBadInputBeforeCallingKBrain(t *testing.T) {
 	fixture := &usageStatsFixture{capability: `"usage_stats":1`, answer: `{}`}
 	relay := newUsageStatsRelay(t, fixture)
