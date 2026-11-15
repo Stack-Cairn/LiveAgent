@@ -70,6 +70,35 @@ test("loads 371 days for the browser time zone and shows the cards and charts", 
   });
 });
 
+test("higher token usage has darker heatmap colors in both themes", async () => {
+  await fixture({ available: true, stats }, async ({ env }) => {
+    const { USAGE_PALETTE_CLASS, heatColor } = env.loadModule("@liveagent/ui/pages/settings/usage/usageUi.tsx");
+    const { heatScale, heatLevel } = env.loadModule("@liveagent/ui/lib/usage/usageStats.ts");
+    const values = [100, 200, 300, 400];
+    const scale = heatScale(values);
+    const luminance = (hex) => {
+      const rgb = hex.match(/\w{2}/g).map((part) => {
+        const channel = Number.parseInt(part, 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    for (const prefix of ["", "dark:"]) {
+      const colors = new Map([...USAGE_PALETTE_CLASS.matchAll(/(?<!\S)(dark:)?\[--usage-heat-(\d):#([a-f0-9]{6})\]/g)]
+        .filter((match) => (match[1] ?? "") === prefix)
+        .map((match) => [`var(--usage-heat-${match[2]})`, match[3]]));
+      const brightness = values.map((value) => {
+        const color = colors.get(heatColor(heatLevel(value, scale)));
+        assert.ok(color, `missing ${prefix}heat color for ${value} tokens`);
+        return luminance(color);
+      });
+      for (let index = 1; index < brightness.length; index++) {
+        assert.ok(brightness[index] < brightness[index - 1], `${prefix || "light:"}more tokens must be darker`);
+      }
+    }
+  });
+});
+
 test("a priced answer adds the cost card", async () => {
   await fixture({ available: true, stats: { ...stats, totals: { ...stats.totals, costUSD: 3.5 } } }, async ({ testId }) => {
     assert.match(testId("usage-metric-cost").textContent, /\$3\.50/);

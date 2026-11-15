@@ -6,7 +6,7 @@ import { compactParts, type UsageLocale } from "../../../lib/usage/usageStats";
  * Chart colors. Model slots follow the model's all-time rank, so a model keeps its
  * color in the donut and the trend. The eight hues and their order are a validated
  * colorblind-safe set; dark mode uses its own steps of the same hues. The heat ramp
- * is one hue, light to dark (reversed on the dark surface).
+ * is one hue, light to dark as usage increases in both themes.
  */
 export const USAGE_PALETTE_CLASS = cn(
   "[--usage-series-1:#2a78d6] [--usage-series-2:#eb6834] [--usage-series-3:#1baf7a]",
@@ -16,7 +16,7 @@ export const USAGE_PALETTE_CLASS = cn(
   "dark:[--usage-series-1:#3987e5] dark:[--usage-series-2:#d95926] dark:[--usage-series-3:#199e70]",
   "dark:[--usage-series-4:#c98500] dark:[--usage-series-5:#d55181] dark:[--usage-series-6:#008300]",
   "dark:[--usage-series-7:#9085e9] dark:[--usage-series-8:#e66767] dark:[--usage-series-other:#64635e]",
-  "dark:[--usage-heat-1:#184f95] dark:[--usage-heat-2:#256abf] dark:[--usage-heat-3:#3987e5] dark:[--usage-heat-4:#86b6ef]",
+  "dark:[--usage-heat-1:#86b6ef] dark:[--usage-heat-2:#3987e5] dark:[--usage-heat-3:#256abf] dark:[--usage-heat-4:#184f95]",
 );
 
 const SERIES_SLOTS = 8;
