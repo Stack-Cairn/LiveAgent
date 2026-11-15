@@ -150,7 +150,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
                 <div
                   key={week.start}
                   className={cn(
-                    "grid grid-rows-7 gap-[3px] rounded-[3px]",
+                    "grid grid-rows-7 gap-[3px] rounded-xs",
                     byColumn &&
                       hover?.column === column &&
                       "outline outline-1 outline-offset-1 outline-foreground/50",
@@ -162,7 +162,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
                       key={cell.date}
                       onMouseEnter={(event) => point(column, row, event.currentTarget)}
                       className={cn(
-                        "aspect-square w-full rounded-[2px]",
+                        "aspect-square w-full rounded-xs",
                         cell.future ? "bg-transparent" : cell.level === 0 && "bg-foreground/[0.07]",
                         !byColumn &&
                           hover?.column === column &&
@@ -183,7 +183,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
             <span
               // biome-ignore lint/suspicious/noArrayIndexKey: fixed legend steps
               key={level}
-              className={cn("size-2.5 rounded-[2px]", level === 0 && "bg-foreground/[0.07]")}
+              className={cn("size-2.5 rounded-xs", level === 0 && "bg-foreground/[0.07]")}
               style={{ backgroundColor: heatColor(level) }}
             />
           ))}

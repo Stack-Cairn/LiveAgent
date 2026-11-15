@@ -98,7 +98,7 @@ export function Swatch({ color, className }: { color: string; className?: string
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-block size-2.5 shrink-0 rounded-[3px]", className)}
+      className={cn("inline-block size-2.5 shrink-0 rounded-xs", className)}
       style={{ backgroundColor: color }}
     />
   );
