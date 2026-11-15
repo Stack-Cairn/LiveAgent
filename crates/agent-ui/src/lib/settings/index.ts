@@ -555,11 +555,11 @@ export function normalizeChatRuntimeControlsForProvider(
       controls.nativeWebSearchEnabled &&
       (!params.providerId ||
         webSearchUsableForRun(
-          params.nativeWebSearchSupported ??
-            providerSupportsNativeWebSearch(
-              params.providerId,
-              resolveProviderApi(params.providerId, params.requestFormat),
-            ),
+          providerSupportsNativeWebSearch(
+            params.providerId,
+            resolveProviderApi(params.providerId, params.requestFormat),
+            { modelId: params.modelId, nativeWebSearchSupported: params.nativeWebSearchSupported },
+          ),
         )),
   };
 }

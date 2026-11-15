@@ -48,8 +48,7 @@ export function createProviderRuntimeConfig(
     promptCachingEnabled: provider.promptCachingEnabled,
     promptCacheHintMode: provider.promptCacheHintMode,
     promptCacheRetention: provider.promptCacheRetention,
-    // Already gated by normalizeChatRuntimeControlsForProvider: on where the API searches
-    // natively or K-brain's web_search fallback is available.
+    // Normalization allows native search or the configured K-brain fallback.
     nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     useSystemProxy: provider.useSystemProxy,
     ...(provider.retryPolicy ? { retryPolicy: provider.retryPolicy } : {}),

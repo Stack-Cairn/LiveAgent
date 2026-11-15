@@ -456,8 +456,12 @@ for (const [mode, runTurn] of [["text", runTextConversationTurn], ["agent", runA
       ["responses", "codex", "openai-responses", "https://relay.example/v1"],
       ["gemini", "gemini", undefined, "https://generativelanguage.googleapis.com/v1beta"],
       ["search-preview", "codex", "openai-completions", "https://api.openai.com/v1"],
+      ["deepseek-flash", "deepseek", undefined, "https://api.deepseek.com"],
+      ["deepseek-chat", "deepseek", undefined, "https://api.deepseek.com"],
     ].map(([id, type, requestFormat, baseUrl]) => Object.freeze(normalizeCustomProvider({
-      id, name: id, type, requestFormat, baseUrl, models: ["gpt-4o-search-preview"], activeModels: ["gpt-4o-search-preview"],
+      id, name: id, type, requestFormat, baseUrl,
+      models: [type === "deepseek" ? id : "gpt-4o-search-preview"],
+      activeModels: [type === "deepseek" ? id : "gpt-4o-search-preview"],
     })));
     assert.ok(providers.every((provider) => provider.nativeWebSearchEnabled === true));
     const runs = [];
@@ -506,8 +510,8 @@ for (const [mode, runTurn] of [["text", runTextConversationTurn], ["agent", runA
     for (const enabled of [true, false]) {
       const controls = Object.freeze({ ...DEFAULT_CHAT_RUNTIME_CONTROLS, nativeWebSearchEnabled: enabled });
       const settings = { customProviders: providers, chatRuntimeControls: controls };
-      for (const index of [1, 0, 2, 3, 1]) {
-        const selectedModel = { customProviderId: providers[index].id, model: "gpt-4o-search-preview" };
+      for (const index of [1, 0, 2, 3, 4, 5, 4, 1]) {
+        const selectedModel = { customProviderId: providers[index].id, model: index >= 4 ? providers[index].id : "gpt-4o-search-preview" };
         const selection = resolveEffectiveChatModelSelection({
           settings,
           ...(mode === "text" ? { conversationSelectedModel: selectedModel } : { gatewaySelectedModel: { ...selectedModel, providerType: providers[index].type } }),
@@ -529,12 +533,12 @@ for (const [mode, runTurn] of [["text", runTextConversationTurn], ["agent", runA
         });
         assert.deepEqual(errors, []);
         assert.equal(runs.at(-1).model.provider, selectedModel.customProviderId);
-        assert.equal(runs.at(-1).options.search, enabled && [1, 2].includes(index) ? "enabled" : "disabled");
+        assert.equal(runs.at(-1).options.search, enabled && [1, 2, 4].includes(index) ? "enabled" : "disabled");
         assert.equal(runs.at(-1).options.mode, mode === "text" ? "chat" : "agent");
         assert.equal(controls.nativeWebSearchEnabled, enabled);
         assert.equal(selection.provider.nativeWebSearchEnabled, true);
       }
     }
-    assert.equal(runs.length, 10);
+    assert.equal(runs.length, 16);
   });
 }
