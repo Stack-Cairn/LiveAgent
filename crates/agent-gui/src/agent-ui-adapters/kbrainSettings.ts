@@ -7,6 +7,7 @@ import {
   recordWebSearchFallbackState,
   webSearchFallbackStateFrom,
 } from "@liveagent/ui/lib/providers/webSearchFallback";
+import { supportsUsageStats } from "@liveagent/ui/lib/usage/usageStats";
 import type {
   KBrainComputerStatus,
   KBrainSettingsAdapter,
@@ -37,7 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await (await send(path, init)).json()) as T;
 }
 
-// The rules API answers errors as {"error": "..."}; show the message, not the JSON.
+// The rules and usage APIs answer errors as {"error": "..."}; show the message, not the JSON.
 async function rulesRequest<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     return await request<T>(path, init);
@@ -142,6 +143,15 @@ export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
       `/v1/permissions/rules/${encodeURIComponent(id)}${rulesQuery({ scope, workspace })}`,
       { method: "DELETE" },
     );
+  },
+  // Read-only; an older K-brain without the capability gets the page's update notice.
+  getUsageStats: async ({ days, timezone }) => {
+    const health = await getKBrainHealth();
+    if (!supportsUsageStats(health.capabilities)) return { available: false };
+    const stats = await rulesRequest<unknown>(
+      `/v1/usage/stats${rulesQuery({ days: String(days), tz: timezone })}`,
+    );
+    return { available: true, stats };
   },
 };
 

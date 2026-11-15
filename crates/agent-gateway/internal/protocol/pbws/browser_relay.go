@@ -186,6 +186,17 @@ func (c *browserConn) handleKBrainPermissionRules(requestID, agentID string, req
 	c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_PermissionRulesResp{PermissionRulesResp: response}})
 }
 
+func (c *browserConn) handleKBrainUsageStats(requestID, agentID string, request *gatewayv2.UsageStatsRequest) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
+	defer cancel()
+	response, err := c.srv.kbrainRelay.UsageStats(ctx, request)
+	if err != nil {
+		_ = c.sendLocalError(requestID, errorMessage(err))
+		return
+	}
+	c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_UsageStatsResp{UsageStatsResp: response}})
+}
+
 func (c *browserConn) handleKBrainChatQueue(requestID, agentID string, request *gatewayv2.ChatQueueRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 	defer cancel()
@@ -305,6 +316,14 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 				return
 			}
 			c.handleKBrainPermissionRules(requestID, agentID, permissionRules)
+			return
+		}
+		if usageStats := env.GetUsageStats(); usageStats != nil {
+			if err := vetUsageStats(usageStats); err != nil {
+				_ = c.sendLocalError(requestID, err.Error())
+				return
+			}
+			c.handleKBrainUsageStats(requestID, agentID, usageStats)
 			return
 		}
 		if historyList := env.GetHistoryList(); historyList != nil {

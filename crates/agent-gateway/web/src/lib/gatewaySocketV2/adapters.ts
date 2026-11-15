@@ -98,6 +98,7 @@ import {
   TrajectoryFetchRequestSchema,
   TunnelMutationSchema,
   UploadedImagePreviewRequestSchema,
+  UsageStatsRequestSchema,
   WorkspaceRootGrantDraftSchema,
   WorkspaceRootGrantsRequestSchema,
 } from "@/lib/proto/gen/proto/v2/gateway_pb";
@@ -864,6 +865,15 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         value: create(PermissionRulesRequestSchema, {
           action: type.slice("permission.rules.".length),
           inputJson: JSON.stringify(permissionRulesInput(body)),
+        }),
+      };
+    // 设置 → 用量统计：只读，天数与浏览器时区由网关和桌面端再校验。
+    case "usage.stats":
+      return {
+        case: "usageStats",
+        value: create(UsageStatsRequestSchema, {
+          days: n32(body.days),
+          timezone: trimStr(body.timezone),
         }),
       };
     case "files.preview":
@@ -1669,6 +1679,10 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       return unmarshalJsonPayload(payload.value.resultJson);
     case "permissionRulesResp":
       return unmarshalJsonPayload(payload.value.resultJson);
+    case "usageStatsResp":
+      return payload.value.unsupported
+        ? { available: false }
+        : { available: true, stats: unmarshalJsonPayload(payload.value.resultJson) };
     case "sftpResponse":
       return sftpResponsePayload(payload.value);
     case "chatQueueResp":

@@ -880,3 +880,29 @@ test("permission rules requests carry the action and only the rule fields", () =
   assert.equal(decoded.kind, "response");
   assert.deepEqual(decoded.payload, rules);
 });
+
+test("usage stats requests carry days and time zone; unsupported answers are not errors", () => {
+  const request = decodeClientFrame(
+    encodeRequestFrame("usage-1", "usage.stats", { days: 371, timezone: " Asia/Shanghai ", extra: 1 }, "agent-1"),
+  );
+  assert.equal(request.payload.value.payload.case, "usageStats");
+  assert.equal(request.payload.value.payload.value.days, 371);
+  assert.equal(request.payload.value.payload.value.timezone, "Asia/Shanghai");
+
+  const response = (usage_stats_resp) =>
+    decodeServerFrame(
+      roundtrip(
+        serverFrame({
+          request_id: "usage-1",
+          agent_id: "agent-1",
+          agent_response: { request_id: "usage-1", usage_stats_resp },
+        }),
+      ),
+      { agentOnline: true },
+    );
+  const stats = { timezone: "Asia/Shanghai", totals: { total: 12 }, daily: [], models: [] };
+  const ready = response({ result_json: JSON.stringify(stats) });
+  assert.equal(ready.kind, "response");
+  assert.deepEqual(ready.payload, { available: true, stats });
+  assert.deepEqual(response({ unsupported: true }).payload, { available: false });
+});

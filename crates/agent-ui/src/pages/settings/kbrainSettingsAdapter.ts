@@ -1,5 +1,6 @@
 import type { KBrainHealth } from "@liveagent/ui/lib/kbrain/health";
 import type { KBrainWebSearchSettings } from "@liveagent/ui/lib/providers/webSearchFallback";
+import type { UsageStatsAnswer, UsageStatsQuery } from "@liveagent/ui/lib/usage/usageStats";
 export type KBrainSettingsProvider = {
   id: string;
   name: string;
@@ -130,6 +131,12 @@ export type KBrainSettingsAdapter = {
   listPermissionRules?: (query: { workspace?: string }) => Promise<PermissionRuleList>;
   addPermissionRule?: (input: PermissionRuleInput) => Promise<PermissionRule>;
   deletePermissionRule?: (ref: PermissionRuleRef) => Promise<void>;
+  /**
+   * Read-only cross-session token usage (`GET /v1/usage/stats`). Answers
+   * `{ available: false }` when K-brain lacks `capabilities.usage_stats`. Hosts that
+   * cannot reach it leave this out and Settings hides the page.
+   */
+  getUsageStats?: (query: UsageStatsQuery) => Promise<UsageStatsAnswer>;
 };
 
 export type SettingsHostAdapter = {

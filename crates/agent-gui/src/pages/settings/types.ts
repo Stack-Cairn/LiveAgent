@@ -15,6 +15,7 @@ export type SectionId =
   | "systemTools"
   | "webSearch"
   | "permissions"
+  | "usage"
   | "stt"
   | "providers"
   | "agents"

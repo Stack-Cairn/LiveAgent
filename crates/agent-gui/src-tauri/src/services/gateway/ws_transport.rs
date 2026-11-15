@@ -33,6 +33,8 @@ pub(crate) const COMPOSER_COMMANDS_V1_CAPABILITY: &str = "COMPOSER_COMMANDS_V1";
 pub(crate) const PROXY_DETECT_V1_CAPABILITY: &str = "PROXY_DETECT_V1";
 /// 设置 → 权限：查看、添加、删除 K-brain 记住的权限规则（permission_rules 请求）。
 pub(crate) const PERMISSION_RULES_V1_CAPABILITY: &str = "PERMISSION_RULES_V1";
+/// 设置 → 用量统计：只读的跨会话 token 用量（usage_stats 请求）。
+pub(crate) const USAGE_STATS_V1_CAPABILITY: &str = "USAGE_STATS_V1";
 /// 桌面端主链路路径。
 pub(crate) const GATEWAY_WS_AGENT_PATH: &str = "/ws/v2/agent";
 /// 终端数据面路径。
@@ -95,6 +97,7 @@ pub(crate) fn build_client_hello(
             COMPOSER_COMMANDS_V1_CAPABILITY.to_string(),
             PROXY_DETECT_V1_CAPABILITY.to_string(),
             PERMISSION_RULES_V1_CAPABILITY.to_string(),
+            USAGE_STATS_V1_CAPABILITY.to_string(),
         ],
     }
 }
@@ -444,6 +447,7 @@ mod tests {
                     COMPOSER_COMMANDS_V1_CAPABILITY,
                     PROXY_DETECT_V1_CAPABILITY,
                     PERMISSION_RULES_V1_CAPABILITY,
+                    USAGE_STATS_V1_CAPABILITY,
                 ]
             );
 

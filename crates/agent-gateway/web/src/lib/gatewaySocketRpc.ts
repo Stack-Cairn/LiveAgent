@@ -49,6 +49,7 @@ import type {
   TerminalSshLatency,
 } from "@liveagent/ui/lib/terminal/types";
 import type { TunnelCreateInput, TunnelUpdateInput } from "@liveagent/ui/lib/tunnels/constants";
+import type { UsageStatsAnswer } from "@liveagent/ui/lib/usage/usageStats";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
   ChatCommandAccepted,
@@ -1339,6 +1340,12 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     return action === "list"
       ? this.requestWithRecovery<T>(type, input)
       : this.request<T>(type, input);
+  }
+
+  /** 设置 → 用量统计：K-brain 的跨会话 token 用量（只读，重连后可重发）。K-brain 不支持时
+   *  返回 `{ available: false }`。 */
+  async usageStats(query: { days: number; timezone: string }): Promise<UsageStatsAnswer> {
+    return this.requestWithRecovery<UsageStatsAnswer>("usage.stats", { ...query });
   }
 
   async listFsRoots(): Promise<FsRootsResponse> {
