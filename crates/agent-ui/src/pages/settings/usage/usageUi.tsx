@@ -6,7 +6,9 @@ import { compactParts, type UsageLocale } from "../../../lib/usage/usageStats";
  * Chart colors. Model slots follow the model's all-time rank, so a model keeps its
  * color in the donut and the trend. The eight hues and their order are a validated
  * colorblind-safe set; dark mode uses its own steps of the same hues. The heat ramp
- * is one hue, light to dark (reversed on the dark surface).
+ * is one hue that moves away from the surface as usage grows: darker on the light
+ * surface, brighter on the dark one. Keeping "more" as "more contrast" leaves the
+ * busiest days the easiest to see, never close to the empty cells.
  */
 export const USAGE_PALETTE_CLASS = cn(
   "[--usage-series-1:#2a78d6] [--usage-series-2:#eb6834] [--usage-series-3:#1baf7a]",

@@ -1888,7 +1888,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.usage.days": "{count} days",
   "settings.usage.heatmapTitle": "Activity",
   "settings.usage.heatmapDescription":
-    "The last 52 weeks, one square per day; stronger color means more tokens.",
+    "The last 52 weeks, one square per day; the more a square stands out, the more tokens.",
   "settings.usage.heatmapDaily": "Daily",
   "settings.usage.heatmapWeekly": "Weekly",
   "settings.usage.heatmapCumulative": "Cumulative",

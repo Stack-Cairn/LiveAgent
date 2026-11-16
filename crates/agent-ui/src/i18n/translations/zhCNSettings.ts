@@ -1778,7 +1778,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.usage.untitledSession": "未命名会话",
   "settings.usage.days": "{count} 天",
   "settings.usage.heatmapTitle": "活跃热力图",
-  "settings.usage.heatmapDescription": "最近 52 周，每格一天，颜色越浓用量越多。",
+  "settings.usage.heatmapDescription": "最近 52 周，每格一天，颜色越醒目用量越多。",
   "settings.usage.heatmapDaily": "每日",
   "settings.usage.heatmapWeekly": "每周",
   "settings.usage.heatmapCumulative": "累计",
