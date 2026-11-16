@@ -70,6 +70,40 @@ test("loads 371 days for the browser time zone and shows the cards and charts", 
   });
 });
 
+// The heat ramp grows away from each theme's surface: darker on the light surface,
+// brighter on the dark one, so the busiest days have the most contrast with the
+// card and with empty days in both themes.
+test("busier heatmap levels stand out more from the surface in both themes", async () => {
+  await fixture({ available: true, stats }, async ({ env }) => {
+    const { USAGE_PALETTE_CLASS, heatColor } = env.loadModule("@liveagent/ui/pages/settings/usage/usageUi.tsx");
+    const luminance = (hex) => {
+      const [r, g, b] = hex.match(/\w{2}/g).map((part) => {
+        const channel = Number.parseInt(part, 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return r * 0.2126 + g * 0.7152 + b * 0.0722;
+    };
+    const ramp = (prefix) => {
+      const colors = new Map(
+        [...USAGE_PALETTE_CLASS.matchAll(/(?<!\S)(dark:)?\[--usage-heat-(\d):#([a-f0-9]{6})\]/g)]
+          .filter((match) => (match[1] ?? "") === prefix)
+          .map((match) => [`var(--usage-heat-${match[2]})`, match[3]]),
+      );
+      return [1, 2, 3, 4].map((level) => {
+        const color = colors.get(heatColor(level));
+        assert.ok(color, `missing ${prefix || "light "}heat color for level ${level}`);
+        return luminance(color);
+      });
+    };
+    const light = ramp("");
+    const dark = ramp("dark:");
+    for (let level = 1; level < 4; level++) {
+      assert.ok(light[level] < light[level - 1], `light: level ${level + 1} must be darker than level ${level}`);
+      assert.ok(dark[level] > dark[level - 1], `dark: level ${level + 1} must be brighter than level ${level}`);
+    }
+  });
+});
+
 test("a priced answer adds the cost card", async () => {
   await fixture({ available: true, stats: { ...stats, totals: { ...stats.totals, costUSD: 3.5 } } }, async ({ testId }) => {
     assert.match(testId("usage-metric-cost").textContent, /\$3\.50/);
