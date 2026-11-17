@@ -302,3 +302,14 @@ test("fallback current streak must reach today or yesterday in the snapshot zone
   assert.equal(parse([day("2026-11-14",1)],{summary:{currentStreak:7}}).summary.currentStreak,7,"backend summary is authoritative");
   assert.equal(usage.parseUsageStats({timezone:"UTC",daily:[day("2026-11-15",1)]},new Date("2026-11-16T01:00:00Z")).summary.currentStreak,1);
 });
+
+test("borrowed trend colors avoid the slots the donut still names", () => {
+  // 18 models: the donut names ranks 0-4 and folds the rest. Recent use skips the
+  // all-time top model, so its slot is free in the trend but still shown in the donut.
+  const models = Array.from({ length: 18 }, (_, i) => ({ model: `model-${i}`, provider: "p", total: 10000 - i * 100 }));
+  const parsed = stats({ models, daily: [day("2026-11-16", 600, { "model-1": 100, "model-8": 200, "model-16": 300 })] });
+  const trend = usage.buildTrend(parsed, "2026-11-16", 7);
+  const color = (model) => trend.series.find((line) => line.model === model).colorIndex;
+  assert.equal(color("model-1"), 1);
+  assert.deepEqual([color("model-8"), color("model-16")], [5, 6]);
+});

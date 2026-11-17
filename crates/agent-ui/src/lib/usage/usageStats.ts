@@ -617,15 +617,22 @@ export function buildTrend(
     .map(([model]) => model);
   // Preserve palette colors for the visible top-ranked models, then give each
   // lower-ranked visible model an unused slot. Only the donut's "other" is gray.
+  // Slots the donut never shows (past its named slices) go first, so a borrowed
+  // color does not match a top model still named in the donut.
   const colors = new Map<string, number>();
   for (const model of top) {
     const rank = ranking.indexOf(model);
     if (rank >= 0 && rank < USAGE_SERIES_SLOTS) colors.set(model, rank);
   }
   const used = new Set(colors.values());
-  const available = Array.from({ length: USAGE_SERIES_SLOTS }, (_, index) => index).filter(
+  const donutSlots = MAX_MODEL_SLICES - 1;
+  const free = Array.from({ length: USAGE_SERIES_SLOTS }, (_, index) => index).filter(
     (index) => !used.has(index),
   );
+  const available = [
+    ...free.filter((index) => index >= donutSlots),
+    ...free.filter((index) => index < donutSlots),
+  ];
   for (const model of [...top].sort((a, b) => ranking.indexOf(a) - ranking.indexOf(b))) {
     if (!colors.has(model))
       colors.set(model, available.shift() ?? ranking.indexOf(model) % USAGE_SERIES_SLOTS);

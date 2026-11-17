@@ -291,7 +291,7 @@ test("the desktop adapter checks the capability, then asks K-brain for the stats
   }
 });
 
- test("same model on two providers keeps independent hover totals", async () => {
+test("same model on two providers keeps independent hover totals", async () => {
   const duplicate = { ...stats, models: [
     { model: "shared-model", provider: "provider-a", total: 200000 },
     { model: "shared-model", provider: "provider-b", total: 100000 },
