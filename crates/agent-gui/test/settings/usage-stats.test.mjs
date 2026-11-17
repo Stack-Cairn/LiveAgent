@@ -259,3 +259,12 @@ test("today follows the requested time zone", () => {
   assert.equal(usage.formatMonth(11, "zh-CN"), "11月");
   assert.equal(usage.formatMonth(12, "en-US"), "Dec");
 });
+
+test("model slice keys distinguish provider names and separator characters", () => {
+  const slices = usage.buildModelSlices(stats({models:[
+    {model:"a@b",provider:"c",total:3},
+    {model:"a",provider:"b@c",total:2},
+    {model:"a",provider:"other",total:1},
+  ]}));
+  assert.equal(new Set(slices.map(slice=>slice.key)).size, 3);
+});
