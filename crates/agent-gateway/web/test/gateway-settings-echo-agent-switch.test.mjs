@@ -70,6 +70,7 @@ async function harness(t, options = {}) {
   });
 
   const updates = [];
+  const targets = [];
   let settingsListener = null;
   let connectionListener = null;
   let nextGetSettings = snapshot(initial, acks);
@@ -77,6 +78,7 @@ async function harness(t, options = {}) {
   const agentSnapshots = new Map();
   const agentState = { id: "agent-a" };
   const api = {
+    getActiveAgent: () => agentState.id,
     subscribeSettings(listener) {
       settingsListener = listener;
       return () => {
@@ -94,6 +96,8 @@ async function harness(t, options = {}) {
     },
     async updateSettings(payload) {
       updates.push(structuredClone(payload));
+      targets.push(agentState.id);
+      if (options.onUpdate) await options.onUpdate(payload);
     },
   };
 
@@ -156,6 +160,7 @@ async function harness(t, options = {}) {
     sync: hookModule,
     api,
     updates,
+    targets,
     state,
     get settings() {
       return state.current.settings;
@@ -241,3 +246,22 @@ test("switching back to a previously edited agent applies that agent's settings"
   await h.push(snapshot(withMode(editedB, "always", false), { [id]: { seq: 1 } }));
   assert.equal(h.mode(), "always/false", "agent B's live pushes must apply");
 });
+
+for (const failOldSave of [false, true]) {
+  test(`queued saves stay on their original agent (old save rejects: ${failOldSave})`, async (t) => {
+    const oldSave = deferred();
+    let calls = 0;
+    const h = await harness(t, { onUpdate: () => ++calls === 1 ? oldSave.promise : Promise.resolve() });
+    await h.set("autoEdit", false);
+    await h.set("always", false);
+    assert.deepEqual(h.targets, ["agent-a"]);
+    await h.switchAgent("agent-b");
+    await h.set("ask", true);
+    assert.deepEqual(h.targets, ["agent-a", "agent-b"], "the new device does not wait for the old save");
+    await act(async () => failOldSave ? oldSave.reject(new Error("old device offline")) : oldSave.resolve());
+    await h.flush();
+    assert.deepEqual(h.targets, ["agent-a", "agent-b"], "queued old-device save must not be sent");
+    assert.equal(h.updates[1].chatRuntimeControls.planModeEnabled, true);
+    assert.equal(h.state.current.settingsSaveState.status, "saved");
+  });
+}

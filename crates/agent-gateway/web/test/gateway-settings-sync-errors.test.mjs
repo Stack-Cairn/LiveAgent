@@ -117,3 +117,27 @@ test("WebUI settings fallbacks are localized", () => {
   assert.notEqual(
     i18n.t("app.webSettingsSaveFailed", "zh-CN"), i18n.t("app.webSettingsSaveFailed", "en-US"));
 });
+
+test("settings updates retain the target while awaiting a connection", async () => {
+  const client = Object.create(rpc.GatewayWebSocketRpcClient.prototype);
+  client.activeAgentId = "agent-a";
+  client.ensureConnected = async () => { client.activeAgentId = "agent-b"; };
+  client.ensureActiveAgent = async () => client.activeAgentId;
+  let sent = false;
+  client.sendConnectedRequest = async () => { sent = true; return { accepted: true }; };
+  await assert.rejects(client.updateSettings({}), /settings target changed/);
+  assert.equal(sent, false);
+});
+
+test("settings updates are sent when the target remains unchanged", async () => {
+  const client = Object.create(rpc.GatewayWebSocketRpcClient.prototype);
+  client.activeAgentId = "agent-a";
+  client.ensureConnected = async () => {};
+  client.ensureActiveAgent = async () => client.activeAgentId;
+  client.sendConnectedRequest = async (type, payload, options, agentId) => {
+    assert.equal(type, "settings.update");
+    assert.equal(agentId, "agent-a");
+    return { accepted: true };
+  };
+  await client.updateSettings({});
+});

@@ -19,7 +19,7 @@ import {
   redactSettingsForWebStorage,
 } from "@liveagent/ui/lib/settings/sync";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Locale, t } from "@/i18n/config";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import { GatewaySettingsUpdateError } from "@/lib/gatewaySocketRpc";
@@ -110,6 +110,16 @@ export function useGatewaySettingsSync(params: {
   activeAgentId: string;
 }) {
   const { token, api, activeAgentId } = params;
+  // Queued saves and their callbacks belong to the device that originated them.
+  const saveScope = useMemo(() => ({ api, token, activeAgentId }), [api, token, activeAgentId]);
+  const saveScopeRef = useRef<typeof saveScope | null>(saveScope);
+  saveScopeRef.current = saveScope;
+  useEffect(() => {
+    saveScopeRef.current = saveScope;
+    return () => {
+      if (saveScopeRef.current === saveScope) saveScopeRef.current = null;
+    };
+  }, [saveScope]);
   const [settings, setSettingsState] = useState<AppSettings>(() => loadWebSettings(loadToken()));
   const [settingsSyncReady, setSettingsSyncReady] = useState(() => token.trim() === "");
   const [settingsSyncError, setSettingsSyncError] = useState<string | null>(null);
@@ -365,6 +375,11 @@ export function useGatewaySettingsSync(params: {
 
   const queueSettingsSave = useCallback(
     (prev: AppSettings, next: AppSettings, fallback: string, syncGateway: boolean) => {
+      const scope = saveScopeRef.current;
+      const isCurrentScope = () =>
+        scope !== null &&
+        saveScopeRef.current === scope &&
+        (!api?.getActiveAgent || api.getActiveAgent() === scope.activeAgentId);
       const saveSequence = ++settingsSaveSequenceRef.current;
       setSettingsSaveState({ status: "saving" });
       const redactedNext = redactSettingsForWebStorage(next);
@@ -404,23 +419,24 @@ export function useGatewaySettingsSync(params: {
       settingsSaveChainRef.current = settingsSaveChainRef.current
         .catch(() => undefined)
         .then(() => {
-          persistWebSettings(redactedNext);
+          if (isCurrentScope()) persistWebSettings(redactedNext);
         })
         .then(async () => {
-          if (gatewayUpdate && sendsGatewayUpdate) {
+          if (isCurrentScope() && gatewayUpdate && sendsGatewayUpdate) {
             await api?.updateSettings(gatewayUpdate);
           }
         })
         .then(() => {
-          if (settingsSaveSequenceRef.current === saveSequence) {
+          if (isCurrentScope() && settingsSaveSequenceRef.current === saveSequence) {
             setSettingsSaveState({ status: "saved" });
           }
         })
         .catch((error) => {
+          if (!isCurrentScope()) return;
           console.error("Failed to persist gateway settings", error);
           if (syncSeq > 0) releasePendingThrough(syncSeq);
           if (syncGateway && api) calibrateFromGateway();
-          if (settingsSaveSequenceRef.current === saveSequence) {
+          if (isCurrentScope() && settingsSaveSequenceRef.current === saveSequence) {
             setSettingsSaveState({
               status: "error",
               message: getGatewaySettingsErrorMessage(error, fallback, settingsRef.current.locale),
@@ -428,7 +444,7 @@ export function useGatewaySettingsSync(params: {
           }
         })
         .finally(() => {
-          if (syncSeq === 0) return;
+          if (!isCurrentScope() || syncSeq === 0) return;
           savesInFlightRef.current -= 1;
           scheduleEchoSettle();
         });
@@ -453,6 +469,11 @@ export function useGatewaySettingsSync(params: {
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching the active agent intentionally starts a fresh settings synchronization
   useEffect(() => {
     backendPromptResourcesRef.current = false;
+    // A slow old device must not block saves to the new device.
+    settingsSaveChainRef.current = Promise.resolve();
+    savesInFlightRef.current = 0;
+    settingsSaveSequenceRef.current += 1;
+    setSettingsSaveState({ status: "saved" });
     resetEchoGuard();
     if (!api) {
       setSettingsSyncReady(token.trim() === "");
