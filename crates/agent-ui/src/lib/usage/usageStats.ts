@@ -106,10 +106,9 @@ function tokens(source: Record<string, unknown>): UsageTokens {
   const output = count(source.output);
   const cacheRead = count(source.cacheRead);
   const cacheWrite = count(source.cacheWrite);
+  // K-brain input already includes cache reads/writes; those are subsets.
   const total =
-    source.total === undefined || source.total === null
-      ? input + output + cacheRead + cacheWrite
-      : count(source.total);
+    source.total === undefined || source.total === null ? input + output : count(source.total);
   return { input, output, cacheRead, cacheWrite, total };
 }
 

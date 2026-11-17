@@ -55,7 +55,7 @@ test("parsing is lenient: bad numbers are 0, bad dates dropped, duplicates merge
     extra: true,
   });
   assert.deepEqual(plain(parsed.totals), { input: 12, output: 0, cacheRead: 0, cacheWrite: 0, total: 40, turns: 2.5, sessions: 0, costUSD: null });
-  assert.deepEqual(parsed.daily.map((row) => [row.date, row.total, row.turns]), [["2026-11-01", 10, 0], ["2026-11-02", 6, 3]]);
+  assert.deepEqual(parsed.daily.map((row) => [row.date, row.total, row.turns]), [["2026-11-01", 3, 0], ["2026-11-02", 6, 3]]);
   assert.deepEqual(plain(parsed.daily[1].models), { a: 6 });
   assert.deepEqual(parsed.models.map((model) => [model.model, model.costUSD]), [["big", 0.25], ["small", null]]);
   assert.equal(parsed.summary.topModel, "big");
@@ -279,4 +279,14 @@ test("recently active lower-ranked models get distinct unused trend colors", () 
     assert.ok(colors.every(color=>color>=0 && color<usage.USAGE_SERIES_SLOTS));
     assert.equal(trend.series.find(line=>line.model==="model-0").colorIndex,0);
   }
+});
+
+test("missing totals do not count cached input twice at any aggregation level", () => {
+  const tokens={input:1000,output:100,cacheRead:800,cacheWrite:100};
+  const parsed=stats({totals:tokens,daily:[{...tokens,date:"2026-11-16"}],models:[{...tokens,model:"cached",provider:"p"}]});
+  assert.equal(parsed.totals.total,1100);
+  assert.equal(parsed.daily[0].total,1100);
+  assert.equal(parsed.models[0].total,1100);
+  assert.equal(stats({totals:{...tokens,total:42}}).totals.total,42,"explicit backend total stays authoritative");
+  assert.equal(stats({totals:{...tokens,total:null}}).totals.total,1100);
 });
