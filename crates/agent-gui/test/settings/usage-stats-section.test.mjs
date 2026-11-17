@@ -311,3 +311,20 @@ test("the desktop adapter checks the capability, then asks K-brain for the stats
     assert.match(chart.querySelector(".pointer-events-none").textContent, /20\s*万/);
   });
 });
+
+test("top model total includes every provider for that model", async () => {
+  const env = await createDomTestEnv({mocks:{"@liveagent/ui/components/IconSet":new Proxy({}, {get:()=>()=>null})}});
+  const {UsageMetricCards} = env.loadModule("@liveagent/ui/pages/settings/usage/UsageMetricCards.tsx");
+  const host=document.body.appendChild(document.createElement("div"));
+  const root=env.createRoot(host);
+  try {
+    await env.act(async()=>root.render(env.React.createElement(UsageMetricCards,{stats:{...stats,summary:{...stats.summary,topModel:"shared"},models:[
+      {model:"different",provider:"p",total:250000},
+      {model:"shared",provider:"a",total:200000},
+      {model:"shared",provider:"b",total:100000},
+    ]}})));
+    assert.match(host.querySelector('[data-testid="usage-metric-top-model"]').textContent,/30\s*万/);
+  } finally {
+    await env.act(async()=>root.unmount());host.remove();env.cleanup();
+  }
+});

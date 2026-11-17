@@ -141,9 +141,13 @@ export function UsageMetricCards({ stats }: { stats: UsageStats }) {
             )
           }
           detail={(() => {
-            const top = stats.models.find((model) => model.model === summary.topModel);
-            return top ? (
-              <CompactAmount value={top.total} locale={usageLocale} suffix="tokens" />
+            const entries = stats.models.filter((model) => model.model === summary.topModel);
+            return entries.length > 0 ? (
+              <CompactAmount
+                value={entries.reduce((sum, model) => sum + model.total, 0)}
+                locale={usageLocale}
+                suffix="tokens"
+              />
             ) : undefined;
           })()}
         />
