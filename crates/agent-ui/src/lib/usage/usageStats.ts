@@ -16,6 +16,7 @@ export const MAX_MONTH_LABELS = 12;
 /** More model slices than this fold into top (limit - 1) + "other". */
 export const MAX_MODEL_SLICES = 6;
 export const MAX_TREND_SERIES = 5;
+export const USAGE_SERIES_SLOTS = 8;
 export const HEATMAP_LEVELS = 4;
 
 export type UsageTokens = {
@@ -508,7 +509,8 @@ export function monthLabels(weekStarts: readonly string[], limit = MAX_MONTH_LAB
 /**
  * Models ranked by all-time total (K-brain's models list, then any model only seen
  * in daily rows). A model keeps its rank, and so its color, across the donut and
- * the trend, whichever range is shown.
+ * the trend when it fits the fixed palette. Lower-ranked models use unused colors
+ * among the visible trend series so they do not all collapse to gray.
  */
 export function modelRanking(stats: UsageStats): string[] {
   const ranked = stats.models.map((model) => model.model);
@@ -609,9 +611,24 @@ export function buildTrend(
     .sort((a, b) => b[1] - a[1] || ranking.indexOf(a[0]) - ranking.indexOf(b[0]))
     .slice(0, limit)
     .map(([model]) => model);
+  // Preserve palette colors for the visible top-ranked models, then give each
+  // lower-ranked visible model an unused slot. Only the donut's "other" is gray.
+  const colors = new Map<string, number>();
+  for (const model of top) {
+    const rank = ranking.indexOf(model);
+    if (rank >= 0 && rank < USAGE_SERIES_SLOTS) colors.set(model, rank);
+  }
+  const used = new Set(colors.values());
+  const available = Array.from({ length: USAGE_SERIES_SLOTS }, (_, index) => index).filter(
+    (index) => !used.has(index),
+  );
+  for (const model of [...top].sort((a, b) => ranking.indexOf(a) - ranking.indexOf(b))) {
+    if (!colors.has(model))
+      colors.set(model, available.shift() ?? ranking.indexOf(model) % USAGE_SERIES_SLOTS);
+  }
   const series = top.map((model) => ({
     model,
-    colorIndex: ranking.indexOf(model),
+    colorIndex: colors.get(model) ?? 0,
     values: days.map((day) => day.models[model] ?? 0),
   }));
   return { days, series, yMax: trendYMax(series) };

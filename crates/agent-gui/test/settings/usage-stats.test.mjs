@@ -259,3 +259,15 @@ test("today follows the requested time zone", () => {
   assert.equal(usage.formatMonth(11, "zh-CN"), "11月");
   assert.equal(usage.formatMonth(12, "en-US"), "Dec");
 });
+
+test("recently active lower-ranked models get distinct unused trend colors", () => {
+  const models=Array.from({length:18},(_,i)=>({model:`model-${i}`,provider:"p",total:10000-i*100}));
+  const parsed=stats({models,daily:[day("2026-11-16",600,{"model-0":100,"model-8":200,"model-16":300})]});
+  for (const range of [7,30]) {
+    const trend=usage.buildTrend(parsed,"2026-11-16",range);
+    const colors=trend.series.map(line=>line.colorIndex);
+    assert.equal(new Set(colors).size,3);
+    assert.ok(colors.every(color=>color>=0 && color<usage.USAGE_SERIES_SLOTS));
+    assert.equal(trend.series.find(line=>line.model==="model-0").colorIndex,0);
+  }
+});
