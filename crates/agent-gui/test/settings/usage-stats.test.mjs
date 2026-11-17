@@ -259,3 +259,15 @@ test("today follows the requested time zone", () => {
   assert.equal(usage.formatMonth(11, "zh-CN"), "11月");
   assert.equal(usage.formatMonth(12, "en-US"), "Dec");
 });
+
+test("fallback current streak must reach today or yesterday in the snapshot zone", () => {
+  const parse=(daily,extra={})=>usage.parseUsageStats({generatedAt:"2026-11-16T01:00:00Z",timezone:"UTC",daily,...extra});
+  assert.equal(parse([day("2026-11-14",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2026-11-14",1),day("2026-11-15",1)]).summary.currentStreak,2);
+  assert.equal(parse([day("2026-11-15",1),day("2026-11-16",1)]).summary.currentStreak,2);
+  assert.equal(parse([day("2026-11-17",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2020-01-01",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2026-11-14",1)],{timezone:"America/Los_Angeles"}).summary.currentStreak,1);
+  assert.equal(parse([day("2026-11-14",1)],{summary:{currentStreak:7}}).summary.currentStreak,7,"backend summary is authoritative");
+  assert.equal(usage.parseUsageStats({timezone:"UTC",daily:[day("2026-11-15",1)]},new Date("2026-11-16T01:00:00Z")).summary.currentStreak,1);
+});

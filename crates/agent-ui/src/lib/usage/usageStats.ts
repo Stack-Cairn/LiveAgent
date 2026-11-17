@@ -135,7 +135,7 @@ function modelCounts(value: unknown): Record<string, number> {
  * are 0, unknown fields are ignored, daily rows with bad dates are dropped and
  * duplicates merged, and models are ordered by total (largest first).
  */
-export function parseUsageStats(raw: unknown): UsageStats {
+export function parseUsageStats(raw: unknown, now: Date = new Date()): UsageStats {
   const source = record(typeof raw === "string" ? safeJson(raw) : raw);
   const totalsSource = record(source.totals);
   const summarySource = record(source.summary);
@@ -198,7 +198,9 @@ export function parseUsageStats(raw: unknown): UsageStats {
           total: sumDaily("total"),
           turns: sumDaily("turns"),
         };
-  const streaks = dailyStreaks(daily);
+  const generatedAt = new Date(text(source.generatedAt));
+  const snapshotTime = Number.isNaN(generatedAt.getTime()) ? now : generatedAt;
+  const streaks = dailyStreaks(daily, todayIn(text(source.timezone), snapshotTime));
   const summaryCount = (key: string, fallback: number) =>
     summarySource[key] === undefined || summarySource[key] === null
       ? fallback
@@ -229,9 +231,12 @@ export function parseUsageStats(raw: unknown): UsageStats {
 
 /**
  * Active days and streaks from daily rows alone, for answers without a summary.
- * The current streak counts back from the last active day.
+ * The current streak must reach today or yesterday in the snapshot time zone.
  */
-function dailyStreaks(daily: readonly UsageDay[]): {
+function dailyStreaks(
+  daily: readonly UsageDay[],
+  today: string,
+): {
   active: number;
   current: number;
   longest: number;
@@ -241,13 +246,13 @@ function dailyStreaks(daily: readonly UsageDay[]): {
   let run = 0;
   let previous = "";
   for (const day of daily) {
-    if (!(day.total > 0 || day.turns > 0)) continue;
+    if (day.date > today || !(day.total > 0 || day.turns > 0)) continue;
     active += 1;
     run = previous && addDays(previous, 1) === day.date ? run + 1 : 1;
     longest = Math.max(longest, run);
     previous = day.date;
   }
-  return { active, current: run, longest };
+  return { active, current: previous >= addDays(today, -1) ? run : 0, longest };
 }
 
 function safeJson(value: string): unknown {
