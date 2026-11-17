@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -97,32 +98,31 @@ func ImportDirectory(
 		}
 
 		r.Body = http.MaxBytesReader(w, r.Body, maxDirectoryUploadBodyBytes)
-		if err := r.ParseMultipartForm(32 << 20); err != nil {
+		upload, err := readDirectoryUpload(r)
+		if err != nil {
 			status := http.StatusBadRequest
 			message := "invalid multipart form"
-			if strings.Contains(err.Error(), "http: request body too large") {
-				status = http.StatusRequestEntityTooLarge
-				message = "uploaded directory is too large"
+			var bodyTooLarge *http.MaxBytesError
+			if errors.Is(err, errDirectoryUploadTooLarge) || errors.As(err, &bodyTooLarge) {
+				status, message = http.StatusRequestEntityTooLarge, "uploaded directory exceeds its file, byte, or metadata limit"
 			}
 			writeError(w, status, message)
 			return
 		}
-		if r.MultipartForm != nil {
-			defer func() { _ = r.MultipartForm.RemoveAll() }()
-		}
+		defer upload.cleanup()
 
-		name := strings.TrimSpace(r.FormValue("name"))
+		name := strings.TrimSpace(upload.name)
 		if name == "" {
 			writeError(w, http.StatusBadRequest, "name is required")
 			return
 		}
-		target := strings.TrimSpace(r.FormValue("target"))
+		target := strings.TrimSpace(upload.target)
 		if !directoryImportTargets[target] {
 			writeError(w, http.StatusBadRequest, "target must be workspace or project-root")
 			return
 		}
 
-		fileHeaders := r.MultipartForm.File["files"]
+		fileHeaders := upload.files
 		if len(fileHeaders) == 0 {
 			writeError(w, http.StatusBadRequest, "files is required")
 			return
@@ -133,7 +133,7 @@ func ImportDirectory(
 		}
 		// multipart 的 filename 会被 Go 侧 filepath.Base 削成末段，目录内的
 		// 相对路径改由与 files 按序对齐的 paths 字段承载。
-		relativePaths := r.MultipartForm.Value["paths"]
+		relativePaths := upload.paths
 		if len(relativePaths) != len(fileHeaders) {
 			writeError(w, http.StatusBadRequest, "paths must align with files")
 			return
