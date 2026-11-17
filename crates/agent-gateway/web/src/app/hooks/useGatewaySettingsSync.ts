@@ -287,6 +287,19 @@ export function useGatewaySettingsSync(params: {
 
   const applyGatewaySettings = useCallback(
     (payload: GatewaySettingsSyncUpdatePayload) => {
+      const version = readSettingsSyncVersion(payload);
+      if (version) {
+        const seen = syncVersionRef.current;
+        if (seen?.epoch === version.epoch) {
+          // Read from an older cache than a snapshot already applied: all of it is stale.
+          if (version.generation < seen.generation) return;
+        } else if (seen) {
+          // A restarted desktop never saw this tab's pending updates and will never
+          // acknowledge them; its snapshot is the truth now.
+          resetEchoGuard();
+        }
+        syncVersionRef.current = version;
+      }
       if (Object.hasOwn(payload, "projectPrompts")) backendPromptResourcesRef.current = true;
       // The web search fallback rides along on settings.get answers from desktops whose
       // K-brain has it; the composer and the send path gate web search on it.
@@ -307,19 +320,6 @@ export function useGatewaySettingsSync(params: {
       }
       if (automation.automationHooks) {
         feedHooksSnapshot(automation.automationHooks);
-      }
-      const version = readSettingsSyncVersion(payload);
-      if (version) {
-        const seen = syncVersionRef.current;
-        if (seen?.epoch === version.epoch) {
-          // Read from an older cache than a snapshot already applied: all of it is stale.
-          if (version.generation < seen.generation) return;
-        } else if (seen) {
-          // A restarted desktop never saw this tab's pending updates and will never
-          // acknowledge them; its snapshot is the truth now.
-          resetEchoGuard();
-        }
-        syncVersionRef.current = version;
       }
       const acks = readAppliedClientSeqs(payload);
       if (acks) {
