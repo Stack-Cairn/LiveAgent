@@ -290,3 +290,24 @@ test("the desktop adapter checks the capability, then asks K-brain for the stats
     clearKBrainRuntimeConnection();
   }
 });
+
+ test("same model on two providers keeps independent hover totals", async () => {
+  const duplicate = { ...stats, models: [
+    { model: "shared-model", provider: "provider-a", total: 200000 },
+    { model: "shared-model", provider: "provider-b", total: 100000 },
+  ] };
+  await fixture({ available: true, stats: duplicate }, async ({env, testId, settle}) => {
+    const chart = testId("usage-models");
+    const rows = chart.querySelectorAll("tbody tr");
+    const hover = async (row) => {
+      await env.act(async () => row.dispatchEvent(new window.MouseEvent("mouseover", {bubbles:true, relatedTarget:document.body})));
+      await settle();
+    };
+    await hover(rows[1]);
+    assert.match(chart.querySelector(".pointer-events-none").textContent, /10\s*万/);
+    assert.equal(rows[0].className.includes("bg-foreground"), false);
+    assert.equal(rows[1].className.includes("bg-foreground"), true);
+    await hover(rows[0]);
+    assert.match(chart.querySelector(".pointer-events-none").textContent, /20\s*万/);
+  });
+});

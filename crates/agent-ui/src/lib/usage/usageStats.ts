@@ -545,7 +545,7 @@ export function buildModelSlices(stats: UsageStats, limit = MAX_MODEL_SLICES): M
   const sum = models.reduce((total, model) => total + model.total, 0);
   if (sum <= 0) return [];
   const slice = (model: UsageModel): ModelSlice => ({
-    key: model.model,
+    key: JSON.stringify([model.model, model.provider]),
     model: model.model,
     provider: model.provider,
     total: model.total,
