@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "snapshotDate": "2026-11-12",
-  "generatedAt": "2026-11-12T20:26:47.757Z",
+  "snapshotDate": "2026-11-17",
+  "generatedAt": "2026-11-17T21:20:16.945Z",
   "generator": {
-    "commit": "0e5f494cb36ab66074fe0dbaa4c567be1f8f2ea8",
+    "commit": "b5ce9520cbf850282103b898cdeb90a19cda28b6",
     "sources": [
       "https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json",
       "https://models.dev/api.json"
@@ -1460,7 +1460,7 @@
       },
       {
         "id": "gpt-6.1-sol",
-        "contextWindow": 400000,
+        "contextWindow": 628000,
         "maxOutputToken": 128000,
         "inputModalities": [
           "text",
@@ -1494,6 +1494,44 @@
             "max"
           ],
           "off": true
+        }
+      },
+      {
+        "id": "gpt-6.2-astra",
+        "contextWindow": 400000,
+        "maxOutputToken": 128000,
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "thinking": {
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "off": false
+        }
+      },
+      {
+        "id": "gpt-6.2-sol",
+        "contextWindow": 628000,
+        "maxOutputToken": 128000,
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "thinking": {
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "off": false
         }
       },
       {
@@ -3156,7 +3194,8 @@
         "maxOutputToken": 32768,
         "inputModalities": [
           "text",
-          "image"
+          "image",
+          "video"
         ],
         "thinking": {
           "levels": [
@@ -3573,5 +3612,5 @@
     "alibaba": 40,
     "tencent": 4
   },
-  "sha256": "05abb901623e3de97db918e45cf362cf661810cc747b0d704da9df55fc7278cb"
+  "sha256": "67275c8f7f0112929bde94be7b394353ab88479051ae73c3bf2193f56f61f208"
 }
