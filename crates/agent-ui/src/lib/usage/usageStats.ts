@@ -16,6 +16,7 @@ export const MAX_MONTH_LABELS = 12;
 /** More model slices than this fold into top (limit - 1) + "other". */
 export const MAX_MODEL_SLICES = 6;
 export const MAX_TREND_SERIES = 5;
+export const USAGE_SERIES_SLOTS = 8;
 export const HEATMAP_LEVELS = 4;
 
 export type UsageTokens = {
@@ -105,10 +106,9 @@ function tokens(source: Record<string, unknown>): UsageTokens {
   const output = count(source.output);
   const cacheRead = count(source.cacheRead);
   const cacheWrite = count(source.cacheWrite);
+  // K-brain input already includes cache reads/writes; those are subsets.
   const total =
-    source.total === undefined || source.total === null
-      ? input + output + cacheRead + cacheWrite
-      : count(source.total);
+    source.total === undefined || source.total === null ? input + output : count(source.total);
   return { input, output, cacheRead, cacheWrite, total };
 }
 
@@ -135,7 +135,7 @@ function modelCounts(value: unknown): Record<string, number> {
  * are 0, unknown fields are ignored, daily rows with bad dates are dropped and
  * duplicates merged, and models are ordered by total (largest first).
  */
-export function parseUsageStats(raw: unknown): UsageStats {
+export function parseUsageStats(raw: unknown, now: Date = new Date()): UsageStats {
   const source = record(typeof raw === "string" ? safeJson(raw) : raw);
   const totalsSource = record(source.totals);
   const summarySource = record(source.summary);
@@ -198,7 +198,9 @@ export function parseUsageStats(raw: unknown): UsageStats {
           total: sumDaily("total"),
           turns: sumDaily("turns"),
         };
-  const streaks = dailyStreaks(daily);
+  const generatedAt = new Date(text(source.generatedAt));
+  const snapshotTime = Number.isNaN(generatedAt.getTime()) ? now : generatedAt;
+  const streaks = dailyStreaks(daily, todayIn(text(source.timezone), snapshotTime));
   const summaryCount = (key: string, fallback: number) =>
     summarySource[key] === undefined || summarySource[key] === null
       ? fallback
@@ -229,9 +231,12 @@ export function parseUsageStats(raw: unknown): UsageStats {
 
 /**
  * Active days and streaks from daily rows alone, for answers without a summary.
- * The current streak counts back from the last active day.
+ * The current streak must reach today or yesterday in the snapshot time zone.
  */
-function dailyStreaks(daily: readonly UsageDay[]): {
+function dailyStreaks(
+  daily: readonly UsageDay[],
+  today: string,
+): {
   active: number;
   current: number;
   longest: number;
@@ -241,13 +246,13 @@ function dailyStreaks(daily: readonly UsageDay[]): {
   let run = 0;
   let previous = "";
   for (const day of daily) {
-    if (!(day.total > 0 || day.turns > 0)) continue;
+    if (day.date > today || !(day.total > 0 || day.turns > 0)) continue;
     active += 1;
     run = previous && addDays(previous, 1) === day.date ? run + 1 : 1;
     longest = Math.max(longest, run);
     previous = day.date;
   }
-  return { active, current: run, longest };
+  return { active, current: previous >= addDays(today, -1) ? run : 0, longest };
 }
 
 function safeJson(value: string): unknown {
@@ -508,7 +513,8 @@ export function monthLabels(weekStarts: readonly string[], limit = MAX_MONTH_LAB
 /**
  * Models ranked by all-time total (K-brain's models list, then any model only seen
  * in daily rows). A model keeps its rank, and so its color, across the donut and
- * the trend, whichever range is shown.
+ * the trend when it fits the fixed palette. Lower-ranked models use unused colors
+ * among the visible trend series so they do not all collapse to gray.
  */
 export function modelRanking(stats: UsageStats): string[] {
   const ranked = stats.models.map((model) => model.model);
@@ -609,9 +615,31 @@ export function buildTrend(
     .sort((a, b) => b[1] - a[1] || ranking.indexOf(a[0]) - ranking.indexOf(b[0]))
     .slice(0, limit)
     .map(([model]) => model);
+  // Preserve palette colors for the visible top-ranked models, then give each
+  // lower-ranked visible model an unused slot. Only the donut's "other" is gray.
+  // Slots the donut never shows (past its named slices) go first, so a borrowed
+  // color does not match a top model still named in the donut.
+  const colors = new Map<string, number>();
+  for (const model of top) {
+    const rank = ranking.indexOf(model);
+    if (rank >= 0 && rank < USAGE_SERIES_SLOTS) colors.set(model, rank);
+  }
+  const used = new Set(colors.values());
+  const donutSlots = MAX_MODEL_SLICES - 1;
+  const free = Array.from({ length: USAGE_SERIES_SLOTS }, (_, index) => index).filter(
+    (index) => !used.has(index),
+  );
+  const available = [
+    ...free.filter((index) => index >= donutSlots),
+    ...free.filter((index) => index < donutSlots),
+  ];
+  for (const model of [...top].sort((a, b) => ranking.indexOf(a) - ranking.indexOf(b))) {
+    if (!colors.has(model))
+      colors.set(model, available.shift() ?? ranking.indexOf(model) % USAGE_SERIES_SLOTS);
+  }
   const series = top.map((model) => ({
     model,
-    colorIndex: ranking.indexOf(model),
+    colorIndex: colors.get(model) ?? 0,
     values: days.map((day) => day.models[model] ?? 0),
   }));
   return { days, series, yMax: trendYMax(series) };

@@ -1,10 +1,11 @@
 import { Fragment, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../../lib/shared/utils";
-import { compactParts, type UsageLocale } from "../../../lib/usage/usageStats";
+import { compactParts, USAGE_SERIES_SLOTS, type UsageLocale } from "../../../lib/usage/usageStats";
 
 /**
  * Chart colors. Model slots follow the model's all-time rank, so a model keeps its
- * color in the donut and the trend. The eight hues and their order are a validated
+ * color in the donut and the trend; lower ranks use free slots in the visible trend.
+ * The eight hues and their order are a validated
  * colorblind-safe set; dark mode uses its own steps of the same hues. The heat ramp
  * is one hue that moves away from the surface as usage grows: darker on the light
  * surface, brighter on the dark one. Keeping "more" as "more contrast" leaves the
@@ -21,11 +22,9 @@ export const USAGE_PALETTE_CLASS = cn(
   "dark:[--usage-heat-1:#184f95] dark:[--usage-heat-2:#256abf] dark:[--usage-heat-3:#3987e5] dark:[--usage-heat-4:#86b6ef]",
 );
 
-const SERIES_SLOTS = 8;
-
 /** CSS color for a model's rank; null (merged "other") and ranks past the palette are gray. */
 export function seriesColor(colorIndex: number | null): string {
-  return colorIndex === null || colorIndex < 0 || colorIndex >= SERIES_SLOTS
+  return colorIndex === null || colorIndex < 0 || colorIndex >= USAGE_SERIES_SLOTS
     ? "var(--usage-series-other)"
     : `var(--usage-series-${colorIndex + 1})`;
 }

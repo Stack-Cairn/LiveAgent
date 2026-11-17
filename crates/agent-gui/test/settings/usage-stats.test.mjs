@@ -55,7 +55,7 @@ test("parsing is lenient: bad numbers are 0, bad dates dropped, duplicates merge
     extra: true,
   });
   assert.deepEqual(plain(parsed.totals), { input: 12, output: 0, cacheRead: 0, cacheWrite: 0, total: 40, turns: 2.5, sessions: 0, costUSD: null });
-  assert.deepEqual(parsed.daily.map((row) => [row.date, row.total, row.turns]), [["2026-11-01", 10, 0], ["2026-11-02", 6, 3]]);
+  assert.deepEqual(parsed.daily.map((row) => [row.date, row.total, row.turns]), [["2026-11-01", 3, 0], ["2026-11-02", 6, 3]]);
   assert.deepEqual(plain(parsed.daily[1].models), { a: 6 });
   assert.deepEqual(parsed.models.map((model) => [model.model, model.costUSD]), [["big", 0.25], ["small", null]]);
   assert.equal(parsed.summary.topModel, "big");
@@ -267,4 +267,49 @@ test("model slice keys distinguish provider names and separator characters", () 
     {model:"a",provider:"other",total:1},
   ]}));
   assert.equal(new Set(slices.map(slice=>slice.key)).size, 3);
+});
+
+test("recently active lower-ranked models get distinct unused trend colors", () => {
+  const models=Array.from({length:18},(_,i)=>({model:`model-${i}`,provider:"p",total:10000-i*100}));
+  const parsed=stats({models,daily:[day("2026-11-16",600,{"model-0":100,"model-8":200,"model-16":300})]});
+  for (const range of [7,30]) {
+    const trend=usage.buildTrend(parsed,"2026-11-16",range);
+    const colors=trend.series.map(line=>line.colorIndex);
+    assert.equal(new Set(colors).size,3);
+    assert.ok(colors.every(color=>color>=0 && color<usage.USAGE_SERIES_SLOTS));
+    assert.equal(trend.series.find(line=>line.model==="model-0").colorIndex,0);
+  }
+});
+
+test("missing totals do not count cached input twice at any aggregation level", () => {
+  const tokens={input:1000,output:100,cacheRead:800,cacheWrite:100};
+  const parsed=stats({totals:tokens,daily:[{...tokens,date:"2026-11-16"}],models:[{...tokens,model:"cached",provider:"p"}]});
+  assert.equal(parsed.totals.total,1100);
+  assert.equal(parsed.daily[0].total,1100);
+  assert.equal(parsed.models[0].total,1100);
+  assert.equal(stats({totals:{...tokens,total:42}}).totals.total,42,"explicit backend total stays authoritative");
+  assert.equal(stats({totals:{...tokens,total:null}}).totals.total,1100);
+});
+
+test("fallback current streak must reach today or yesterday in the snapshot zone", () => {
+  const parse=(daily,extra={})=>usage.parseUsageStats({generatedAt:"2026-11-16T01:00:00Z",timezone:"UTC",daily,...extra});
+  assert.equal(parse([day("2026-11-14",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2026-11-14",1),day("2026-11-15",1)]).summary.currentStreak,2);
+  assert.equal(parse([day("2026-11-15",1),day("2026-11-16",1)]).summary.currentStreak,2);
+  assert.equal(parse([day("2026-11-17",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2020-01-01",1)]).summary.currentStreak,0);
+  assert.equal(parse([day("2026-11-14",1)],{timezone:"America/Los_Angeles"}).summary.currentStreak,1);
+  assert.equal(parse([day("2026-11-14",1)],{summary:{currentStreak:7}}).summary.currentStreak,7,"backend summary is authoritative");
+  assert.equal(usage.parseUsageStats({timezone:"UTC",daily:[day("2026-11-15",1)]},new Date("2026-11-16T01:00:00Z")).summary.currentStreak,1);
+});
+
+test("borrowed trend colors avoid the slots the donut still names", () => {
+  // 18 models: the donut names ranks 0-4 and folds the rest. Recent use skips the
+  // all-time top model, so its slot is free in the trend but still shown in the donut.
+  const models = Array.from({ length: 18 }, (_, i) => ({ model: `model-${i}`, provider: "p", total: 10000 - i * 100 }));
+  const parsed = stats({ models, daily: [day("2026-11-16", 600, { "model-1": 100, "model-8": 200, "model-16": 300 })] });
+  const trend = usage.buildTrend(parsed, "2026-11-16", 7);
+  const color = (model) => trend.series.find((line) => line.model === model).colorIndex;
+  assert.equal(color("model-1"), 1);
+  assert.deepEqual([color("model-8"), color("model-16")], [5, 6]);
 });
