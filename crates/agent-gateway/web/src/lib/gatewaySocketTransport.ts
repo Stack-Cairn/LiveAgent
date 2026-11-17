@@ -932,6 +932,7 @@ export class GatewayWebSocketTransport {
     type: string,
     payload: unknown,
     options?: GatewayRequestOptions,
+    expectedAgentId?: string,
   ): Promise<T> {
     await this.ensureConnected();
     let agentId = this.activeAgentId;
@@ -939,6 +940,12 @@ export class GatewayWebSocketTransport {
       agentId = await this.ensureActiveAgent();
       // 首次自动选中会主动重连，以便只回放目标 Agent 的快照。
       await this.ensureConnected();
+    }
+    if (
+      expectedAgentId &&
+      (agentId !== expectedAgentId || this.activeAgentId !== expectedAgentId)
+    ) {
+      throw new Error("Gateway settings target changed before the request was sent");
     }
     return this.sendConnectedRequest<T>(type, payload, options, agentId);
   }
