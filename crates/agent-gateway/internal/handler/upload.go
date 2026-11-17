@@ -7,11 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-const maxReadableUploadBytes int64 = 100 << 20 // 100 MiB
+// Desktop's tungstenite transport accepts at most 16 MiB in a single frame.
+// Bound the HTTP body too, then check the encoded envelope including metadata.
+const maxReadableUploadBytes int64 = 16 << 20
+const maxReadableUploadFrameBytes = 16 << 20
 
 func ImportReadableFiles(
 	sm *session.Manager,
@@ -85,7 +90,7 @@ func ImportReadableFiles(
 		defer cancel()
 
 		requestID := newRequestID()
-		ch, done, cleanup, err := sm.RegisterStreamAndSendContext(ctx, agentID, requestID, &gatewayv2.GatewayEnvelope{
+		envelope := &gatewayv2.GatewayEnvelope{
 			RequestId: requestID,
 			Timestamp: time.Now().Unix(),
 			Payload: &gatewayv2.GatewayEnvelope_UploadReadableFiles{
@@ -94,7 +99,13 @@ func ImportReadableFiles(
 					Files:   uploads,
 				},
 			},
-		})
+		}
+		frame := &gatewayv2.AgentServerFrame{Payload: &gatewayv2.AgentServerFrame_Envelope{Envelope: envelope}}
+		if proto.Size(frame) > maxReadableUploadFrameBytes {
+			writeError(w, http.StatusRequestEntityTooLarge, "uploaded files exceed desktop transfer limit (16 MiB including metadata)")
+			return
+		}
+		ch, done, cleanup, err := sm.RegisterStreamAndSendContext(ctx, agentID, requestID, envelope)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "agent offline")
 			return
