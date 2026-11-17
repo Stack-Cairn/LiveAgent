@@ -149,6 +149,7 @@ async function harness(t, options = {}) {
   };
   return {
     sync: hookModule,
+    webSearch: loader.loadModule("@liveagent/ui/lib/providers/webSearchFallback.ts"),
     api,
     updates,
     getSettingsCalls,
@@ -378,4 +379,19 @@ test("a held A-mode echo older than a later local edit does not survive the sett
   await act(async () => t.mock.timers.tick(h.sync.SETTINGS_ECHO_SETTLE_MS));
   await h.flush();
   assert.equal(h.mode(), "autoEdit/true");
+});
+
+test("stale settings snapshots cannot roll back web search availability", async (t) => {
+  const h = await harness(t);
+  const push = (generation, available) => h.push({
+    ...snapshot(initial, {}, { epoch: "desktop", generation }),
+    kbrainWebSearch: { provider: "tavily", available },
+  });
+  await push(5, true);
+  await push(4, false);
+  assert.equal(h.webSearch.getRecordedWebSearchFallbackState().available, true);
+  await push(6, false);
+  assert.equal(h.webSearch.getRecordedWebSearchFallbackState().available, false);
+  await h.push({ ...snapshot(initial, {}, { epoch: "restarted", generation: 1 }), kbrainWebSearch: { provider: "brave", available: true } });
+  assert.deepEqual(h.webSearch.getRecordedWebSearchFallbackState(), { provider: "brave", available: true });
 });
