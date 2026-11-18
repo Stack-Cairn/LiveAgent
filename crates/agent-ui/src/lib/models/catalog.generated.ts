@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-14";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-18";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -119,8 +119,10 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "gpt-6-astra", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
     { id: "gpt-6-luna", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "gpt-6-sol", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
-    { id: "gpt-6.1-sol", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
+    { id: "gpt-6.1-sol", contextWindow: 628000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
     { id: "gpt-6.1-terra", contextWindow: 628000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
+    { id: "gpt-6.2-astra", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
+    { id: "gpt-6.2-sol", contextWindow: 628000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
     { id: "gpt-daybreak-blue-latest", contextWindow: 400000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "gpt-daybreak-red-latest", contextWindow: 500000, maxOutputToken: 128000, inputModalities: ["text", "image"], thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: true } },
     { id: "gpt-realtime-2.1", contextWindow: 128000, maxOutputToken: 32000, inputModalities: ["text", "image", "audio"], thinking: { levels: ["minimal", "low", "medium", "high", "xhigh"], off: false } },
@@ -258,7 +260,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "qwen3-omni-flash-realtime", contextWindow: 65536, maxOutputToken: 16384, inputModalities: ["text", "image", "audio"] },
     { id: "qwen3-vl-235b-a22b", contextWindow: 131072, maxOutputToken: 32768, inputModalities: ["text", "image"], thinking: { levels: [], off: false } },
     { id: "qwen3-vl-30b-a3b", contextWindow: 131072, maxOutputToken: 32768, inputModalities: ["text", "image"], thinking: { levels: [], off: false } },
-    { id: "qwen3-vl-plus", contextWindow: 262144, maxOutputToken: 32768, inputModalities: ["text", "image"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "qwen3-vl-plus", contextWindow: 262144, maxOutputToken: 32768, inputModalities: ["text", "image", "video"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.5-122b-a10b", contextWindow: 262144, maxOutputToken: 65536, inputModalities: ["text", "image", "video"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.5-27b", contextWindow: 262144, maxOutputToken: 65536, inputModalities: ["text", "image", "video"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.5-35b-a3b", contextWindow: 262144, maxOutputToken: 65536, inputModalities: ["text", "image", "video"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
