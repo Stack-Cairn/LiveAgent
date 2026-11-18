@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::io::{self, Cursor, Read, Seek};
+use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -22,7 +22,8 @@ use crate::runtime::platform::expand_tilde_path;
 use crate::services::skills::skills_root_dir;
 
 const READ_MAX_TEXT_BYTES: usize = 200 * 1024; // 200KB
-const EDITABLE_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024; // 3MB
+const EDITABLE_TEXT_MAX_BYTES: usize = 16 * 1024 * 1024; // 16 MiB
+const EDITABLE_TEXT_PREVIEW_BYTES: usize = 256 * 1024;
 const READ_MAX_IMAGE_BYTES: usize = 25 * 1024 * 1024; // 25MB
 const READ_MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024; // 25MB
 const DOCUMENT_PREVIEW_CACHE_VERSION: &str = "v1";
@@ -2223,24 +2224,118 @@ fn parse_expected_version(
     }
 }
 
+fn stale_file(logical_path: &str) -> FsError {
+    FsError::StaleFile {
+        path: logical_path.to_string(),
+        message: "File changed since the last full Read. Read the file again before modifying it."
+            .to_string(),
+    }
+}
+
+// Unlike file_identity on Windows, this identifies the already-open handle,
+// so replacing the path between open and metadata cannot mix two file versions.
+fn open_file_identity(file: &fs::File, target: &Path) -> io::Result<String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        };
+        let _ = target;
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+        Ok(format!("{}:{index}", info.dwVolumeSerialNumber))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(file_identity(&file.metadata()?, target))
+    }
+}
+
+fn same_file_metadata(before: &fs::Metadata, after: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        // Also detect same-size writes whose mtime was restored by another process.
+        if before.ctime() != after.ctime() || before.ctime_nsec() != after.ctime_nsec() {
+            return false;
+        }
+    }
+    before.len() == after.len()
+        && before.modified().ok() == after.modified().ok()
+        && before.created().ok() == after.created().ok()
+}
+
+fn ensure_read_snapshot(
+    file: &fs::File,
+    target: &Path,
+    before: &fs::Metadata,
+    identity: &str,
+    logical_path: &str,
+) -> Result<(), FsError> {
+    let after = file.metadata()?;
+    // Observe the current path through one handle: on Windows, querying metadata
+    // and identity by opening the path separately could mix two replacements.
+    let current_file = fs::File::open(target).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            stale_file(logical_path)
+        } else {
+            FsError::Io(error)
+        }
+    })?;
+    let current = current_file.metadata()?;
+    if !same_file_metadata(before, &after)
+        || !same_file_metadata(before, &current)
+        || open_file_identity(&current_file, target)? != identity
+    {
+        return Err(stale_file(logical_path));
+    }
+    Ok(())
+}
+
+// Fixed memory and a fixed byte budget, even if another process keeps appending.
+fn hash_reader(reader: impl Read, byte_limit: u64) -> io::Result<(String, u64)> {
+    let mut reader = reader.take(byte_limit);
+    let mut buffer = [0u8; 64 * 1024];
+    let mut hash: u64 = 0xcbf29ce484222325;
+    let mut total = 0;
+    loop {
+        let count = match reader.read(&mut buffer) {
+            Ok(count) => count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        if count == 0 {
+            break;
+        }
+        total += count as u64;
+        for byte in &buffer[..count] {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    Ok((format!("{hash:016x}"), total))
+}
+
 fn ensure_expected_version_matches(
     target: &Path,
     logical_path: &str,
     expected: &ExpectedVersion,
 ) -> Result<(), FsError> {
-    let md = fs::metadata(target)?;
-    let bytes = fs::read(target)?;
-    let actual_mtime_ms = metadata_mtime_ms(&md);
-    let actual_content_hash = hash_bytes(&bytes);
-    if actual_mtime_ms != expected.mtime_ms || actual_content_hash != expected.content_hash {
-        return Err(FsError::StaleFile {
-            path: logical_path.to_string(),
-            message:
-                "File changed since the last full Read. Read the file again before modifying it."
-                    .to_string(),
-        });
+    let mut file = fs::File::open(target)?;
+    let md = file.metadata()?;
+    let identity = open_file_identity(&file, target)?;
+    if metadata_mtime_ms(&md) != expected.mtime_ms {
+        return Err(stale_file(logical_path));
     }
-    Ok(())
+    let (actual_content_hash, total) = hash_reader(&mut file, md.len().saturating_add(1))?;
+    if total != md.len() || actual_content_hash != expected.content_hash {
+        return Err(stale_file(logical_path));
+    }
+    ensure_read_snapshot(&file, target, &md, &identity, logical_path)
 }
 
 #[derive(Debug, Serialize)]
@@ -2883,15 +2978,23 @@ pub struct ReadEditableTextResponse {
     pub size_bytes: usize,
     pub total_lines: usize,
     pub file_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_offset: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_next_offset: Option<u64>,
 }
 
 pub(crate) fn fs_read_editable_text_sync(
     workdir: String,
     path: String,
+    preview_offset: Option<u64>,
 ) -> Result<ReadEditableTextResponse, FsCommandError> {
     let target = resolve_scoped_fs_path(&workdir, &path)?;
-    fs_read_editable_text_impl(&target)
-        .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
+    let response = match preview_offset {
+        Some(offset) => fs_read_editable_text_preview_impl(&target, offset),
+        None => fs_read_editable_text_impl(&target),
+    };
+    response.map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
 fn fs_read_editable_text_impl(path: &ScopedFsPath) -> Result<ReadEditableTextResponse, FsError> {
@@ -2905,31 +3008,16 @@ fn fs_read_editable_text_impl(path: &ScopedFsPath) -> Result<ReadEditableTextRes
         });
     }
 
-    let md = fs::metadata(&target)?;
-    let size_bytes = usize::try_from(md.len()).unwrap_or(usize::MAX);
-    if size_bytes > EDITABLE_TEXT_MAX_BYTES {
-        return Err(FsError::TooLarge {
-            path: logical_path,
-            message: format!(
-                "File is too large to edit ({size_bytes} bytes, max {EDITABLE_TEXT_MAX_BYTES} bytes)"
-            ),
-        });
-    }
-
-    let bytes = fs::read(&target)?;
-    if bytes.len() > EDITABLE_TEXT_MAX_BYTES {
-        return Err(FsError::TooLarge {
-            path: logical_path,
-            message: format!(
-                "File is too large to edit ({} bytes, max {EDITABLE_TEXT_MAX_BYTES} bytes)",
-                bytes.len()
-            ),
-        });
-    }
-
+    let mut file = fs::File::open(&target)?;
+    let md = file.metadata()?;
+    let identity = open_file_identity(&file, &target)?;
+    let bytes = read_bounded_editable_bytes(&mut file, &md, &logical_path)?;
+    ensure_read_snapshot(&file, &target, &md, &identity, &logical_path)?;
+    ensure_text_not_binary(&bytes, &logical_path)?;
+    let size_bytes = bytes.len();
     let mtime_ms = metadata_mtime_ms(&md);
     let content_hash = hash_bytes(&bytes);
-    let file_id = Some(file_identity(&md, &target));
+    let file_id = Some(identity);
     let content = String::from_utf8(bytes).map_err(|_| FsError::NotUtf8 {
         path: logical_path.clone(),
     })?;
@@ -2943,16 +3031,158 @@ fn fs_read_editable_text_impl(path: &ScopedFsPath) -> Result<ReadEditableTextRes
         size_bytes,
         total_lines,
         file_id,
+        preview_offset: None,
+        preview_next_offset: None,
     })
+}
+
+fn editable_text_too_large(logical_path: &str, size: u64) -> FsError {
+    FsError::TooLarge {
+        path: logical_path.to_string(),
+        message: format!(
+            "File is too large to edit ({size} bytes, max {EDITABLE_TEXT_MAX_BYTES} bytes)"
+        ),
+    }
+}
+
+fn read_bounded_editable_bytes(
+    file: &mut fs::File,
+    md: &fs::Metadata,
+    logical_path: &str,
+) -> Result<Vec<u8>, FsError> {
+    if md.len() > EDITABLE_TEXT_MAX_BYTES as u64 {
+        return Err(editable_text_too_large(logical_path, md.len()));
+    }
+    let mut bytes = Vec::new();
+    file.take(EDITABLE_TEXT_MAX_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > EDITABLE_TEXT_MAX_BYTES {
+        return Err(editable_text_too_large(logical_path, bytes.len() as u64));
+    }
+    if bytes.len() as u64 != md.len() {
+        return Err(stale_file(logical_path));
+    }
+    Ok(bytes)
+}
+
+fn ensure_text_not_binary(bytes: &[u8], logical_path: &str) -> Result<(), FsError> {
+    if bytes
+        .iter()
+        .any(|byte| *byte < 0x20 && !matches!(*byte, b'\t' | b'\n' | b'\r' | 0x0c | 0x08 | 0x1b))
+    {
+        return Err(FsError::UnsupportedTarget {
+            path: logical_path.to_string(),
+            message: "Binary files are not supported in the code editor".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn fs_read_editable_text_preview_impl(
+    path: &ScopedFsPath,
+    requested_offset: u64,
+) -> Result<ReadEditableTextResponse, FsError> {
+    let logical_path = &path.logical_path;
+    let target = resolve_existing_file_target(&path.root, &path.relative_path)
+        .map_err(|error| remap_scoped_path_error(path, error))?;
+    if let Some(reason) = editable_text_unsupported_reason(&target) {
+        return Err(FsError::UnsupportedTarget {
+            path: logical_path.clone(),
+            message: reason.to_string(),
+        });
+    }
+    let mut file = fs::File::open(&target)?;
+    let md = file.metadata()?;
+    let identity = open_file_identity(&file, &target)?;
+    let offset = requested_offset.min(md.len());
+    // At most three bytes of lookbehind let us validate the scalar containing
+    // an arbitrary continuation-byte start instead of silently skipping junk.
+    let lookbehind = offset.min(3) as usize;
+    file.seek(SeekFrom::Start(offset - lookbehind as u64))?;
+    let mut bytes = Vec::new();
+    let budget = lookbehind + EDITABLE_TEXT_PREVIEW_BYTES;
+    (&mut file).take(budget as u64).read_to_end(&mut bytes)?;
+    let expected_len = (md.len() - (offset - lookbehind as u64)).min(budget as u64);
+    if bytes.len() as u64 != expected_len {
+        return Err(stale_file(logical_path));
+    }
+    ensure_read_snapshot(&file, &target, &md, &identity, logical_path)?;
+    let (content, aligned_offset, next_offset) =
+        decode_text_preview(&bytes, lookbehind, offset, md.len(), logical_path)?;
+    let total_lines = count_text_lines(&content);
+    Ok(ReadEditableTextResponse {
+        path: logical_path.clone(),
+        content,
+        mtime_ms: metadata_mtime_ms(&md),
+        // A range is not a full-read version token and cannot authorize a write.
+        content_hash: String::new(),
+        size_bytes: usize::try_from(md.len()).unwrap_or(usize::MAX),
+        total_lines,
+        file_id: Some(identity),
+        preview_offset: Some(aligned_offset),
+        preview_next_offset: next_offset,
+    })
+}
+
+fn decode_text_preview(
+    bytes: &[u8],
+    lookbehind: usize,
+    offset: u64,
+    size: u64,
+    logical_path: &str,
+) -> Result<(String, u64, Option<u64>), FsError> {
+    let invalid = || FsError::NotUtf8 {
+        path: logical_path.to_string(),
+    };
+    let is_continuation = |byte: u8| byte & 0xc0 == 0x80;
+    let mut start = lookbehind;
+    if bytes.get(start).is_some_and(|byte| is_continuation(*byte)) {
+        let lead = (0..start)
+            .rev()
+            .find(|index| !is_continuation(bytes[*index]))
+            .ok_or_else(invalid)?;
+        let width = match bytes[lead] {
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => return Err(invalid()),
+        };
+        let end = lead + width;
+        if end <= start || end > bytes.len() {
+            return Err(invalid());
+        }
+        std::str::from_utf8(&bytes[lead..end]).map_err(|_| invalid())?;
+        start = end;
+    }
+    let aligned_offset = offset + (start - lookbehind) as u64;
+    let range = &bytes[start..];
+    let valid_len = match std::str::from_utf8(range) {
+        Ok(_) => range.len(),
+        Err(error)
+            if error.error_len().is_none()
+                && offset + ((bytes.len() - lookbehind) as u64) < size =>
+        {
+            error.valid_up_to()
+        }
+        Err(_) => return Err(invalid()),
+    };
+    let range = &range[..valid_len];
+    ensure_text_not_binary(range, logical_path)?;
+    let content = std::str::from_utf8(range)
+        .map_err(|_| invalid())?
+        .to_string();
+    let next = aligned_offset + range.len() as u64;
+    Ok((content, aligned_offset, (next < size).then_some(next)))
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fs_read_editable_text(
     workdir: String,
     path: String,
+    preview_offset: Option<u64>,
 ) -> Result<ReadEditableTextResponse, FsCommandError> {
     run_blocking_fs("fs_read_editable_text", move || {
-        fs_read_editable_text_sync(workdir, path)
+        fs_read_editable_text_sync(workdir, path, preview_offset)
     })
     .await
 }
@@ -3038,6 +3268,46 @@ pub struct WriteTextResponse {
     pub file_id: Option<String>,
 }
 
+fn replace_saved_text(
+    mut staged: tempfile::NamedTempFile,
+    target: &Path,
+    logical_path: &str,
+    expected: &ExpectedVersion,
+) -> Result<fs::File, FsError> {
+    #[cfg(windows)]
+    use windows_sys::Win32::Foundation::{
+        ERROR_ACCESS_DENIED, ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION,
+    };
+
+    let mut retry_delays = [20, 40, 80, 160].into_iter();
+    loop {
+        // Recheck after staging and after any brief reader lock before replacing.
+        ensure_expected_version_matches(target, logical_path, expected)?;
+        match staged.persist(target) {
+            Ok(file) => return Ok(file),
+            Err(error) => {
+                #[cfg(windows)]
+                let retryable = error.error.raw_os_error().is_some_and(|code| {
+                    matches!(
+                        code as u32,
+                        ERROR_ACCESS_DENIED | ERROR_LOCK_VIOLATION | ERROR_SHARING_VIOLATION
+                    )
+                });
+                #[cfg(not(windows))]
+                let retryable = false;
+                if retryable {
+                    if let Some(delay) = retry_delays.next() {
+                        staged = error.file;
+                        std::thread::sleep(Duration::from_millis(delay));
+                        continue;
+                    }
+                }
+                return Err(FsError::Io(error.error));
+            }
+        }
+    }
+}
+
 pub(crate) fn fs_write_text_sync(
     workdir: String,
     path: String,
@@ -3068,6 +3338,9 @@ fn fs_write_text_impl(
     checkpoint: Option<CheckpointCtx>,
 ) -> Result<WriteTextResponse, FsError> {
     let logical_path = path.logical_path.clone();
+    if content.len() > EDITABLE_TEXT_MAX_BYTES {
+        return Err(editable_text_too_large(&logical_path, content.len() as u64));
+    }
     let raw_target = path.root.join(&path.relative_path);
     let expected = parse_expected_version(expected_mtime_ms, expected_content_hash)?;
 
@@ -3105,11 +3378,38 @@ fn fs_write_text_impl(
     };
 
     if existed_before {
-        let expected = expected.ok_or_else(|| FsError::RequiresFullRead {
+        let expected = expected.as_ref().ok_or_else(|| FsError::RequiresFullRead {
             path: logical_path.clone(),
         })?;
-        ensure_expected_version_matches(&target, &logical_path, &expected)?;
+        ensure_expected_version_matches(&target, &logical_path, expected)?;
     }
+
+    // Stage on the same filesystem; a failed write must leave the target intact.
+    let parent = target
+        .parent()
+        .ok_or_else(|| FsError::Other("Invalid target path".into()))?;
+    let mut staging = tempfile::Builder::new();
+    staging.prefix(".liveagent-edit-");
+    #[cfg(unix)]
+    if !existed_before {
+        use std::os::unix::fs::PermissionsExt;
+        // Match fs::write creation permissions; Builder applies the process umask.
+        staging.permissions(fs::Permissions::from_mode(0o666));
+    }
+    let mut staged = staging.tempfile_in(parent)?;
+    staged.write_all(content.as_bytes())?;
+    if existed_before {
+        let permissions = fs::metadata(&target)?.permissions();
+        if permissions.readonly() {
+            return Err(FsError::Io(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Target file is read-only",
+            )));
+        }
+        staged.as_file().set_permissions(permissions)?;
+    }
+    staged.as_file().sync_all()?;
+    let staged_mtime = staged.as_file().metadata()?.modified()?;
 
     // 落盘前捕获前像(root + 相对路径):不存在则记删除标记,存在则拷贝原
     // 字节。失败不阻断写入。
@@ -3124,9 +3424,24 @@ fn fs_write_text_impl(
         },
     );
 
-    fs::write(&target, content.as_bytes())?;
-    let canon = fs::canonicalize(&target)?;
-    let md = fs::metadata(&canon)?;
+    let persisted = if existed_before {
+        replace_saved_text(staged, &target, &logical_path, expected.as_ref().unwrap())?
+    } else {
+        // Do not overwrite a file created by another process while staging.
+        staged.persist_noclobber(&target).map_err(|error| {
+            if error.error.kind() == io::ErrorKind::AlreadyExists {
+                stale_file(&logical_path)
+            } else {
+                FsError::Io(error.error)
+            }
+        })?
+    };
+    let md = persisted.metadata()?;
+    let identity = open_file_identity(&persisted, &target)?;
+    if md.len() != content.len() as u64 || md.modified()? != staged_mtime {
+        return Err(stale_file(&logical_path));
+    }
+    ensure_read_snapshot(&persisted, &target, &md, &identity, &logical_path)?;
 
     Ok(WriteTextResponse {
         path: logical_path,
@@ -3136,7 +3451,7 @@ fn fs_write_text_impl(
         mtime_ms: metadata_mtime_ms(&md),
         content_hash: hash_bytes(content.as_bytes()),
         total_lines: count_text_lines(&content),
-        file_id: Some(file_identity(&md, &canon)),
+        file_id: Some(identity),
     })
 }
 
@@ -3816,7 +4131,9 @@ pub(crate) fn fs_list_dirs_sync(
 
     for entry in entries {
         let Ok(entry) = entry else { continue };
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
 
         let mut is_dir = file_type.is_dir();
         if !is_dir && file_type.is_symlink() {
@@ -5374,14 +5691,401 @@ mod tests {
     }
 
     #[test]
+    fn editable_reads_bound_growth_and_reject_changed_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("growth.txt");
+        fs::write(&target, b"old").unwrap();
+        let mut file = fs::File::open(&target).unwrap();
+        let md = file.metadata().unwrap();
+        let identity = open_file_identity(&file, &target).unwrap();
+        let writer = fs::OpenOptions::new().write(true).open(&target).unwrap();
+        writer.set_len(EDITABLE_TEXT_MAX_BYTES as u64 * 8).unwrap();
+        assert!(matches!(
+            read_bounded_editable_bytes(&mut file, &md, "growth.txt"),
+            Err(FsError::TooLarge { .. })
+        ));
+        assert_eq!(
+            file.stream_position().unwrap(),
+            EDITABLE_TEXT_MAX_BYTES as u64 + 1
+        );
+        assert!(matches!(
+            ensure_read_snapshot(&file, &target, &md, &identity, "growth.txt"),
+            Err(FsError::StaleFile { .. })
+        ));
+
+        // Growth within the cap and truncation must not pair old metadata with new bytes.
+        for changed in [b"longer".as_slice(), b"x".as_slice()] {
+            fs::write(&target, b"old").unwrap();
+            let mut file = fs::File::open(&target).unwrap();
+            let md = file.metadata().unwrap();
+            fs::write(&target, changed).unwrap();
+            assert!(matches!(
+                read_bounded_editable_bytes(&mut file, &md, "growth.txt"),
+                Err(FsError::StaleFile { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn editable_snapshot_rejects_replaced_path_even_with_matching_version_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("replaced.txt");
+        fs::write(&target, b"old").unwrap();
+        let file = fs::File::open(&target).unwrap();
+        let before = file.metadata().unwrap();
+        let identity = open_file_identity(&file, &target).unwrap();
+        let mut replacement = tempfile::NamedTempFile::new_in(dir.path()).unwrap();
+        replacement.write_all(b"new").unwrap();
+        replacement
+            .as_file()
+            .set_times(fs::FileTimes::new().set_modified(before.modified().unwrap()))
+            .unwrap();
+        // Windows can move an open file aside, but can reject overwriting its path in one call.
+        fs::rename(&target, dir.path().join("original.txt")).unwrap();
+        let replacement = replacement.persist(&target).unwrap();
+        assert_eq!(replacement.metadata().unwrap().len(), before.len());
+        assert_eq!(
+            replacement.metadata().unwrap().modified().unwrap(),
+            before.modified().unwrap()
+        );
+        assert_ne!(open_file_identity(&replacement, &target).unwrap(), identity);
+        assert!(matches!(
+            ensure_read_snapshot(&file, &target, &before, &identity, "replaced.txt"),
+            Err(FsError::StaleFile { .. })
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn editable_save_retries_when_a_reader_temporarily_prevents_replacement() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_READ, FILE_SHARE_WRITE};
+
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("locked.txt");
+        fs::write(&target, b"original").unwrap();
+        let workdir = directory.path().display().to_string();
+        let original =
+            fs_read_editable_text_sync(workdir.clone(), "locked.txt".into(), None).unwrap();
+        let reader = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&target)
+            .unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(65));
+            drop(reader);
+        });
+        let result = fs_write_text_sync(
+            workdir,
+            "locked.txt".into(),
+            "updated".into(),
+            "rewrite".into(),
+            Some(original.mtime_ms),
+            Some(original.content_hash),
+            None,
+        );
+        release.join().unwrap();
+        assert_eq!(result.unwrap().bytes_written, 7);
+        assert_eq!(fs::read(target).unwrap(), b"updated");
+    }
+
+    #[test]
+    fn editable_text_accepts_16_mib_and_rejects_oversized_writes_before_side_effects() {
+        let dir = tempfile::tempdir().unwrap();
+        let workdir = dir.path().display().to_string();
+        let content = "a".repeat(EDITABLE_TEXT_MAX_BYTES);
+        let written = fs_write_text_sync(
+            workdir.clone(),
+            "limit.txt".into(),
+            content.clone(),
+            "rewrite".into(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(written.bytes_written, EDITABLE_TEXT_MAX_BYTES);
+        let read = fs_read_editable_text_sync(workdir.clone(), "limit.txt".into(), None).unwrap();
+        assert_eq!(read.content, content);
+        assert_eq!(read.size_bytes, read.content.len());
+        assert_eq!(read.content_hash, written.content_hash);
+        let json = serde_json::to_value(&read).unwrap();
+        assert!(json.get("previewOffset").is_none());
+        assert!(json.get("previewNextOffset").is_none());
+
+        let error = fs_write_text_sync(
+            workdir,
+            "must-not-exist/large.txt".into(),
+            "a".repeat(EDITABLE_TEXT_MAX_BYTES + 1),
+            "rewrite".into(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, FsErrorCode::TooLarge);
+        assert!(!dir.path().join("must-not-exist").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn editable_rewrite_preserves_creation_and_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("reference.txt"), b"reference").unwrap();
+        let workdir = dir.path().display().to_string();
+        fs_write_text_sync(
+            workdir.clone(),
+            "new.txt".into(),
+            "new".into(),
+            "rewrite".into(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mode = |name| {
+            fs::metadata(dir.path().join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777
+        };
+        assert_eq!(mode("new.txt"), mode("reference.txt"));
+        fs::set_permissions(
+            dir.path().join("new.txt"),
+            fs::Permissions::from_mode(0o640),
+        )
+        .unwrap();
+        let read = fs_read_editable_text_sync(workdir.clone(), "new.txt".into(), None).unwrap();
+        fs_write_text_sync(
+            workdir,
+            "new.txt".into(),
+            "updated".into(),
+            "rewrite".into(),
+            Some(read.mtime_ms),
+            Some(read.content_hash),
+            None,
+        )
+        .unwrap();
+        assert_eq!(mode("new.txt"), 0o640);
+    }
+
+    #[test]
+    fn streaming_conflict_hash_retries_interrupted_and_short_reads_within_budget() {
+        struct InterruptingReader {
+            bytes: Cursor<Vec<u8>>,
+            interrupt: bool,
+        }
+        impl Read for InterruptingReader {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                self.interrupt = !self.interrupt;
+                if self.interrupt {
+                    return Err(io::Error::from(io::ErrorKind::Interrupted));
+                }
+                // Exercise short reads as well as repeated EINTRs.
+                let count = buf.len().min(3);
+                self.bytes.read(&mut buf[..count])
+            }
+        }
+        let mut reader = InterruptingReader {
+            bytes: Cursor::new(b"0123456789".to_vec()),
+            interrupt: false,
+        };
+        let (hash, total) = hash_reader(&mut reader, 7).unwrap();
+        assert_eq!(total, 7);
+        assert_eq!(hash, hash_bytes(b"0123456"));
+        assert_eq!(reader.bytes.position(), 7);
+    }
+
+    #[test]
+    fn streaming_conflict_hash_is_bounded_and_matches_full_read_hash() {
+        let data = b"UTF-8: \xe4\xb8\xad\xf0\x9f\x98\x80\n".repeat(10000);
+        let mut reader = Cursor::new(&data);
+        let (hash, total) = hash_reader(&mut reader, data.len() as u64 + 1).unwrap();
+        assert_eq!(hash, hash_bytes(&data));
+        assert_eq!(total, data.len() as u64);
+        let (_, total) = hash_reader(Cursor::new(&data), 7).unwrap();
+        assert_eq!(total, 7);
+
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("conflict.txt");
+        fs::write(&target, b"old").unwrap();
+        let expected = ExpectedVersion {
+            mtime_ms: metadata_mtime_ms(&fs::metadata(&target).unwrap()),
+            content_hash: hash_bytes(b"old"),
+        };
+        ensure_expected_version_matches(&target, "conflict.txt", &expected).unwrap();
+        // Supply the current mtime to force hash validation even on coarse filesystems.
+        fs::write(&target, b"new").unwrap();
+        let expected = ExpectedVersion {
+            mtime_ms: metadata_mtime_ms(&fs::metadata(&target).unwrap()),
+            ..expected
+        };
+        let error = fs_write_text_sync(
+            dir.path().display().to_string(),
+            "conflict.txt".into(),
+            "replacement".into(),
+            "rewrite".into(),
+            Some(expected.mtime_ms),
+            Some(expected.content_hash),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, FsErrorCode::StaleFile);
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&target)
+            .unwrap()
+            .set_len(EDITABLE_TEXT_MAX_BYTES as u64 + 1)
+            .unwrap();
+        let expected = ExpectedVersion {
+            mtime_ms: metadata_mtime_ms(&fs::metadata(&target).unwrap()),
+            content_hash: hash_bytes(b"new"),
+        };
+        assert!(matches!(
+            ensure_expected_version_matches(&target, "conflict.txt", &expected),
+            Err(FsError::StaleFile { .. })
+        ));
+    }
+
+    #[test]
+    fn editable_preview_reads_large_file_ranges_without_full_read_tokens() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("large.txt");
+        let mut file = fs::File::create(&target).unwrap();
+        let size = EDITABLE_TEXT_MAX_BYTES as u64 + 100;
+        file.set_len(size).unwrap();
+        file.write_all(&vec![b'a'; EDITABLE_TEXT_PREVIEW_BYTES])
+            .unwrap();
+        file.seek(SeekFrom::Start(size - 4)).unwrap();
+        file.write_all("😀".as_bytes()).unwrap();
+        drop(file);
+        let read = |offset| {
+            fs_read_editable_text_sync(
+                dir.path().display().to_string(),
+                "large.txt".into(),
+                Some(offset),
+            )
+            .unwrap()
+        };
+        let first = read(0);
+        assert_eq!(first.content.len(), EDITABLE_TEXT_PREVIEW_BYTES);
+        assert_eq!(first.size_bytes as u64, size);
+        assert_eq!(first.preview_offset, Some(0));
+        assert_eq!(
+            first.preview_next_offset,
+            Some(EDITABLE_TEXT_PREVIEW_BYTES as u64)
+        );
+        assert!(first.content_hash.is_empty());
+        assert_ne!(first.mtime_ms, 0);
+        let json = serde_json::to_value(&first).unwrap();
+        assert_eq!(json["previewOffset"], 0);
+        assert_eq!(
+            json["previewNextOffset"],
+            EDITABLE_TEXT_PREVIEW_BYTES as u64
+        );
+        assert_eq!(read(size - 4).content, "😀");
+        for offset in [size - 3, size - 2, size - 1, size, u64::MAX] {
+            let response = read(offset);
+            assert!(response.content.is_empty());
+            assert_eq!(response.preview_offset, Some(size));
+            assert_eq!(response.preview_next_offset, None);
+        }
+    }
+
+    #[test]
+    fn editable_preview_pages_preserve_utf8_and_exact_offsets() {
+        let dir = tempfile::tempdir().unwrap();
+        for prefix_bytes in 1..=3 {
+            let prefix = "a".repeat(EDITABLE_TEXT_PREVIEW_BYTES - prefix_bytes);
+            let text = format!("{prefix}😀tail");
+            fs::write(dir.path().join("utf8.txt"), &text).unwrap();
+            let read = |offset| {
+                fs_read_editable_text_sync(
+                    dir.path().display().to_string(),
+                    "utf8.txt".into(),
+                    Some(offset),
+                )
+                .unwrap()
+            };
+            let first = read(0);
+            assert_eq!(first.content, prefix);
+            assert_eq!(first.preview_next_offset, Some(prefix.len() as u64));
+            let second = read(first.preview_next_offset.unwrap());
+            assert_eq!(second.content, "😀tail");
+            assert_eq!(second.preview_next_offset, None);
+            assert_eq!(format!("{}{}", first.content, second.content), text);
+            for continuation in 1..=3 {
+                let response = read(prefix.len() as u64 + continuation);
+                assert_eq!(response.preview_offset, Some(prefix.len() as u64 + 4));
+                assert_eq!(response.content, "tail");
+            }
+        }
+        fs::write(dir.path().join("empty.txt"), "").unwrap();
+        let empty = fs_read_editable_text_sync(
+            dir.path().display().to_string(),
+            "empty.txt".into(),
+            Some(0),
+        )
+        .unwrap();
+        assert_eq!(empty.preview_offset, Some(0));
+        assert_eq!(empty.preview_next_offset, None);
+        assert_eq!(empty.size_bytes, 0);
+    }
+
+    #[test]
+    fn editable_preview_rejects_invalid_boundaries_binary_and_unsupported_files() {
+        let dir = tempfile::tempdir().unwrap();
+        for (bytes, offset) in [
+            (vec![0x80, b'a'], 0),
+            (vec![b'a', 0x80, b'z'], 1),
+            (vec![0xe0, 0x80, 0x80, b'z'], 1),
+            (vec![0xed, 0xa0, 0x80, b'z'], 2),
+            (vec![0xf4, 0x90, 0x80, 0x80, b'z'], 3),
+            (vec![0xf0, 0x9f], 0),
+        ] {
+            fs::write(dir.path().join("invalid.txt"), bytes).unwrap();
+            let error = fs_read_editable_text_sync(
+                dir.path().display().to_string(),
+                "invalid.txt".into(),
+                Some(offset),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, FsErrorCode::NotUtf8);
+        }
+        for (name, bytes) in [
+            ("binary.txt", b"a\0b".as_slice()),
+            ("image.png", b"text".as_slice()),
+        ] {
+            fs::write(dir.path().join(name), bytes).unwrap();
+            for preview_offset in [None, Some(0)] {
+                let error = fs_read_editable_text_sync(
+                    dir.path().display().to_string(),
+                    name.into(),
+                    preview_offset,
+                )
+                .unwrap_err();
+                assert_eq!(error.code, FsErrorCode::UnsupportedTarget);
+            }
+        }
+    }
+
+    #[test]
     fn read_editable_text_returns_raw_utf8_with_version_metadata() {
         let workdir = unique_test_workdir("read-editable");
         fs::create_dir_all(workdir.join("src")).expect("create workdir");
         fs::write(workdir.join("src/main.rs"), "fn main() {}\n").expect("write file");
 
-        let response =
-            fs_read_editable_text_sync(workdir.display().to_string(), "src/main.rs".to_string())
-                .expect("editable text should read");
+        let response = fs_read_editable_text_sync(
+            workdir.display().to_string(),
+            "src/main.rs".to_string(),
+            None,
+        )
+        .expect("editable text should read");
 
         assert_eq!(response.path, "src/main.rs");
         assert_eq!(response.content, "fn main() {}\n");
@@ -5588,7 +6292,7 @@ mod tests {
         .expect("write large file");
 
         let dir_error =
-            fs_read_editable_text_sync(workdir.display().to_string(), "src".to_string())
+            fs_read_editable_text_sync(workdir.display().to_string(), "src".to_string(), None)
                 .expect_err("directory should fail");
         assert!(
             matches!(dir_error.code, FsErrorCode::NotAFile),
@@ -5597,9 +6301,12 @@ mod tests {
         );
         assert_eq!(dir_error.entry_kind.as_deref(), Some("dir"));
 
-        let utf8_error =
-            fs_read_editable_text_sync(workdir.display().to_string(), "src/binary.bin".to_string())
-                .expect_err("invalid UTF-8 should fail");
+        let utf8_error = fs_read_editable_text_sync(
+            workdir.display().to_string(),
+            "src/binary.bin".to_string(),
+            None,
+        )
+        .expect_err("invalid UTF-8 should fail");
         assert!(
             matches!(utf8_error.code, FsErrorCode::NotUtf8),
             "unexpected error: {:?}",
@@ -5611,8 +6318,9 @@ mod tests {
             ("src/notebook.ipynb", "Notebook"),
             ("src/readme.pdf", "PDF"),
         ] {
-            let error = fs_read_editable_text_sync(workdir.display().to_string(), path.to_string())
-                .expect_err("unsupported preview file should fail");
+            let error =
+                fs_read_editable_text_sync(workdir.display().to_string(), path.to_string(), None)
+                    .expect_err("unsupported preview file should fail");
             assert!(
                 matches!(error.code, FsErrorCode::UnsupportedTarget),
                 "unexpected error for {path}: {:?}",
@@ -5628,6 +6336,7 @@ mod tests {
         let large_error = fs_read_editable_text_sync(
             workdir.display().to_string(),
             "src/too-large.txt".to_string(),
+            None,
         )
         .expect_err("large file should fail");
         assert!(
@@ -5642,8 +6351,9 @@ mod tests {
         );
 
         for path in ["", "/tmp/liveagent-outside", "../outside"] {
-            let error = fs_read_editable_text_sync(workdir.display().to_string(), path.to_string())
-                .expect_err("invalid path should fail");
+            let error =
+                fs_read_editable_text_sync(workdir.display().to_string(), path.to_string(), None)
+                    .expect_err("invalid path should fail");
             assert!(
                 matches!(error.code, FsErrorCode::InvalidPath),
                 "expected invalid path error for {path:?}, got {:?}",

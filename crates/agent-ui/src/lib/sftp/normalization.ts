@@ -102,6 +102,7 @@ export function normalizeSftpStatResponse(response: RawSftpStatResponse): SftpSt
 export function normalizeSftpActionResponse(response: RawSftpActionResponse): SftpActionResponse {
   return {
     action: response.action ?? "",
+    ...(response.contentHash ? { contentHash: response.contentHash } : {}),
     path: response.path ?? "",
     entry: response.entry ? normalizeSftpEntry(response.entry) : null,
     transfer: response.transfer ? normalizeSftpTransfer(response.transfer) : null,
@@ -131,6 +132,7 @@ export function normalizeSftpReadTextResponse(
   return {
     path: response.path ?? "",
     content: response.content ?? "",
+    ...(response.contentHash ? { contentHash: response.contentHash } : {}),
     offset: Number(response.offset ?? 0),
     bytesRead: Number(response.bytesRead ?? response.bytes_read ?? 0),
     sizeBytes: Number(response.sizeBytes ?? response.size_bytes ?? 0),

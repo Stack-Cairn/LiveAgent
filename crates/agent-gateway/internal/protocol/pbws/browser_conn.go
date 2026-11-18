@@ -52,6 +52,9 @@ type browserConn struct {
 	historyRecoveryMu sync.Mutex
 	historyRecovery   map[string]historyRecoveryLatch
 	historySyncAck    func(agentID, generation string, appliedSeq uint64)
+
+	textSaveMu sync.Mutex
+	textSave   *browserTextSave
 }
 
 // BrowserHandler 返回 /ws/v2 的 HTTP 处理器。
@@ -145,6 +148,9 @@ func (c *browserConn) serve() {
 		switch payload := frame.GetPayload().(type) {
 		case *gatewayv2.WebClientFrame_Pong:
 			continue
+		case *gatewayv2.WebClientFrame_AgentRequestChunk:
+			// Collection is ordered by the authenticated socket's read loop.
+			c.handleAgentRequestChunk(frame)
 		case *gatewayv2.WebClientFrame_Hello:
 			_ = c.sendLocalError(frame.GetRequestId(), "already authenticated")
 			continue
@@ -186,6 +192,10 @@ func (c *browserConn) readFrame() (*gatewayv2.WebClientFrame, bool) {
 		var frame gatewayv2.WebClientFrame
 		if err := proto.Unmarshal(data, &frame); err != nil {
 			return nil, false
+		}
+		if frame.GetAgentRequestChunk() != nil && len(data) > maxTextSaveFrameBytes {
+			c.rejectTextSave(frame.GetRequestId(), "text save chunk exceeds 1 MiB frame limit")
+			continue
 		}
 		return &frame, true
 	}

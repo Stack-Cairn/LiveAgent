@@ -44,6 +44,7 @@ export type SftpTransferEvent = {
 };
 
 export type SftpActionResponse = {
+  contentHash?: string;
   action?: string;
   path?: string;
   entry?: SftpEntry | null;
@@ -51,6 +52,7 @@ export type SftpActionResponse = {
 };
 
 export type SftpReadTextResponse = {
+  contentHash?: string;
   path: string;
   content: string;
   offset: number;
@@ -117,6 +119,7 @@ export type SftpClient = {
     projectPathKey: string;
     workdir: string;
     path: string;
+    offset?: number;
     maxBytes?: number;
     strictUtf8?: boolean;
   }): Promise<SftpReadTextResponse>;
@@ -132,5 +135,6 @@ export type SftpClient = {
     content: string;
     expectedMtime?: number;
     expectedSizeBytes?: number;
+    expectedContentHash?: string;
   }): Promise<SftpActionResponse>;
 };

@@ -237,6 +237,8 @@ export type FsReadEditableTextResponse = {
   contentHash: string;
   sizeBytes: number;
   totalLines: number;
+  previewOffset?: number;
+  previewNextOffset?: number;
 };
 
 export type FsReadWorkspaceImageResponse = {

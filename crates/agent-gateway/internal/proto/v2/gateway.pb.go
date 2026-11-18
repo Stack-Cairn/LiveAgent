@@ -5693,11 +5693,12 @@ type SftpRequest struct {
 	StrictUtf8     bool                   `protobuf:"varint,16,opt,name=strict_utf8,json=strictUtf8,proto3" json:"strict_utf8,omitempty"`
 	// write_text conflict guard; 0 means "skip the check" (proto3 has no
 	// presence for scalars, an mtime/size of exactly 0 is accepted as-is).
-	ExpectedMtime     uint64 `protobuf:"varint,17,opt,name=expected_mtime,json=expectedMtime,proto3" json:"expected_mtime,omitempty"`
-	ExpectedSizeBytes uint64 `protobuf:"varint,18,opt,name=expected_size_bytes,json=expectedSizeBytes,proto3" json:"expected_size_bytes,omitempty"`
-	CreateParentDirs  bool   `protobuf:"varint,19,opt,name=create_parent_dirs,json=createParentDirs,proto3" json:"create_parent_dirs,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	ExpectedMtime       uint64 `protobuf:"varint,17,opt,name=expected_mtime,json=expectedMtime,proto3" json:"expected_mtime,omitempty"`
+	ExpectedSizeBytes   uint64 `protobuf:"varint,18,opt,name=expected_size_bytes,json=expectedSizeBytes,proto3" json:"expected_size_bytes,omitempty"`
+	CreateParentDirs    bool   `protobuf:"varint,19,opt,name=create_parent_dirs,json=createParentDirs,proto3" json:"create_parent_dirs,omitempty"`
+	ExpectedContentHash string `protobuf:"bytes,20,opt,name=expected_content_hash,json=expectedContentHash,proto3" json:"expected_content_hash,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *SftpRequest) Reset() {
@@ -5861,6 +5862,13 @@ func (x *SftpRequest) GetCreateParentDirs() bool {
 		return x.CreateParentDirs
 	}
 	return false
+}
+
+func (x *SftpRequest) GetExpectedContentHash() string {
+	if x != nil {
+		return x.ExpectedContentHash
+	}
+	return ""
 }
 
 type SftpEntry struct {
@@ -6084,6 +6092,7 @@ type SftpResponse struct {
 	BytesRead     uint64                 `protobuf:"varint,9,opt,name=bytes_read,json=bytesRead,proto3" json:"bytes_read,omitempty"`
 	SizeBytes     uint64                 `protobuf:"varint,10,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	Truncated     bool                   `protobuf:"varint,11,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	ContentHash   string                 `protobuf:"bytes,13,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6193,6 +6202,13 @@ func (x *SftpResponse) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *SftpResponse) GetContentHash() string {
+	if x != nil {
+		return x.ContentHash
+	}
+	return ""
 }
 
 type SftpEvent struct {
@@ -13658,6 +13674,7 @@ type FsReadEditableTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Workdir       string                 `protobuf:"bytes,1,opt,name=workdir,proto3" json:"workdir,omitempty"`
 	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	PreviewOffset *uint64                `protobuf:"varint,3,opt,name=preview_offset,json=previewOffset,proto3,oneof" json:"preview_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13706,16 +13723,25 @@ func (x *FsReadEditableTextRequest) GetPath() string {
 	return ""
 }
 
+func (x *FsReadEditableTextRequest) GetPreviewOffset() uint64 {
+	if x != nil && x.PreviewOffset != nil {
+		return *x.PreviewOffset
+	}
+	return 0
+}
+
 type FsReadEditableTextResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
-	MtimeMs       uint64                 `protobuf:"varint,3,opt,name=mtime_ms,json=mtimeMs,proto3" json:"mtime_ms,omitempty"`
-	ContentHash   string                 `protobuf:"bytes,4,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
-	SizeBytes     uint64                 `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	TotalLines    uint64                 `protobuf:"varint,6,opt,name=total_lines,json=totalLines,proto3" json:"total_lines,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Path              string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Content           string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	MtimeMs           uint64                 `protobuf:"varint,3,opt,name=mtime_ms,json=mtimeMs,proto3" json:"mtime_ms,omitempty"`
+	ContentHash       string                 `protobuf:"bytes,4,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
+	SizeBytes         uint64                 `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	TotalLines        uint64                 `protobuf:"varint,6,opt,name=total_lines,json=totalLines,proto3" json:"total_lines,omitempty"`
+	PreviewOffset     *uint64                `protobuf:"varint,7,opt,name=preview_offset,json=previewOffset,proto3,oneof" json:"preview_offset,omitempty"`
+	PreviewNextOffset *uint64                `protobuf:"varint,8,opt,name=preview_next_offset,json=previewNextOffset,proto3,oneof" json:"preview_next_offset,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *FsReadEditableTextResponse) Reset() {
@@ -13786,6 +13812,20 @@ func (x *FsReadEditableTextResponse) GetSizeBytes() uint64 {
 func (x *FsReadEditableTextResponse) GetTotalLines() uint64 {
 	if x != nil {
 		return x.TotalLines
+	}
+	return 0
+}
+
+func (x *FsReadEditableTextResponse) GetPreviewOffset() uint64 {
+	if x != nil && x.PreviewOffset != nil {
+		return *x.PreviewOffset
+	}
+	return 0
+}
+
+func (x *FsReadEditableTextResponse) GetPreviewNextOffset() uint64 {
+	if x != nil && x.PreviewNextOffset != nil {
+		return *x.PreviewNextOffset
 	}
 	return 0
 }
@@ -17218,7 +17258,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x11reconnect_attempt\x18\b \x01(\rR\x10reconnectAttempt\x124\n" +
 	"\x16reconnect_max_attempts\x18\t \x01(\rR\x14reconnectMaxAttempts\x12!\n" +
 	"\fsftp_enabled\x18\n" +
-	" \x01(\bR\vsftpEnabled\"\xee\x04\n" +
+	" \x01(\bR\vsftpEnabled\"\xa2\x05\n" +
 	"\vSftpRequest\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1d\n" +
 	"\n" +
@@ -17244,7 +17284,8 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"strictUtf8\x12%\n" +
 	"\x0eexpected_mtime\x18\x11 \x01(\x04R\rexpectedMtime\x12.\n" +
 	"\x13expected_size_bytes\x18\x12 \x01(\x04R\x11expectedSizeBytes\x12,\n" +
-	"\x12create_parent_dirs\x18\x13 \x01(\bR\x10createParentDirs\"|\n" +
+	"\x12create_parent_dirs\x18\x13 \x01(\bR\x10createParentDirs\x122\n" +
+	"\x15expected_content_hash\x18\x14 \x01(\tR\x13expectedContentHash\"|\n" +
 	"\tSftpEntry\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -17272,7 +17313,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	" \x01(\rR\tfilesDone\x12\x1f\n" +
 	"\vfiles_total\x18\v \x01(\rR\n" +
 	"filesTotal\x12\x14\n" +
-	"\x05error\x18\f \x01(\tR\x05error\"\x92\x03\n" +
+	"\x05error\x18\f \x01(\tR\x05error\"\xb5\x03\n" +
 	"\fSftpResponse\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x129\n" +
@@ -17287,7 +17328,8 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\n" +
 	" \x01(\x04R\tsizeBytes\x12\x1c\n" +
-	"\ttruncated\x18\v \x01(\bR\ttruncated\"_\n" +
+	"\ttruncated\x18\v \x01(\bR\ttruncated\x12!\n" +
+	"\fcontent_hash\x18\r \x01(\tR\vcontentHash\"_\n" +
 	"\tSftpEvent\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12>\n" +
 	"\btransfer\x18\x02 \x01(\v2\".liveagent.gateway.v2.SftpTransferR\btransfer\"\x9a\x02\n" +
@@ -17897,10 +17939,12 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"maxResults\x12\x14\n" +
 	"\x05total\x18\x06 \x01(\rR\x05total\x12\x19\n" +
 	"\bhas_more\x18\a \x01(\bR\ahasMore\x12;\n" +
-	"\aentries\x18\b \x03(\v2!.liveagent.gateway.v2.FsListEntryR\aentries\"I\n" +
+	"\aentries\x18\b \x03(\v2!.liveagent.gateway.v2.FsListEntryR\aentries\"\x88\x01\n" +
 	"\x19FsReadEditableTextRequest\x12\x18\n" +
 	"\aworkdir\x18\x01 \x01(\tR\aworkdir\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"\xc8\x01\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12*\n" +
+	"\x0epreview_offset\x18\x03 \x01(\x04H\x00R\rpreviewOffset\x88\x01\x01B\x11\n" +
+	"\x0f_preview_offset\"\xd4\x02\n" +
 	"\x1aFsReadEditableTextResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
@@ -17909,7 +17953,11 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\x05 \x01(\x04R\tsizeBytes\x12\x1f\n" +
 	"\vtotal_lines\x18\x06 \x01(\x04R\n" +
-	"totalLines\"K\n" +
+	"totalLines\x12*\n" +
+	"\x0epreview_offset\x18\a \x01(\x04H\x00R\rpreviewOffset\x88\x01\x01\x123\n" +
+	"\x13preview_next_offset\x18\b \x01(\x04H\x01R\x11previewNextOffset\x88\x01\x01B\x11\n" +
+	"\x0f_preview_offsetB\x16\n" +
+	"\x14_preview_next_offset\"K\n" +
 	"\x1bFsReadWorkspaceImageRequest\x12\x18\n" +
 	"\aworkdir\x18\x01 \x01(\tR\aworkdir\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"\xc0\x01\n" +
@@ -18819,6 +18867,8 @@ func file_proto_v2_gateway_proto_init() {
 	file_proto_v2_gateway_proto_msgTypes[89].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[132].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[154].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[157].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[158].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[161].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[162].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[176].OneofWrappers = []any{}

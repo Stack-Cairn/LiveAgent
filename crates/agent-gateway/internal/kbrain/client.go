@@ -2,6 +2,7 @@ package kbrain
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -266,13 +267,22 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 }
 
 func (c *Client) request(ctx context.Context, method, path string, input any, output any) (*http.Response, error) {
+	return c.requestLimited(ctx, method, path, input, output, 0, 0)
+}
+
+// requestLimited applies byte limits only to callers that opt in, such as the
+// filesystem relay where JSON escaping can expand a bounded text save sixfold.
+func (c *Client) requestLimited(ctx context.Context, method, path string, input any, output any, maxSend, maxRead int64) (*http.Response, error) {
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
 		if err != nil {
 			return nil, err
 		}
-		body = strings.NewReader(string(data))
+		if maxSend > 0 && int64(len(data)) > maxSend {
+			return nil, errors.New("kbrain request exceeds size limit")
+		}
+		body = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
 	if err != nil {
@@ -290,7 +300,18 @@ func (c *Client) request(ctx context.Context, method, path string, input any, ou
 	}
 	if output != nil {
 		defer func() { _ = resp.Body.Close() }()
-		if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
+		if maxRead > 0 {
+			data, err := io.ReadAll(io.LimitReader(resp.Body, maxRead+1))
+			if err != nil {
+				return resp, err
+			}
+			if int64(len(data)) > maxRead {
+				return resp, errors.New("kbrain response exceeds size limit")
+			}
+			if err := json.Unmarshal(data, output); err != nil {
+				return resp, err
+			}
+		} else if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
 			return resp, err
 		}
 	}

@@ -75,6 +75,7 @@ import {
   encodePongFrame,
   encodeRequestFrame,
   GATEWAY_V2_SUBPROTOCOL,
+  prepareTextSaveTransfer,
 } from "./gatewaySocketV2/adapters";
 import type {
   AgentStatus,
@@ -90,6 +91,7 @@ export class GatewayWebSocketTransport {
   protected connectPromise: Promise<void> | null = null;
   protected authenticated = false;
   protected requestSeq = 0;
+  private textSaveQueue: Promise<void> = Promise.resolve();
   protected pending = new Map<string, PendingRequest>();
   protected disposed = false;
   protected statusListeners = new Set<StatusListener>();
@@ -957,6 +959,53 @@ export class GatewayWebSocketTransport {
     agentId: string,
   ): Promise<T> {
     const requestId = this.nextRequestId(type);
+    if (type === "fs.write_text" || type === "sftp.write_text") {
+      const socket = this.socket;
+      const run = async (): Promise<T> => {
+        const transfer = prepareTextSaveTransfer(requestId, type, payload, agentId);
+        try {
+          let response: unknown;
+          for (const frame of transfer.frames) {
+            if (this.socket !== socket || !this.authenticated || this.activeAgentId !== agentId) {
+              throw new Error("Gateway text save connection or target changed");
+            }
+            // One pending response at a time for the transfer id: intermediate
+            // ACKs and the final ordinary response use existing decoding.
+            response = await this.sendEncodedRequest<T>(requestId, type, frame, options);
+          }
+          return response as T;
+        } catch (error) {
+          if (transfer.cancel && this.socket === socket && socket?.readyState === WebSocket.OPEN) {
+            try {
+              this.sendFrame(transfer.cancel);
+            } catch {
+              // Disconnect releases the server's socket-scoped collector.
+            }
+          }
+          throw error;
+        }
+      };
+      const result = this.textSaveQueue.then(run);
+      this.textSaveQueue = result.then(
+        () => {},
+        () => {},
+      );
+      return result;
+    }
+    return this.sendEncodedRequest<T>(
+      requestId,
+      type,
+      encodeRequestFrame(requestId, type, payload, agentId),
+      options,
+    );
+  }
+
+  private sendEncodedRequest<T>(
+    requestId: string,
+    type: string,
+    frame: Uint8Array<ArrayBuffer>,
+    options: GatewayRequestOptions | undefined,
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const host = getRuntimeHost();
       const requestStartedAt = Date.now();
@@ -983,7 +1032,7 @@ export class GatewayWebSocketTransport {
       });
 
       try {
-        this.sendFrame(encodeRequestFrame(requestId, type, payload, agentId));
+        this.sendFrame(frame);
       } catch (error) {
         host.clearTimeout(timeoutId);
         this.pending.delete(requestId);

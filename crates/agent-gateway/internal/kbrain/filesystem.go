@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"google.golang.org/protobuf/proto"
@@ -31,7 +32,11 @@ func (r *Relay) Filesystem(ctx context.Context, request *gatewayv2.GatewayEnvelo
 		output, envelope.Payload = response, &gatewayv2.AgentEnvelope_FsListResp{FsListResp: response}
 	case request.GetFsReadEditableText() != nil:
 		req := request.GetFsReadEditableText()
-		input = map[string]any{"action": "read_text", "workdir": req.GetWorkdir(), "path": req.GetPath()}
+		body := map[string]any{"action": "read_text", "workdir": req.GetWorkdir(), "path": req.GetPath()}
+		if req.PreviewOffset != nil {
+			body["preview_offset"] = req.GetPreviewOffset()
+		}
+		input = body
 		response := &gatewayv2.FsReadEditableTextResponse{}
 		output, envelope.Payload = response, &gatewayv2.AgentEnvelope_FsReadEditableTextResp{FsReadEditableTextResp: response}
 	case request.GetFsReadWorkspaceImage() != nil:
@@ -69,12 +74,26 @@ func (r *Relay) Filesystem(ctx context.Context, request *gatewayv2.GatewayEnvelo
 	default:
 		return nil, false, nil
 	}
-	if proto.Size(request) > 3<<20 {
+	limit := 3 << 20
+	if write := request.GetFsWriteText(); write != nil {
+		if len(write.GetContent()) > 16<<20 {
+			return nil, true, errors.New("filesystem text exceeds 16 MiB size limit")
+		}
+		// Bound metadata separately; text may fill the entire 16 MiB budget.
+		limit = len(write.GetContent()) + 64<<10
+	}
+	if proto.Size(request) > limit {
 		return nil, true, errors.New("filesystem request exceeds size limit")
 	}
 	var raw json.RawMessage
-	if err := r.commandResource(ctx, "POST", "/v1/fs", input, &raw); err != nil {
+	// JSON can expand each UTF-8 byte to six bytes (for example NUL -> \u0000).
+	const maxFilesystemJSONBytes = 6*(16<<20) + (1 << 20)
+	response, err := r.client.requestLimited(ctx, "POST", "/v1/fs", input, &raw, maxFilesystemJSONBytes, maxFilesystemJSONBytes)
+	if err != nil {
 		return nil, true, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, true, fmt.Errorf("kbrain command: %s: %s", response.Status, raw)
 	}
 	if err := json.Unmarshal(raw, output); err != nil {
 		return nil, true, err

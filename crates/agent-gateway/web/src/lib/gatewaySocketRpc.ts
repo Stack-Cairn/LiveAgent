@@ -713,6 +713,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     projectPathKey: string;
     workdir: string;
     path: string;
+    offset?: number;
     maxBytes?: number;
     strictUtf8?: boolean;
   }): Promise<SftpReadTextResponse> {
@@ -722,6 +723,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
         project_path_key: params.projectPathKey,
         workdir: params.workdir,
         remote_path: params.path,
+        offset: params.offset ?? 0,
         max_bytes: params.maxBytes ?? 0,
         strict_utf8: params.strictUtf8 ?? false,
       }),
@@ -736,6 +738,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     content: string;
     expectedMtime?: number;
     expectedSizeBytes?: number;
+    expectedContentHash?: string;
   }): Promise<SftpActionResponse> {
     return normalizeSftpActionResponse(
       await this.request<RawSftpResponse>("sftp.write_text", {
@@ -748,6 +751,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
         create_parent_dirs: false,
         expected_mtime: params.expectedMtime ?? 0,
         expected_size_bytes: params.expectedSizeBytes ?? 0,
+        expected_content_hash: params.expectedContentHash,
       }),
     );
   }
@@ -1481,10 +1485,15 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
-  async readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse> {
+  async readEditableTextFile(
+    workdir: string,
+    path: string,
+    previewOffset?: number,
+  ): Promise<FsReadEditableTextResponse> {
     return this.request<FsReadEditableTextResponse>("fs.read_editable_text", {
       workdir,
       path,
+      preview_offset: previewOffset,
     });
   }
 

@@ -20,9 +20,10 @@ use crate::runtime::terminal::{
 
 const TRANSFER_BUFFER_BYTES: usize = 64 * 1024;
 const SFTP_READ_TEXT_DEFAULT_BYTES: usize = 200 * 1024;
-// Aligned with EDITABLE_TEXT_MAX_BYTES (commands/workspace/fs.rs) so the code
-// editor can open the same file sizes for remote files as for local ones.
 const SFTP_READ_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024;
+// Strict editor IO uses the same full-file limit as the local editor. Basic
+// previews retain their default and maximum sizes.
+const SFTP_EDIT_TEXT_MAX_BYTES: usize = 16 * 1024 * 1024;
 pub const SFTP_EVENT_NAME: &str = "sftp:event";
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +78,8 @@ pub struct SftpTransferResponse {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SftpReadTextResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
     pub path: String,
     pub content: String,
     pub offset: u64,
@@ -102,6 +105,8 @@ pub struct SftpEvent {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SftpActionResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
     pub action: String,
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -288,8 +293,17 @@ impl SftpSessionRegistry {
         create_parent_dirs: bool,
         expected_mtime: Option<u64>,
         expected_size_bytes: Option<u64>,
+        expected_content_hash: Option<String>,
     ) -> Result<SftpActionResponse, String> {
         self.ensure_session_allowed(&session_id, project_path_key.as_deref())?;
+        if expected_mtime.is_some()
+            || expected_size_bytes.is_some()
+            || expected_content_hash
+                .as_ref()
+                .is_some_and(|hash| !hash.is_empty())
+        {
+            validate_editor_text_size(content.len())?;
+        }
         let remote_path = normalize_remote_path(&path);
         match self
             .write_text_once(
@@ -300,6 +314,7 @@ impl SftpSessionRegistry {
                 create_parent_dirs,
                 expected_mtime,
                 expected_size_bytes,
+                expected_content_hash.clone(),
             )
             .await
         {
@@ -314,6 +329,7 @@ impl SftpSessionRegistry {
                     create_parent_dirs,
                     expected_mtime,
                     expected_size_bytes,
+                    expected_content_hash.clone(),
                 )
                 .await
             }
@@ -330,14 +346,19 @@ impl SftpSessionRegistry {
         create_parent_dirs: bool,
         expected_mtime: Option<u64>,
         expected_size_bytes: Option<u64>,
+        expected_content_hash: Option<String>,
     ) -> Result<SftpActionResponse, String> {
         let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
-        // Conflict guard for the code editor: stat while holding the
-        // connection lock, before session.create() truncates the target. A
-        // structured "conflict" response (instead of an error) survives the
-        // gateway websocket path, which flattens errors to plain strings.
-        if expected_mtime.is_some() || expected_size_bytes.is_some() {
+        // Editor writes stage and atomically replace the file; general callers
+        // keep their existing create/truncate behavior. Structured conflicts
+        // survive the gateway websocket path, which flattens errors to strings.
+        if expected_mtime.is_some()
+            || expected_size_bytes.is_some()
+            || expected_content_hash
+                .as_ref()
+                .is_some_and(|hash| !hash.is_empty())
+        {
             match remote_entry_from_metadata(&guard.session, &remote_path).await {
                 Ok(current) => {
                     if is_write_conflict(expected_mtime, expected_size_bytes, &current) {
@@ -346,6 +367,7 @@ impl SftpSessionRegistry {
                             path: remote_path,
                             entry: Some(current),
                             transfer: None,
+                            content_hash: None,
                         });
                     }
                 }
@@ -356,6 +378,7 @@ impl SftpSessionRegistry {
                         path: remote_path,
                         entry: None,
                         transfer: None,
+                        content_hash: None,
                     });
                 }
                 Err(error) => return Err(error),
@@ -374,6 +397,24 @@ impl SftpSessionRegistry {
                 ensure_remote_dir_all(&guard.session, &parent).await?;
             }
         }
+        if expected_mtime.is_some()
+            || expected_size_bytes.is_some()
+            || expected_content_hash
+                .as_ref()
+                .is_some_and(|hash| !hash.is_empty())
+        {
+            return self
+                .write_editor_text_atomic(
+                    session_id,
+                    &guard.session,
+                    remote_path,
+                    content,
+                    expected_mtime,
+                    expected_size_bytes,
+                    expected_content_hash.clone(),
+                )
+                .await;
+        }
         let mut file = guard
             .session
             .create(remote_path.clone())
@@ -391,7 +432,147 @@ impl SftpSessionRegistry {
             path: remote_path,
             entry: Some(entry),
             transfer: None,
+            content_hash: Some(sftp_content_hash(content.as_bytes())),
         })
+    }
+
+    async fn write_editor_text_atomic(
+        &self,
+        session_id: &str,
+        session: &russh_sftp::client::SftpSession,
+        remote_path: String,
+        content: &str,
+        expected_mtime: Option<u64>,
+        expected_size_bytes: Option<u64>,
+        expected_content_hash: Option<String>,
+    ) -> Result<SftpActionResponse, String> {
+        use russh_sftp::protocol::{FileAttributes, OpenFlags, Packet, StatusCode};
+
+        // Resolve symlinks before staging so saving a linked file still updates
+        // its target instead of replacing the symlink with a regular file.
+        let target = session
+            .canonicalize(remote_path.clone())
+            .await
+            .map_err(|error| format!("failed to resolve remote file: {error}"))?;
+        let metadata = session
+            .metadata(target.clone())
+            .await
+            .map_err(|error| format!("remote stat failed: {error}"))?;
+        if !metadata.is_regular() {
+            return Err("remote editor target is not a regular file".to_string());
+        }
+        let rename_session = self
+            .terminal_registry
+            .open_ssh_sftp_atomic_session(session_id)
+            .await?;
+        let parent = remote_parent_path(&target)
+            .ok_or_else(|| "remote file has no parent directory".to_string())?;
+        let temp_path = join_remote_path(&parent, &format!(".liveagent-{}.tmp", Uuid::new_v4()));
+        let mut attributes = FileAttributes::empty();
+        attributes.permissions = metadata.permissions;
+        let mut file = session
+            .open_with_flags_and_attributes(
+                temp_path.clone(),
+                OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::EXCLUDE,
+                attributes,
+            )
+            .await
+            .map_err(|error| format!("failed to create remote temporary file: {error}"))?;
+        let result = async {
+            let written = file
+                .write_all(content.as_bytes())
+                .await
+                .map_err(|error| format!("failed to write remote temporary file: {error}"));
+            let closed = file
+                .shutdown()
+                .await
+                .map_err(|error| format!("failed to close remote temporary file: {error}"));
+            written?;
+            closed?;
+            // A long upload gives external writers time to change the target.
+            // Recheck immediately before replacement, while our connection
+            // lock still serializes saves from this client.
+            // setstat after close preserves executable bits even when the
+            // server applies a restrictive umask during temporary-file create.
+            let mut permissions = FileAttributes::empty();
+            permissions.permissions = metadata.permissions;
+            session
+                .set_metadata(temp_path.clone(), permissions)
+                .await
+                .map_err(|error| format!("failed to preserve remote permissions: {error}"))?;
+            let current_target = session
+                .canonicalize(remote_path.clone())
+                .await
+                .map_err(|error| {
+                    format!("failed to resolve remote file before replacement: {error}")
+                });
+            let current = match remote_entry_from_metadata(session, &remote_path).await {
+                Ok(current) => Some(current),
+                Err(error) if is_not_found_error(&error) => None,
+                Err(error) => return Err(error),
+            };
+            if current_target.as_ref().is_ok_and(|path| path != &target)
+                || current.as_ref().is_none_or(|entry| {
+                    is_write_conflict(expected_mtime, expected_size_bytes, entry)
+                })
+            {
+                return Ok(SftpActionResponse {
+                    action: "conflict".to_string(),
+                    path: remote_path.clone(),
+                    entry: current,
+                    transfer: None,
+                    content_hash: None,
+                });
+            }
+            current_target?;
+            if let Some(expected) = expected_content_hash
+                .as_deref()
+                .filter(|hash| !hash.is_empty())
+            {
+                let actual = match session.open(target.clone()).await {
+                    Ok(mut existing) => hash_editor_destination(&mut existing).await?,
+                    Err(error) if is_not_found_error(&error.to_string()) => None,
+                    Err(error) => {
+                        return Err(format!(
+                            "failed to open remote file for conflict check: {error}"
+                        ))
+                    }
+                };
+                if actual.as_deref() != Some(expected) {
+                    return Ok(SftpActionResponse {
+                        action: "conflict".to_string(),
+                        path: remote_path.clone(),
+                        entry: current,
+                        transfer: None,
+                        content_hash: None,
+                    });
+                }
+            }
+            let payload = sftp_rename_payload(&temp_path, &target)?;
+            match rename_session
+                .extended("posix-rename@openssh.com", payload)
+                .await
+            {
+                Ok(Packet::Status(status)) if status.status_code == StatusCode::Ok => {}
+                Ok(packet) => return Err(format!("atomic remote replacement failed: {packet:?}")),
+                Err(error) => return Err(format!("atomic remote replacement failed: {error}")),
+            }
+            let entry = remote_entry_from_metadata(session, &remote_path).await?;
+            Ok(SftpActionResponse {
+                action: "write_text".to_string(),
+                path: remote_path.clone(),
+                entry: Some(entry),
+                transfer: None,
+                content_hash: Some(sftp_content_hash(content.as_bytes())),
+            })
+        }
+        .await;
+        // Drop also queues CLOSE if shutdown failed before closing the handle.
+        drop(file);
+        // On success the path has moved; on conflict or failure discard the
+        // staged content without touching the original file.
+        let _ = session.remove_file(temp_path).await;
+        result
     }
 
     pub async fn mkdir(
@@ -415,6 +596,7 @@ impl SftpSessionRegistry {
                     path: entry.path.clone(),
                     entry: Some(entry),
                     transfer: None,
+                    content_hash: None,
                 })
             }
             "remote" => {
@@ -433,6 +615,7 @@ impl SftpSessionRegistry {
                     path: remote_path,
                     entry: Some(entry),
                     transfer: None,
+                    content_hash: None,
                 })
             }
             _ => Err("side must be local or remote".to_string()),
@@ -466,6 +649,7 @@ impl SftpSessionRegistry {
                     path: entry.path.clone(),
                     entry: Some(entry),
                     transfer: None,
+                    content_hash: None,
                 })
             }
             "remote" => {
@@ -485,6 +669,7 @@ impl SftpSessionRegistry {
                     path: to,
                     entry: Some(entry),
                     transfer: None,
+                    content_hash: None,
                 })
             }
             _ => Err("side must be local or remote".to_string()),
@@ -525,6 +710,7 @@ impl SftpSessionRegistry {
                     path: normalize_local_path(&path),
                     entry: None,
                     transfer: None,
+                    content_hash: None,
                 })
             }
             "remote" => {
@@ -538,6 +724,7 @@ impl SftpSessionRegistry {
                     path: remote_path,
                     entry: None,
                     transfer: None,
+                    content_hash: None,
                 })
             }
             _ => Err("side must be local or remote".to_string()),
@@ -968,7 +1155,7 @@ impl SftpSessionRegistry {
         max_bytes: Option<usize>,
         strict_utf8: bool,
     ) -> Result<SftpReadTextResponse, String> {
-        let limit = normalize_read_text_max_bytes(max_bytes);
+        let limit = normalize_read_text_max_bytes(max_bytes, strict_utf8);
         let connection = self.connection_for_session(session_id).await?;
         let guard = connection.lock().await;
         let metadata = guard
@@ -985,40 +1172,10 @@ impl SftpSessionRegistry {
             .open(remote_path.clone())
             .await
             .map_err(|error| format!("failed to open remote file: {error}"))?;
-        if offset > 0 {
-            file.seek(io::SeekFrom::Start(offset))
+        let (content, offset, bytes_read, truncated) =
+            read_text_page(&mut file, offset, limit, size_bytes, strict_utf8)
                 .await
-                .map_err(|error| format!("failed to seek remote file: {error}"))?;
-        }
-        let mut buffer = Vec::with_capacity(limit.saturating_add(1));
-        let mut chunk = vec![0u8; TRANSFER_BUFFER_BYTES.min(limit.saturating_add(1).max(1))];
-        while buffer.len() <= limit {
-            let want = (limit + 1 - buffer.len()).min(chunk.len());
-            let bytes_read = file
-                .read(&mut chunk[..want])
-                .await
-                .map_err(|error| format!("failed to read remote file: {error}"))?;
-            if bytes_read == 0 {
-                break;
-            }
-            buffer.extend_from_slice(&chunk[..bytes_read]);
-        }
-        let actual_read = buffer.len();
-        buffer.truncate(actual_read.min(limit));
-        let truncated = actual_read > limit
-            || (offset as u128).saturating_add(buffer.len() as u128) < u128::from(size_bytes);
-        let bytes_read = buffer.len();
-        // Strict mode is used by the code editor: a lossy conversion would
-        // silently corrupt non-UTF-8 files when the content is written back.
-        // Truncated reads may split a multi-byte character, and the editor
-        // rejects truncated content anyway, so strictness only applies to
-        // complete reads.
-        let content = if strict_utf8 && !truncated {
-            String::from_utf8(buffer)
-                .map_err(|_| format!("remote file is not valid UTF-8: {remote_path}"))?
-        } else {
-            String::from_utf8_lossy(&buffer).to_string()
-        };
+                .map_err(|error| format!("{error}: {remote_path}"))?;
         let entry = SftpEntry {
             name: remote_basename(&remote_path).unwrap_or_else(|| remote_path.clone()),
             path: remote_path.clone(),
@@ -1027,6 +1184,7 @@ impl SftpSessionRegistry {
             mtime: u64::from(metadata.mtime.unwrap_or(0)) * 1000,
         };
         Ok(SftpReadTextResponse {
+            content_hash: full_read_content_hash(&content, offset, truncated, strict_utf8),
             path: remote_path,
             content,
             offset,
@@ -1290,11 +1448,184 @@ fn normalize_transfer_target_path(direction: &str, path: &str) -> String {
     }
 }
 
-fn normalize_read_text_max_bytes(max_bytes: Option<usize>) -> usize {
+fn normalize_read_text_max_bytes(max_bytes: Option<usize>, strict_utf8: bool) -> usize {
+    let maximum = if strict_utf8 {
+        SFTP_EDIT_TEXT_MAX_BYTES
+    } else {
+        SFTP_READ_TEXT_MAX_BYTES
+    };
     max_bytes
         .filter(|value| *value > 0)
         .unwrap_or(SFTP_READ_TEXT_DEFAULT_BYTES)
-        .clamp(4 * 1024, SFTP_READ_TEXT_MAX_BYTES)
+        .clamp(4 * 1024, maximum)
+}
+
+fn validate_editor_text_size(size: usize) -> Result<(), String> {
+    if size > SFTP_EDIT_TEXT_MAX_BYTES {
+        return Err("remote editor content exceeds the 16 MiB limit".to_string());
+    }
+    Ok(())
+}
+
+fn sftp_content_hash(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn full_read_content_hash(
+    content: &str,
+    offset: u64,
+    truncated: bool,
+    strict_utf8: bool,
+) -> Option<String> {
+    (strict_utf8 && offset == 0 && !truncated).then(|| sftp_content_hash(content.as_bytes()))
+}
+
+// Stream at most 16 MiB plus a one-byte overflow probe. Oversized targets
+// cannot match an editor baseline, including when stat metadata is stale.
+async fn hash_editor_destination<R>(file: &mut R) -> Result<Option<String>, String>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    let mut total = 0;
+    let mut buffer = vec![0u8; TRANSFER_BUFFER_BYTES];
+    loop {
+        let want = buffer.len().min(SFTP_EDIT_TEXT_MAX_BYTES + 1 - total);
+        let count = file
+            .read(&mut buffer[..want])
+            .await
+            .map_err(|error| format!("failed to read remote file for conflict check: {error}"))?;
+        if count == 0 {
+            return Ok(Some(
+                hash.finalize()
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect(),
+            ));
+        }
+        total += count;
+        if total > SFTP_EDIT_TEXT_MAX_BYTES {
+            return Ok(None);
+        }
+        hash.update(&buffer[..count]);
+    }
+}
+
+fn sftp_rename_payload(from: &str, to: &str) -> Result<Vec<u8>, String> {
+    let mut payload = Vec::new();
+    for path in [from, to] {
+        let len = u32::try_from(path.len()).map_err(|_| "remote path is too long".to_string())?;
+        payload.extend_from_slice(&len.to_be_bytes());
+        payload.extend_from_slice(path.as_bytes());
+    }
+    Ok(payload)
+}
+
+// Read byte pages, independent of line length. Strict pages align a requested
+// seek forward to the next scalar boundary and stop before a split scalar.
+// offset + bytes_read is always the next raw-file position (never the UTF-8
+// size of a replacement-character string). Only a bounded lookbehind/lookahead
+// is read, including for a single line spanning the entire file.
+async fn read_text_page<R>(
+    file: &mut R,
+    offset: u64,
+    limit: usize,
+    size_bytes: u64,
+    strict_utf8: bool,
+) -> Result<(String, u64, usize, bool), String>
+where
+    R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+{
+    let read_offset = if strict_utf8 {
+        offset.saturating_sub(3)
+    } else {
+        offset
+    };
+    let prefix = (offset - read_offset) as usize;
+    // A seek inside a four-byte scalar can advance start by three bytes.
+    // Keep another complete scalar beyond that shifted page edge so valid
+    // trailing UTF-8 never looks incomplete merely because lookahead ran out.
+    let read_limit = limit + prefix + if strict_utf8 { 3 + 4 } else { 1 };
+    file.seek(io::SeekFrom::Start(read_offset))
+        .await
+        .map_err(|error| format!("failed to seek remote file: {error}"))?;
+    let mut buffer = Vec::with_capacity(read_limit);
+    let mut chunk = vec![0u8; TRANSFER_BUFFER_BYTES.min(read_limit)];
+    let mut eof = false;
+    while buffer.len() < read_limit {
+        let want = (read_limit - buffer.len()).min(chunk.len());
+        let count = file
+            .read(&mut chunk[..want])
+            .await
+            .map_err(|error| format!("failed to read remote file: {error}"))?;
+        if count == 0 {
+            eof = true;
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..count]);
+    }
+    if prefix >= buffer.len() {
+        return Ok((String::new(), offset, 0, false));
+    }
+    let mut start = prefix;
+    if strict_utf8 && buffer[start] & 0xc0 == 0x80 {
+        // Validate the containing scalar before skipping its remaining bytes;
+        // arbitrary runs of continuation bytes must fail, not loop or vanish.
+        let mut lead = start;
+        while lead > 0 && buffer[lead] & 0xc0 == 0x80 {
+            lead -= 1;
+        }
+        let width = match buffer[lead] {
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => return Err("remote file is not valid UTF-8".to_string()),
+        };
+        let end = lead + width;
+        if end <= start || end > buffer.len() || std::str::from_utf8(&buffer[lead..end]).is_err() {
+            return Err("remote file is not valid UTF-8".to_string());
+        }
+        start = end;
+    }
+    let mut end = (start + limit).min(buffer.len());
+    if strict_utf8 {
+        if let Err(error) = std::str::from_utf8(&buffer[start..end]) {
+            if error.error_len().is_some() || (eof && end == buffer.len()) {
+                return Err("remote file is not valid UTF-8".to_string());
+            }
+            // Validate the scalar crossing the page edge as well. An invalid
+            // lead/continuation cannot be disguised as a truncated page.
+            let tail = start + error.valid_up_to();
+            let width = match buffer[tail] {
+                0xc2..=0xdf => 2,
+                0xe0..=0xef => 3,
+                0xf0..=0xf4 => 4,
+                _ => return Err("remote file is not valid UTF-8".to_string()),
+            };
+            if tail + width > buffer.len()
+                || std::str::from_utf8(&buffer[tail..tail + width]).is_err()
+            {
+                return Err("remote file is not valid UTF-8".to_string());
+            }
+            end = tail;
+        }
+    }
+    let actual_offset = read_offset.saturating_add(start as u64);
+    let bytes_read = end - start;
+    let truncated =
+        end < buffer.len() || actual_offset.saturating_add(bytes_read as u64) < size_bytes;
+    let content = if strict_utf8 {
+        String::from_utf8(buffer[start..end].to_vec())
+            .map_err(|_| "remote file is not valid UTF-8".to_string())?
+    } else {
+        String::from_utf8_lossy(&buffer[start..end]).into_owned()
+    };
+    Ok((content, actual_offset, bytes_read, truncated))
 }
 
 fn canonicalize_workdir(workdir: &str) -> Result<PathBuf, String> {
@@ -1973,6 +2304,7 @@ impl From<io::Error> for SftpActionResponse {
     fn from(error: io::Error) -> Self {
         Self {
             action: "error".to_string(),
+            content_hash: None,
             path: String::new(),
             entry: None,
             transfer: Some(SftpTransferState {
@@ -1992,6 +2324,10 @@ impl From<io::Error> for SftpActionResponse {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "sftp/text_io_tests.rs"]
+mod text_io_tests;
 
 #[cfg(test)]
 mod tests {
@@ -2062,20 +2398,30 @@ mod tests {
     }
 
     #[test]
-    fn read_text_max_bytes_clamps_to_editor_limit() {
+    fn read_text_max_bytes_keeps_preview_limits_and_expands_strict_editor_io() {
+        for strict in [false, true] {
+            assert_eq!(
+                normalize_read_text_max_bytes(None, strict),
+                SFTP_READ_TEXT_DEFAULT_BYTES
+            );
+            assert_eq!(
+                normalize_read_text_max_bytes(Some(0), strict),
+                SFTP_READ_TEXT_DEFAULT_BYTES
+            );
+            assert_eq!(normalize_read_text_max_bytes(Some(1), strict), 4 * 1024);
+        }
         assert_eq!(
-            normalize_read_text_max_bytes(None),
-            SFTP_READ_TEXT_DEFAULT_BYTES
-        );
-        assert_eq!(
-            normalize_read_text_max_bytes(Some(usize::MAX)),
-            SFTP_READ_TEXT_MAX_BYTES
-        );
-        assert_eq!(
-            normalize_read_text_max_bytes(Some(3 * 1024 * 1024)),
+            normalize_read_text_max_bytes(Some(usize::MAX), false),
             3 * 1024 * 1024
         );
-        assert_eq!(normalize_read_text_max_bytes(Some(1)), 4 * 1024);
+        assert_eq!(
+            normalize_read_text_max_bytes(Some(usize::MAX), true),
+            16 * 1024 * 1024
+        );
+        assert_eq!(
+            normalize_read_text_max_bytes(Some(256 * 1024), true),
+            256 * 1024
+        );
     }
 
     #[cfg(unix)]

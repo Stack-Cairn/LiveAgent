@@ -24,16 +24,19 @@ import {
   Plus,
   RefreshCw,
   RotateCwSquare,
+  WrapText,
   X,
 } from "@liveagent/ui/components/IconSet";
 import { RefreshButton } from "@liveagent/ui/components/ui/button";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 import { floatingSurfaceClassName } from "@liveagent/ui/components/ui/menu-surface";
 import { WorkspaceMarkdownPreview } from "@liveagent/ui/components/workspace-editor/WorkspaceMarkdownPreview";
+import { WorkspaceTextRangePreview } from "@liveagent/ui/components/workspace-editor/WorkspaceTextRangePreview";
 import {
   getWorkspacePreviewKind,
   isWorkspaceEditablePreviewPath,
   type WorkspacePreviewKind,
+  workspacePathExtension,
 } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import {
   clampImageViewerPan,
@@ -50,7 +53,14 @@ import {
   workspaceImageRelativePathForCopy,
   zoomImageViewerAtPoint,
 } from "@liveagent/ui/components/workspace-editor/workspaceImageViewer";
+import {
+  readWorkspaceTextRange,
+  WORKSPACE_EDITABLE_TEXT_MAX_BYTES,
+  type WorkspaceTextRange,
+  type WorkspaceTextRangeSource,
+} from "@liveagent/ui/components/workspace-editor/workspaceTextRange";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { copyTextToClipboard as copySharedTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
@@ -58,12 +68,10 @@ import { renderAsync } from "docx-preview";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { read, utils } from "xlsx";
 
-export type WorkspaceFilePreviewOpenRequest = {
+export type WorkspaceFilePreviewOpenRequest = WorkspaceTextRangeSource & {
   id: number;
-  projectPathKey: string;
-  workdir: string;
-  path: string;
   imagePaths?: string[];
+  textRange?: boolean;
 };
 
 type ReadWorkspacePreviewResponse = {
@@ -78,6 +86,7 @@ type ReadWorkspacePreviewResponse = {
 type WorkspaceFilePreviewOverlayProps = {
   openRequest: WorkspaceFilePreviewOpenRequest | null;
   isOpen: boolean;
+  sftpClient?: SftpClient;
   onOpenEditor: (request: WorkspaceFilePreviewOpenRequest) => void;
   onRequestClose: () => void;
   onClose: () => void;
@@ -340,14 +349,29 @@ function buildSpreadsheetTable(
   }
 }
 
+function needsTextRange(page: WorkspaceTextRange) {
+  if (page.nextOffset < page.sizeBytes) return true;
+  // Short lines in Markdown or CSV can create thousands of DOM nodes well before
+  // the byte budget is exhausted.
+  let lineEnd = 0;
+  for (let line = 0; line < 4000; line += 1) {
+    lineEnd = page.content.indexOf("\n", lineEnd) + 1;
+    if (lineEnd === 0) return false;
+  }
+  return true;
+}
+
 export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayProps) {
-  const { openRequest, isOpen, onOpenEditor, onRequestClose, onClose } = props;
+  const { openRequest, isOpen, sftpClient, onOpenEditor, onRequestClose, onClose } = props;
   const { t } = useLocale();
   const closeAnimationTimeoutRef = useRef<number | null>(null);
   const loadSequenceRef = useRef(0);
   const previewBlobUrlRef = useRef<string | null>(null);
   const previewRef = useRef<LoadedPreview | null>(null);
   const [preview, setPreview] = useState<LoadedPreview | null>(null);
+  const [range, setRange] = useState<{ initialPage: WorkspaceTextRange; sequence: number } | null>(
+    null,
+  );
   const [activeRequest, setActiveRequest] = useState<WorkspaceFilePreviewOpenRequest | null>(null);
   const [imageTransitionDirection, setImageTransitionDirection] =
     useState<ImagePreviewTransitionDirection>(0);
@@ -356,6 +380,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
   const [error, setError] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [wordWrapPreference, setWordWrapPreference] = useState<boolean | null>(null);
 
   const replacePreview = useCallback((next: LoadedPreview | null) => {
     if (previewBlobUrlRef.current) {
@@ -373,6 +398,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
         URL.revokeObjectURL(previewBlobUrlRef.current);
         previewBlobUrlRef.current = null;
       }
+      loadSequenceRef.current += 1;
       previewRef.current = null;
     },
     [],
@@ -388,12 +414,15 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       return () => window.cancelAnimationFrame(animationFrame);
     }
 
+    loadSequenceRef.current += 1;
+    setRange(null);
+    replacePreview(null);
     setIsVisible(false);
     closeAnimationTimeoutRef.current = window.setTimeout(() => {
       closeAnimationTimeoutRef.current = null;
       onClose();
     }, FILE_PREVIEW_OVERLAY_ANIMATION_MS);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, replacePreview]);
 
   useEffect(
     () => () => {
@@ -420,10 +449,69 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       setError(null);
       setRenderError(null);
       setActiveRequest(request);
+      setRange(null);
       if (!keepCurrentImagePreview) {
         replacePreview(null);
       }
       try {
+        const previewKind = getWorkspacePreviewKind(request.path);
+        const extension = workspacePathExtension(request.path);
+        const richTextPreview =
+          previewKind === "markdown" || previewKind === "html" || previewKind === "text";
+        if (
+          request.textRange ||
+          request.remote ||
+          richTextPreview ||
+          extension === "csv" ||
+          extension === "tsv"
+        ) {
+          let firstPage: WorkspaceTextRange | null;
+          try {
+            firstPage = await readWorkspaceTextRange(request, 0, sftpClient);
+          } catch (rangeError) {
+            if (request.textRange || request.remote) throw rangeError;
+            // Existing backends and non-UTF-8 rich previews still use the format-specific reader.
+            firstPage = null;
+          }
+          if (loadSequenceRef.current !== sequence) return;
+          if (firstPage && (request.textRange || request.remote || needsTextRange(firstPage))) {
+            setRange({ initialPage: firstPage, sequence });
+            return;
+          }
+          if (request.textRange || request.remote) {
+            throw new Error(t("workspaceFilePreview.rangeUnavailable"));
+          }
+          if (firstPage && richTextPreview) {
+            const text = firstPage.content.replace(/^\uFEFF/, "");
+            const mimeType =
+              previewKind === "html"
+                ? "text/html"
+                : previewKind === "markdown"
+                  ? "text/markdown"
+                  : "text/plain";
+            const blobUrl =
+              previewKind === "html"
+                ? URL.createObjectURL(
+                    new Blob([buildSandboxedHtmlPreviewSource(text)], {
+                      type: "text/html;charset=utf-8",
+                    }),
+                  )
+                : "";
+            replacePreview({
+              path: request.path,
+              sizeBytes: firstPage.sizeBytes,
+              mtimeMs: firstPage.mtimeMs,
+              mimeType,
+              data: "",
+              contentHash: "",
+              bytes: new Uint8Array(0),
+              kind: previewKind,
+              text,
+              blobUrl,
+            });
+            return;
+          }
+        }
         const response = await invokeFs<ReadWorkspacePreviewResponse>("fs_read_workspace_image", {
           workdir: request.workdir,
           path: request.path,
@@ -457,16 +545,13 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
         }
       }
     },
-    [replacePreview, t],
+    [replacePreview, sftpClient, t],
   );
 
   useEffect(() => {
-    if (!openRequest) {
-      setActiveRequest(null);
-      return;
-    }
+    if (!isOpen || !openRequest) return;
     void loadPreview(openRequest, 0);
-  }, [loadPreview, openRequest]);
+  }, [isOpen, loadPreview, openRequest]);
 
   const spreadsheet = useMemo(
     () => buildSpreadsheetTable(preview, activeSheetName, t("workspaceFilePreview.renderFailed")),
@@ -488,11 +573,20 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       kind === "image" ? normalizeImagePaths(activePreviewRequest?.imagePaths, activePath) : [],
     [activePath, activePreviewRequest?.imagePaths, kind],
   );
-  const canOpenEditor = Boolean(activePreviewRequest && isWorkspaceEditablePreviewPath(activePath));
+  const canEditRange = Boolean(
+    range && range.initialPage.sizeBytes <= WORKSPACE_EDITABLE_TEXT_MAX_BYTES,
+  );
+  const canOpenEditor = Boolean(
+    activePreviewRequest && (range ? canEditRange : isWorkspaceEditablePreviewPath(activePath)),
+  );
   const canOpenExternal = Boolean(
-    supportsExternalWorkspaceOpen && activePreviewRequest && activePath,
+    supportsExternalWorkspaceOpen &&
+      activePreviewRequest &&
+      !activePreviewRequest.remote &&
+      activePath,
   );
   const showHeaderOpenExternal = canOpenExternal && !canOpenEditor && kind !== "image";
+  const wordWrap = wordWrapPreference ?? (!range && preview?.kind === "text");
 
   const openImagePath = useCallback(
     (path: string, transitionDirection: ImagePreviewTransitionDirection = 0) => {
@@ -563,6 +657,22 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
               <FilePenLine className="size-4" />
             </button>
           ) : null}
+          {range || preview?.kind === "text" ? (
+            <button
+              type="button"
+              className={cn(
+                "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
+                "hover:bg-muted hover:text-foreground aria-pressed:bg-muted aria-pressed:text-foreground",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+              title={t("workspaceFilePreview.wordWrap")}
+              aria-label={t("workspaceFilePreview.wordWrap")}
+              aria-pressed={wordWrap}
+              onClick={() => setWordWrapPreference(!wordWrap)}
+            >
+              <WrapText className="size-4" />
+            </button>
+          ) : null}
           {showHeaderOpenExternal ? (
             <button
               type="button"
@@ -623,7 +733,27 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden bg-muted/25">
-        {preview ? (
+        {range && activePreviewRequest ? (
+          <WorkspaceTextRangePreview
+            key={range.sequence}
+            initialPage={range.initialPage}
+            wordWrap={wordWrap}
+            editable={canEditRange}
+            readPage={(offset) => readWorkspaceTextRange(activePreviewRequest, offset, sftpClient)}
+          />
+        ) : preview?.kind === "text" ? (
+          <WorkspaceTextRangePreview
+            key={preview.path}
+            initialPage={{
+              content: preview.text ?? "",
+              offset: 0,
+              nextOffset: preview.sizeBytes,
+              sizeBytes: preview.sizeBytes,
+              mtimeMs: preview.mtimeMs,
+            }}
+            wordWrap={wordWrap}
+          />
+        ) : preview ? (
           <PreviewBody
             preview={preview}
             workdir={activePreviewRequest?.workdir ?? ""}
@@ -880,13 +1010,7 @@ function PreviewBody(props: {
     );
   }
 
-  return (
-    <div className="h-full overflow-auto bg-background p-4">
-      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-foreground">
-        {preview.text ?? ""}
-      </pre>
-    </div>
-  );
+  return null;
 }
 
 function ImagePreviewToolButton(props: {

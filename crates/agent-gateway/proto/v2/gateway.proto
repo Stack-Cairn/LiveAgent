@@ -562,6 +562,7 @@ message SftpRequest {
   uint64 expected_mtime = 17;
   uint64 expected_size_bytes = 18;
   bool create_parent_dirs = 19;
+  string expected_content_hash = 20;
 }
 
 message SftpEntry {
@@ -599,6 +600,7 @@ message SftpResponse {
   uint64 bytes_read = 9;
   uint64 size_bytes = 10;
   bool truncated = 11;
+  string content_hash = 13;
 }
 
 message SftpEvent {
@@ -1447,6 +1449,7 @@ message FsListResponse {
 message FsReadEditableTextRequest {
   string workdir = 1;
   string path = 2;
+  optional uint64 preview_offset = 3;
 }
 
 message FsReadEditableTextResponse {
@@ -1456,6 +1459,8 @@ message FsReadEditableTextResponse {
   string content_hash = 4;
   uint64 size_bytes = 5;
   uint64 total_lines = 6;
+  optional uint64 preview_offset = 7;
+  optional uint64 preview_next_offset = 8;
 }
 
 message FsReadWorkspaceImageRequest {
