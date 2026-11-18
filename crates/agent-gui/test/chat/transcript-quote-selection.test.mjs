@@ -14,6 +14,9 @@ const env = await createDomTestEnv({
   },
 });
 const { React, act, createRoot } = env;
+window.Range.prototype.getClientRects = () => [];
+window.Range.prototype.getBoundingClientRect = () => new window.DOMRect();
+const { buildTextFromComposerDraft } = env.loadModule("@liveagent/ui/lib/chat/composerDraft.ts");
 const quote = env.loadModule("@liveagent/ui/lib/chat/transcriptQuote.ts");
 const { TranscriptQuoteSelection } = env.loadModule(
   "@liveagent/ui/components/chat/TranscriptQuoteSelection.tsx",
@@ -55,14 +58,12 @@ function textOf(id) {
   return document.getElementById(id).firstChild;
 }
 
-test("blockquote formatting normalizes line endings, blank runs and trailing space", () => {
-  assert.equal(quote.formatMarkdownBlockquote("one  \r\ntwo"), "> one\n> two");
-  assert.equal(quote.formatMarkdownBlockquote("\n\na\n\n\n\nb\n\n"), "> a\n>\n> b");
+test("blockquote formatting preserves long selections and internal line breaks", () => {
+  assert.equal(quote.formatMarkdownBlockquote("one  \r\ntwo"), "> one  \n> two");
+  assert.equal(quote.formatMarkdownBlockquote("\n\na\n\n\n\nb\n\n"), "> a\n>\n>\n>\n> b");
   assert.equal(quote.formatMarkdownBlockquote("   \n  "), "");
-  const long = "x".repeat(quote.TRANSCRIPT_QUOTE_MAX_CHARS + 50);
-  const normalized = quote.normalizeQuoteText(long);
-  assert.equal([...normalized].length, quote.TRANSCRIPT_QUOTE_MAX_CHARS + 1);
-  assert.ok(normalized.endsWith("…"));
+  const long = "x".repeat(8_050) + " end";
+  assert.equal(quote.formatMarkdownBlockquote(long), "> " + long);
 });
 
 test("composer insertion separates the quote from existing draft text", () => {
@@ -251,41 +252,74 @@ test("no quote button for selections in code editors, tool traces or disabled ho
   }
 });
 
-test("composer insertQuote appends a blockquote after existing text and keeps the caret below", async () => {
+test("composer shows a quote chip and retains the full selection in its draft", async () => {
   const host = document.createElement("div");
   document.body.append(host);
   const reactRoot = createRoot(host);
   const composerRef = React.createRef();
+  const sent = [];
   const props = {
     ref: composerRef,
     workdir: "",
     enabledSkills: [],
     conversations: [],
     mentionApps: [],
-    onSend: () => {},
+    onSend: () => sent.push(buildTextFromComposerDraft(composerRef.current.getDraft())),
   };
   await act(async () => reactRoot.render(React.createElement(MentionComposer, props)));
   try {
     const composer = composerRef.current;
-    assert.ok(composer);
-    await act(async () => composer.setText("Why is this?"));
-    let inserted;
-    await act(async () => {
-      inserted = composer.insertQuote("line one\nline two");
-    });
-    assert.equal(inserted, true);
-    assert.equal(composer.getText(), "Why is this?\n\n> line one\n> line two\n\n");
     const editor = host.querySelector('[contenteditable="true"]');
-    assert.equal(document.activeElement, editor);
-    const selection = window.getSelection();
-    assert.ok(editor.contains(selection.anchorNode));
-
-    await act(async () => composer.clear());
+    const long = "First line " + "content ".repeat(1_100) + "end of first line\n\nSecond line";
+    await act(async () => composer.setText("Why is this?"));
     await act(async () => {
-      inserted = composer.insertQuote("solo");
+      assert.equal(composer.insertQuote(long), true);
+      assert.equal(composer.insertQuote("Short quote"), true);
+    });
+    const chips = () => [...editor.querySelectorAll("[data-quote-text]")];
+    assert.deepEqual(chips().map((chip) => chip.getAttribute("data-quote-text")), [long, "Short quote"]);
+    assert.ok(chips()[0].querySelector(".truncate"));
+    assert.match(chips()[0].textContent, /^First line/);
+    assert.equal(chips()[1].textContent, "Short quote");
+    assert.equal(document.activeElement, editor);
+    assert.equal(window.getSelection().anchorNode.previousSibling, chips()[1]);
+
+    // Insert text at the caret that insertQuote parked just after the last chip.
+    await act(async () => {
+      const { anchorNode, anchorOffset } = window.getSelection();
+      anchorNode.insertData(anchorOffset, "Please explain.");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const expected =
+      "Why is this?\n\n" + quote.formatMarkdownBlockquote(long) + "\n\n> Short quote\n\nPlease explain.";
+    assert.equal(composer.getText(), expected);
+    const draft = JSON.parse(JSON.stringify(composer.getDraft()));
+    assert.equal(draft.text, expected);
+    assert.equal(draft.textWithoutLargePastes, expected);
+    assert.equal(draft.isEmpty, false);
+    await act(async () => {
+      composer.setText("Other conversation");
+      composer.setDraft(draft);
+    });
+    assert.equal(chips().length, 2);
+    assert.equal(composer.getDraft().text, expected);
+    await act(async () => {
+      editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(sent, [expected]);
+
+    await act(async () => {
+      composer.clear();
+      assert.equal(composer.insertQuote("solo"), true);
+      assert.equal(composer.insertQuote("   "), false);
     });
     assert.equal(composer.getText(), "> solo\n\n");
-    assert.equal(composer.insertQuote("   "), false);
+    await act(async () => {
+      editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+    });
+    assert.equal(chips().length, 0);
+    assert.equal(composer.getText(), "");
+    assert.equal(composer.getDraft().isEmpty, true);
 
     await act(async () =>
       reactRoot.render(React.createElement(MentionComposer, { ...props, disabled: true })),

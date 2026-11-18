@@ -143,8 +143,8 @@ export interface MentionComposerHandle {
   ) => ConversationReferenceInsertResult;
   insertCodeMention: (reference: CodeMentionReference) => void;
   /**
-   * Appends `text` to the end of the draft as a Markdown blockquote and parks
-   * the caret on a fresh line below it. Returns false when the composer is
+   * Appends a quote chip at the end of the draft. The chip serializes as a
+   * Markdown blockquote. Returns false when the composer is
    * unavailable/disabled or the text is blank.
    */
   insertQuote: (text: string) => boolean;
@@ -185,7 +185,8 @@ export type MentionComposerDraftSegment =
   | { type: "commitMention"; commit: MentionComposerCommitMention }
   | { type: "gitFileMention"; file: MentionComposerGitFileMention }
   | { type: "conversationMention"; conversation: MentionComposerConversationMention }
-  | { type: "codeMention"; reference: CodeMentionReference };
+  | { type: "codeMention"; reference: CodeMentionReference }
+  | { type: "quote"; text: string };
 
 export type MentionComposerDraft = {
   segments: MentionComposerDraftSegment[];
@@ -265,6 +266,7 @@ export const MENTION_INDEX_MAX_RESULTS = 5000;
 export const MENTION_REFETCH_DEBOUNCE_MS = 150;
 export const MENTION_TAG_ATTR = "data-mention-path";
 export const MENTION_KIND_ATTR = "data-mention-kind";
+export const QUOTE_TEXT_ATTR = "data-quote-text";
 export const SKILL_MENTION_NAME_ATTR = "data-skill-name";
 export const SKILL_MENTION_FILE_ATTR = "data-skill-file";
 export const SKILL_MENTION_BASE_DIR_ATTR = "data-skill-base-dir";

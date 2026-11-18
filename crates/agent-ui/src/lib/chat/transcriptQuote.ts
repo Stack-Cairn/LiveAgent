@@ -23,9 +23,6 @@ export const TRANSCRIPT_QUOTE_EXCLUDED_SELECTOR = [
   "[data-transcript-quote-button]",
 ].join(",");
 
-/** Upper bound on quoted text; longer selections are truncated with an ellipsis. */
-export const TRANSCRIPT_QUOTE_MAX_CHARS = 8000;
-
 export type TranscriptQuoteSource = "user" | "assistant";
 
 export type TranscriptQuoteSelection = {
@@ -34,27 +31,12 @@ export type TranscriptQuoteSelection = {
   rect: { left: number; top: number; right: number; bottom: number; width: number; height: number };
 };
 
-/** Normalize selected text: unify line endings, drop trailing spaces per
- *  line, trim surrounding blank lines and collapse runs of blank lines. */
+/** Normalize line endings and ignore blank lines around the selection. */
 export function normalizeQuoteText(raw: string) {
-  const lines = raw
-    .replace(/\r\n?/g, "\n")
-    .replace(/ /g, " ")
-    .split("\n")
-    .map((line) => line.replace(/\s+$/u, ""));
+  const lines = raw.replace(/\r\n?/g, "\n").replace(/ /g, " ").split("\n");
   while (lines.length > 0 && !lines[0]?.trim()) lines.shift();
   while (lines.length > 0 && !lines[lines.length - 1]?.trim()) lines.pop();
-  const collapsed: string[] = [];
-  for (const line of lines) {
-    if (!line.trim() && !collapsed[collapsed.length - 1]?.trim()) continue;
-    collapsed.push(line);
-  }
-  let text = collapsed.join("\n");
-  const chars = [...text];
-  if (chars.length > TRANSCRIPT_QUOTE_MAX_CHARS) {
-    text = `${chars.slice(0, TRANSCRIPT_QUOTE_MAX_CHARS).join("").replace(/\s+$/u, "")}…`;
-  }
-  return text;
+  return lines.join("\n");
 }
 
 /** Format text as a Markdown blockquote ("> " per line, bare ">" for blanks). */
@@ -69,7 +51,7 @@ export function formatMarkdownBlockquote(raw: string) {
 
 /** Text to append to a composer whose current serialized content is
  *  `existing`: the blockquote, separated from prior content by a blank line,
- *  followed by a blank line so the caret lands where the reply goes. */
+ *  followed by a blank line to separate any following instruction. */
 export function buildComposerQuoteInsertion(existing: string, raw: string) {
   const quote = formatMarkdownBlockquote(raw);
   if (!quote) return "";
