@@ -17,6 +17,7 @@ import {
   normalizeConversationMentionReferences,
   parseMarkdownConversationMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import { buildComposerQuoteInsertion } from "@liveagent/ui/lib/chat/transcriptQuote";
 import {
   type PendingUploadedFile,
   withPastedTextDisplayMetadata,
@@ -50,29 +51,36 @@ function formatComposerGitFileMention(file: MentionComposerGitFileMention) {
   return `${label} (${file.commitSha})`;
 }
 
+function formatComposerDraftSegment(
+  segment: Exclude<MentionComposerDraft["segments"][number], { type: "quote" }>,
+  pastedFileById?: Map<string, PendingUploadedFile>,
+) {
+  if (segment.type === "text") return segment.text;
+  if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
+  if (segment.type === "skillMention") return `/${segment.skill.name}`;
+  if (segment.type === "appMention") return formatAppMentionToken(segment.app);
+  if (segment.type === "commitMention") return formatComposerCommitMention(segment.commit);
+  if (segment.type === "gitFileMention") return formatComposerGitFileMention(segment.file);
+  if (segment.type === "conversationMention") {
+    return formatConversationMentionToken(segment.conversation);
+  }
+  if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
+  const file = pastedFileById?.get(segment.paste.id);
+  return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
+}
+
 export function buildTextFromComposerDraft(
   draft: MentionComposerDraft,
   pastedFileById?: Map<string, PendingUploadedFile>,
 ) {
-  return normalizeLogicalLineEndings(
-    draft.segments
-      .map((segment) => {
-        if (segment.type === "text") return segment.text;
-        if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
-        if (segment.type === "skillMention") return `/${segment.skill.name}`;
-        if (segment.type === "appMention") return formatAppMentionToken(segment.app);
-        if (segment.type === "commitMention") return formatComposerCommitMention(segment.commit);
-        if (segment.type === "gitFileMention") return formatComposerGitFileMention(segment.file);
-        if (segment.type === "conversationMention") {
-          return formatConversationMentionToken(segment.conversation);
-        }
-        if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
-        const file = pastedFileById?.get(segment.paste.id);
-        return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
-      })
-      .join("")
-      .replace(/\u00A0/g, " "),
-  );
+  let text = "";
+  for (const segment of draft.segments) {
+    text +=
+      segment.type === "quote"
+        ? buildComposerQuoteInsertion(text, segment.text)
+        : formatComposerDraftSegment(segment, pastedFileById);
+  }
+  return normalizeLogicalLineEndings(text.replace(/\u00A0/g, " "));
 }
 
 export function mapImportedPastedTextFiles(
