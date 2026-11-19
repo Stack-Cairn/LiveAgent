@@ -46,3 +46,16 @@ test("a finished goal turn only refreshes the goal bar, and no session means no 
   await settleGoalAfterTurn({ ...g, conversationId: "c1", sessionId: undefined, stopped: true });
   assert.deepEqual(g.calls, []);
 });
+
+test("a delayed settle read cannot replace the next round's live state", async () => {
+  const { publishGoalState, readGoalState } = loader.loadModule("src/lib/kbrain/goalStore.ts");
+  let reply;
+  const pending = settleGoalAfterTurn({
+    client: { getGoal: () => new Promise(resolve => { reply = resolve; }) },
+    conversationId: "late-settle", sessionId: "s", stopped: false, publish: publishGoalState,
+  });
+  publishGoalState("late-settle", {status:"active", round:2});
+  reply({status:"paused", round:1});
+  await pending;
+  assert.equal(readGoalState("late-settle").round, 2);
+});

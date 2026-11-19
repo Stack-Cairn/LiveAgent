@@ -56,11 +56,15 @@ export function KBrainGoalBarHost({
     if (!enabled) return;
     const sessionId = getKBrainSessionId(conversationId);
     if (!sessionId) return;
+    // A goal.updated event or a completed user action may win this race.
+    const initialState = readGoalState(conversationId);
     let cancelled = false;
     void client
       .getGoal(sessionId)
       .then((next) => {
-        if (!cancelled) publishGoalState(conversationId, next);
+        if (!cancelled && readGoalState(conversationId) === initialState) {
+          publishGoalState(conversationId, next);
+        }
       })
       .catch(() => undefined);
     return () => {

@@ -1,4 +1,5 @@
 import type { KBrainClient } from "./client";
+import { readGoalState } from "./goalStore";
 import type { KBrainGoalState } from "./types";
 
 /**
@@ -28,7 +29,10 @@ export async function settleGoalAfterTurn(params: {
     }
   }
   try {
-    params.publish(params.conversationId, await params.client.getGoal(sessionId));
+    const previous = readGoalState(params.conversationId);
+    const snapshot = await params.client.getGoal(sessionId);
+    if (readGoalState(params.conversationId) === previous)
+      params.publish(params.conversationId, snapshot);
   } catch {
     // 读取失败只影响目标栏刷新，不影响本轮结果。
   }
