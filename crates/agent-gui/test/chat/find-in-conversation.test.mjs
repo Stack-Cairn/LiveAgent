@@ -358,3 +358,66 @@ test("find bar counts, navigates off-screen rows, highlights and closes", async 
     env.cleanup();
   }
 });
+
+test("find keeps literal HTML and Markdown inside fenced and inline code", async () => {
+  const env = await createEnv();
+  try {
+    const model = env.loadModule("@liveagent/ui/lib/transcript-find/transcriptFind.ts");
+    const source = [
+      "~~~html",
+      "<section>**literal**</section>",
+      "~~~",
+      "",
+      "Use `<section>`.",
+    ].join("\n");
+    const entries = [{ rowKey: "a", text: model.stripMarkdownForFind(source) }];
+    assert.equal(model.buildTranscriptFindMatches(entries, "section").length, 3);
+    assert.equal(model.buildTranscriptFindMatches(entries, "**literal**").length, 1);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("find counts and highlights the original dotted-I word at the right offsets", async () => {
+  const env = await createEnv();
+  try {
+    const model = env.loadModule("@liveagent/ui/lib/transcript-find/transcriptFind.ts");
+    const dom = env.loadModule("@liveagent/ui/lib/transcript-find/transcriptFindDom.ts");
+    const el = document.createElement("p");
+    el.textContent = "See İstanbul now";
+    assert.equal(
+      model.buildTranscriptFindMatches([{ rowKey: "u", text: el.textContent }], "İstanbul").length,
+      1,
+    );
+    assert.deepEqual(
+      dom.findTextRangesInElement(el, "İstanbul").map((r) => r.toString()),
+      ["İstanbul"],
+    );
+    assert.deepEqual(
+      dom.findTextRangesInElement(el, "now").map((r) => r.toString()),
+      ["now"],
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("find text stays the same when stripped results are reused or evicted", async () => {
+  const env = await createEnv();
+  try {
+    const { stripMarkdownForFind: strip } = env.loadModule(
+      "@liveagent/ui/lib/transcript-find/transcriptFind.ts",
+    );
+    assert.equal(strip("**bold** and `code`"), "bold and code");
+    assert.equal(strip("**bold** and `code`"), "bold and code");
+    // More distinct texts than the cache keeps, then the first one again.
+    for (let i = 0; i < 5000; i += 1) assert.equal(strip(`item **${i}**`), `item ${i}`);
+    assert.equal(strip("item **0**"), "item 0");
+    // A text too large to keep is still stripped.
+    const large = `**big** ${"x".repeat(3 * 1024 * 1024)}`;
+    assert.equal(strip(large).slice(0, 5), "big x");
+    assert.equal(strip(large).length, large.length - 4);
+  } finally {
+    env.cleanup();
+  }
+});

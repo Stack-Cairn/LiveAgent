@@ -5,6 +5,9 @@
  * view, and only then is the rendered text highlighted in the DOM.
  */
 
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { gfm } from "micromark-extension-gfm";
 import { matchesShortcutCommand } from "../shortcuts/shortcutCommands";
 
 export type TranscriptFindEntry = {
@@ -21,7 +24,7 @@ export type TranscriptFindMatch = {
 };
 
 export function normalizeTranscriptFindQuery(query: string) {
-  return query.trim().toLocaleLowerCase();
+  return foldTranscriptFindText(query.trim());
 }
 
 /**
@@ -58,17 +61,77 @@ export function findOccurrenceOffsets(foldedText: string, foldedNeedle: string):
  * Drops the markdown syntax that never reaches the rendered text (link
  * targets, emphasis markers, code fences, heading markers), so counts on the
  * data model line up with what the DOM shows.
+ *
+ * Parsing costs far more than the regexes it replaced, and an open find bar
+ * rebuilds every row's text on each streamed delta, so results are kept per
+ * source text: finished messages are read back, and only the one still
+ * streaming is parsed again. Each rebuild reads every finished message, which
+ * keeps them the most recently used; the superseded drafts of the streaming
+ * one are the first to go.
  */
 export function stripMarkdownForFind(markdown: string) {
-  return markdown
-    .replace(/^```[^\n]*$/gm, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<\/?[a-z][^>\n]*>/gi, "")
-    .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, "$2")
-    .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s{0,3}>\s?/gm, "");
+  const cached = stripCache.get(markdown);
+  if (cached !== undefined) {
+    stripCache.delete(markdown);
+    stripCache.set(markdown, cached);
+    return cached;
+  }
+  const text = visibleText(
+    fromMarkdown(markdown, {
+      extensions: [gfm()],
+      mdastExtensions: [gfmFromMarkdown()],
+    }),
+  );
+  rememberStripped(markdown, text);
+  return text;
+}
+
+const STRIP_CACHE_MAX_ENTRIES = 4096;
+const STRIP_CACHE_MAX_CHARS = 4 * 1024 * 1024;
+const stripCache = new Map<string, string>();
+let stripCacheChars = 0;
+
+function rememberStripped(markdown: string, text: string) {
+  const size = markdown.length + text.length;
+  if (size > STRIP_CACHE_MAX_CHARS) return;
+  stripCache.set(markdown, text);
+  stripCacheChars += size;
+  for (const [key, value] of stripCache) {
+    if (stripCache.size <= STRIP_CACHE_MAX_ENTRIES && stripCacheChars <= STRIP_CACHE_MAX_CHARS) {
+      break;
+    }
+    stripCache.delete(key);
+    stripCacheChars -= key.length + value.length;
+  }
+}
+
+type FindNode = {
+  type: string;
+  value?: string;
+  alt?: string | null;
+  children?: FindNode[];
+};
+
+function visibleText(node: FindNode): string {
+  switch (node.type) {
+    case "text":
+    case "code":
+    case "inlineCode":
+      return node.value ?? "";
+    case "html":
+      return (node.value ?? "").replace(/<\/?[a-z][^>\n]*>/gi, "");
+    case "image":
+    case "imageReference":
+      return node.alt ?? "";
+    case "break":
+      return "\n";
+    default: {
+      const block = ["root", "blockquote", "list", "listItem", "table", "tableRow"].includes(
+        node.type,
+      );
+      return (node.children ?? []).map(visibleText).join(block ? "\n" : "");
+    }
+  }
 }
 
 export function buildTranscriptFindMatches(
