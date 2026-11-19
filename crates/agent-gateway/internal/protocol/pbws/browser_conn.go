@@ -224,9 +224,12 @@ func (c *browserConn) handshake() bool {
 	// 握手前的读超时刻意未刷新；成功后立即续期。
 	c.core.TouchInboundActivity()
 
-	// hello 应答在写泵、心跳和事件转发启动之前同步写出。入队做不到这一点：应答走数据
-	// 队列，而心跳与恢复状态走控制队列，写泵在两条都就绪的队列之间随机取帧——K-brain
-	// 历史同步的状态帧正好在首次握手前后广播，会抢在认证应答之前到达客户端。
+	// 先订阅，再同步写出 hello 应答，最后才启动写泵与心跳：
+	// - 订阅必须早于应答到达客户端，否则客户端收到应答后立刻触发的广播会落在订阅之前而丢失；
+	// - 应答必须先于其它任何帧写出。入队做不到：应答走数据队列，心跳与恢复状态走控制
+	//   队列，写泵在两条都就绪的队列之间随机取帧——K-brain 历史同步的状态帧正好在首次
+	//   握手前后广播，会抢在认证应答之前到达。写泵尚未启动时，订阅产生的帧只会排队。
+	c.startEventForwarders()
 	reply, err := proto.Marshal(&gatewayv2.WebServerFrame{
 		RequestId: frame.GetRequestId(),
 		Payload: &gatewayv2.WebServerFrame_Hello{
@@ -243,13 +246,12 @@ func (c *browserConn) handshake() bool {
 		})
 	}
 	if err != nil {
+		// Close 关掉 done，已启动的转发器随之退出并清理订阅。
 		c.core.Close()
 		return false
 	}
 	c.core.StartWriteLoop()
 	c.core.StartHeartbeat(c.buildHeartbeatPing)
-	// 应答已经写出，之后的订阅与快照回放不可能越过它。
-	c.startEventForwarders()
 	c.replaySnapshots()
 	return true
 }
