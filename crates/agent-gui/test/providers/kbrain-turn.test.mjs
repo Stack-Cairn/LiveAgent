@@ -709,3 +709,80 @@ test("Stop before any output settles as an empty stopped turn, not raw abort tex
   assert.equal(result.errorMessage, undefined);
   assert.deepEqual(result.content, []);
 });
+
+for (const mode of ["normal", "set", "resume"]) {
+  test(`a lost ${mode} acknowledgement reattaches to the accepted run without a second submission`, async () => {
+    const calls = [];
+    const requestId = "lost-ack-" + mode;
+    let accepted = false;
+    await withHttpFixture(
+      async (req, res) => {
+        const url = new URL(req.url, "http://localhost");
+        calls.push(req.method + " " + url.pathname);
+        if (url.pathname === "/v1/sessions") {
+          res.end(JSON.stringify({ id: "backend-session-1", model, messages: [], last_seq: 0 }));
+        } else if (req.method === "POST") {
+          let raw = "";
+          for await (const chunk of req) raw += chunk;
+          const body = JSON.parse(raw);
+          accepted = (body.run ?? body).client_request_id === requestId;
+          if (mode === "resume") return req.socket.destroy();
+          if (mode === "set") return res.writeHead(202).end('{"version":');
+          res.writeHead(202, { "Content-Type": "application/json", "Content-Length": "300" });
+          res.write('{"version":"kbrain.agent.v1",');
+          setTimeout(() => res.destroy(), 10);
+        } else if (
+          url.pathname.endsWith("/runs") &&
+          accepted &&
+          url.searchParams.get("client_request_id") === requestId
+        ) {
+          res.end(
+            JSON.stringify({
+              version: "kbrain.agent.v1",
+              conversation_id: "backend-session-1",
+              run_id: "run-1",
+              accepted_seq: 1,
+            }),
+          );
+        } else if (url.pathname.endsWith("/goal")) {
+          res.end(
+            JSON.stringify({
+              version: "kbrain.agent.v1",
+              conversation_id: "backend-session-1",
+              goal: "fixture",
+              status: "active",
+              round: 1,
+              max_rounds: 5,
+            }),
+          );
+        } else if (url.pathname.endsWith("/events")) {
+          res.writeHead(200, { "Content-Type": "text/event-stream" });
+          res.end(
+            event(2, "assistant.text.delta", { text: "finished" }) + event(3, "run.completed"),
+          );
+        } else {
+          res.writeHead(404).end();
+        }
+      },
+      async (baseUrl) => {
+        const deltas = [];
+        await runKBrainTurn({
+          ...baseParams,
+          conversationId: requestId,
+          baseUrl,
+          fetch: globalThis.fetch,
+          clientRequestId: requestId,
+          goal: mode === "normal" ? undefined : { action: mode, goal: "fixture" },
+          onTextDelta: (text) => deltas.push(text),
+          onGoalUpdate: (state) => assert.equal(state.status, "active"),
+        });
+        assert.deepEqual(deltas, ["finished"]);
+        assert.equal(
+          calls.filter((c) => c.startsWith("POST ") && !c.endsWith("/v1/sessions")).length,
+          1,
+        );
+        assert.ok(calls.includes("GET /v1/sessions/backend-session-1/runs"));
+      },
+    );
+  });
+}
