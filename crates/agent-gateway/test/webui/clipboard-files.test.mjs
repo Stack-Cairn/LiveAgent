@@ -44,3 +44,16 @@ test("extractClipboardFiles falls back to clipboard items when files list is emp
   assert.equal(files.length, 1);
   assert.equal(files[0].name, "clipboard-file-1.png");
 });
+
+test("both clipboard representations preserve files with identical metadata and distinct contents", async () => {
+  const files = ["abcd", "wxyz"].map((content) =>
+    createClipboardFile("notes.txt", content, "text/plain", 1000),
+  );
+  for (const data of [
+    { files },
+    { files: [], items: files.map((file) => ({ kind: "file", getAsFile: () => file })) },
+  ]) {
+    const result = clipboard.extractClipboardFiles(data);
+    assert.deepEqual(await Promise.all(result.map((file) => file.text())), ["abcd", "wxyz"]);
+  }
+});

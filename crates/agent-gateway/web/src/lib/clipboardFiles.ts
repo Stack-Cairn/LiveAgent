@@ -47,36 +47,22 @@ function normalizeClipboardFile(file: File, index: number) {
   });
 }
 
-function clipboardFileKey(file: File) {
-  return [file.name.trim() || "__clipboard_file__", file.type, file.size, file.lastModified].join(
-    "\u0000",
-  );
-}
-
-function appendUniqueClipboardFile(files: File[], seen: Set<string>, file: File | null) {
-  if (!file) return;
-  const key = clipboardFileKey(file);
-  if (seen.has(key)) return;
-  seen.add(key);
-  files.push(normalizeClipboardFile(file, files.length));
-}
-
 export function extractClipboardFiles(data: DataTransfer | null | undefined) {
   const files: File[] = [];
-  const seen = new Set<string>();
   if (!data) return files;
 
   const clipboardFiles = Array.from(data.files ?? []);
   if (clipboardFiles.length > 0) {
     for (const file of clipboardFiles) {
-      appendUniqueClipboardFile(files, seen, file);
+      files.push(normalizeClipboardFile(file, files.length));
     }
     return files;
   }
 
   for (const item of Array.from(data.items ?? [])) {
     if (item.kind !== "file") continue;
-    appendUniqueClipboardFile(files, seen, item.getAsFile());
+    const file = item.getAsFile();
+    if (file) files.push(normalizeClipboardFile(file, files.length));
   }
 
   return files;
@@ -100,7 +86,6 @@ export async function readClipboardFiles() {
   }
 
   const files: File[] = [];
-  const seen = new Set<string>();
   const items = await clipboard.read();
   for (const item of items) {
     const type = item.types.find(isClipboardUploadMimeType);
@@ -114,7 +99,7 @@ export async function readClipboardFiles() {
         lastModified: Date.now(),
       },
     );
-    appendUniqueClipboardFile(files, seen, file);
+    files.push(file);
   }
   return files;
 }
