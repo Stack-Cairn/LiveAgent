@@ -131,7 +131,7 @@ func TestBackendQueueRelayAgainstRealKBrain(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first model request did not start")
 	}
-	if _, err = relay.Start(context.Background(), "gateway-second", "conv", "request-second", PromptRequest{Prompt: "queued-second"}, "append", cb); err != nil {
+	if _, err = relay.Start(context.Background(), "gateway-second", "conv", "request-second", PromptRequest{Prompt: "queued-second", Content: []ContentBlock{{Type: "image", MIMEType: "image/png", ImageURL: dataURL("image/png", testPNG)}}}, "append", cb); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = relay.Start(context.Background(), "gateway-third", "conv", "request-third", PromptRequest{Prompt: "queued-third"}, "append", cb); err != nil {
@@ -153,6 +153,14 @@ func TestBackendQueueRelayAgainstRealKBrain(t *testing.T) {
 	begin := relay.Queue(context.Background(), &gatewayv2.ChatQueueRequest{ConversationId: "conv", Action: "edit_begin", ItemId: "gateway-second"})
 	if !begin.Accepted {
 		t.Fatalf("edit begin=%+v", begin)
+	}
+	var original backendQueueItem
+	if err := json.Unmarshal([]byte(begin.ItemJSON), &original); err != nil {
+		t.Fatal(err)
+	}
+	var attachments []UploadedFile
+	if err := json.Unmarshal([]byte(original.UploadedFilesJSON), &attachments); err != nil || len(attachments) != 1 || attachments[0].Kind != "image" {
+		t.Fatalf("queued image missing from editor: %s", original.UploadedFilesJSON)
 	}
 	commit := relay.Queue(context.Background(), &gatewayv2.ChatQueueRequest{ConversationId: "conv", Action: "edit_commit", ItemId: "gateway-second", Revision: begin.Revision, DraftJson: `{"text":"edited-second","segments":[]}`, UploadedFilesJson: "[]"})
 	if !commit.Accepted {

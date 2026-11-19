@@ -65,15 +65,14 @@ type runState struct {
 }
 
 type queuedRun struct {
-	RunID             string
-	ConversationID    string
-	ClientRequestID   string
-	Prompt            PromptRequest
-	CWD               string
-	CreatedAt         int64
-	Callbacks         Callbacks `json:"-"`
-	DraftJSON         string
-	UploadedFilesJSON string
+	RunID           string
+	ConversationID  string
+	ClientRequestID string
+	Prompt          PromptRequest
+	CWD             string
+	CreatedAt       int64
+	Callbacks       Callbacks `json:"-"`
+	DraftJSON       string
 }
 
 type queueEdit struct {

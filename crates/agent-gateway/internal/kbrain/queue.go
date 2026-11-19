@@ -191,17 +191,12 @@ func (r *Relay) Queue(ctx context.Context, req *gatewayv2.ChatQueueRequest, call
 		if req.GetRevision() == 0 || req.GetRevision() != edited.Revision || currentRevision != edited.Revision {
 			return r.queueConflictLocked(conversationID, r.queues[conversationID], currentRevision)
 		}
-		prompt, draft, uploads, err := editedPrompt(req.GetDraftJson(), req.GetUploadedFilesJson(), edited.Item.Prompt.Prompt)
+		request, err := r.editedQueueRequest(edited.Item.RunID, edited.Item.Prompt, req.GetDraftJson(), req.GetUploadedFilesJson())
 		if err != nil {
 			return queueError("invalid_payload", err.Error())
 		}
-		edited.Item.Prompt.Prompt = prompt
-		// 编辑后不再以“/”开头就不是提示词指令了，避免 K-brain 按指令解析普通文本。
-		if !strings.HasPrefix(strings.TrimSpace(prompt), "/") {
-			edited.Item.Prompt.PromptCommand = false
-		}
-		edited.Item.Prompt.ClientRequestID = edited.Item.ClientRequestID
-		edited.Item.DraftJSON, edited.Item.UploadedFilesJSON = draft, uploads
+		request.ClientRequestID = edited.Item.ClientRequestID
+		edited.Item.Prompt, edited.Item.DraftJSON = request, req.GetDraftJson()
 		delete(r.queueEdits, key)
 		return restoreEditedRun(edited)
 	}
@@ -329,17 +324,10 @@ func insertQueueItem(items []queuedRun, index int, item queuedRun) []queuedRun {
 
 func queueItemFor(item queuedRun, detail bool) queueItem {
 	out := queueItem{ID: item.RunID, PreviewText: item.Prompt.Prompt, CreatedAt: item.CreatedAt, Source: "webui", Editable: true}
+	out.FileCount = len(item.Prompt.Content)
 	if detail {
-		out.DraftJSON, out.UploadedFilesJSON = item.DraftJSON, item.UploadedFilesJSON
-		if out.UploadedFilesJSON == "" {
-			out.UploadedFilesJSON = "[]"
-		}
-	}
-	if item.UploadedFilesJSON != "" {
-		var files []any
-		if json.Unmarshal([]byte(item.UploadedFilesJSON), &files) == nil {
-			out.FileCount = len(files)
-		}
+		out.DraftJSON = item.DraftJSON
+		out.UploadedFilesJSON = queuedAttachmentsJSON(item.RunID, item.Prompt.Content)
 	}
 	return out
 }
@@ -370,39 +358,6 @@ func getDraftText(raw string) (string, error) {
 		}
 	}
 	return strings.Join(parts, ""), nil
-}
-
-func getUploadedFiles(raw string) (string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return "[]", nil
-	}
-	var files []any
-	if err := json.Unmarshal([]byte(raw), &files); err != nil {
-		return "", err
-	}
-	data, err := json.Marshal(files)
-	return string(data), err
-}
-
-func editedPrompt(draftJSON, uploadedFilesJSON, fallback string) (string, string, string, error) {
-	if strings.TrimSpace(draftJSON) == "" {
-		return "", "", "", errors.New("draft_json is required")
-	}
-	prompt, err := getDraftText(draftJSON)
-	if err != nil {
-		return "", "", "", fmt.Errorf("invalid draft_json: %w", err)
-	}
-	if strings.TrimSpace(prompt) == "" && strings.TrimSpace(fallback) == "" {
-		return "", "", "", errors.New("queued prompt must not be empty")
-	}
-	if strings.TrimSpace(prompt) == "" {
-		prompt = fallback
-	}
-	files, err := getUploadedFiles(uploadedFilesJSON)
-	if err != nil {
-		return "", "", "", fmt.Errorf("invalid uploaded_files_json: %w", err)
-	}
-	return prompt, draftJSON, files, nil
 }
 
 type queueCurrent struct {
