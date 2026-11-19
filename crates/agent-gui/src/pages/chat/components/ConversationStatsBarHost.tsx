@@ -50,29 +50,36 @@ export function ConversationStatsBarHost(props: {
     desktopTrajectoryReloadVersion(conversationId),
   );
   const backendOwned = isKBrainBackendEnabled();
+  // 没有 loadStats 的宿主只能报「变了」；有的话直接把 journal 游标交给 hook。
   const [backendRevision, setBackendRevision] = useState(0);
+  const [backendCursor, setBackendCursor] = useState<number | undefined>(undefined);
   const trajectoryHostRef = useRef(trajectoryHost);
   trajectoryHostRef.current = trajectoryHost;
   useEffect(() => {
     if (!backendOwned || !enabled || conversationId === "") return;
-    // K-brain 持有轨迹 journal：用便宜的 stats 轮询做变化门控，只在 lastSeq
-    // 前进时才失效统计缓存。此前的无条件 2s 触发会让大轨迹会话（几十万事件）
-    // 每次都整窗重分页：读数在近似/精确间摆动，还带来持续的读放大。
+    // K-brain 持有轨迹 journal：用便宜的 stats 轮询拿 lastSeq 游标交给 hook，由它
+    // 与已读窗口的位置比较后决定要不要取尾部一窗。此前的无条件 2s 触发会让大轨迹
+    // 会话（几十万事件）每次都整窗重分页：读数在近似/精确间摆动，还带来持续的读放大。
+    // 传游标而不是「变了」的计数：打开会话后的第一次轮询必然是一次变化，按计数
+    // 会把刚取过的首窗原样再取一遍。
     const host = trajectoryHostRef.current as TrajectoryHost & {
       loadStats?: (id: string) => Promise<{ lastSeq?: number }>;
     };
     if (typeof host.loadStats !== "function") {
       return trajectoryHost.subscribeRefresh?.(() => setBackendRevision((value) => value + 1));
     }
-    let lastSeq: number | undefined;
     let stopped = false;
+    // 切会话时宿主按 key 重挂载；这里仍显式归零，防止同一实例换 id 后沿用旧游标。
+    setBackendCursor(undefined);
     const poll = async () => {
       if (stopped) return;
       try {
         const stats = await host.loadStats?.(conversationId);
-        if (stopped || stats?.lastSeq === undefined || stats.lastSeq === lastSeq) return;
-        lastSeq = stats.lastSeq;
-        setBackendRevision((value) => value + 1);
+        const lastSeq = stats?.lastSeq;
+        if (stopped || typeof lastSeq !== "number" || !Number.isFinite(lastSeq)) return;
+        // 原样透传，相同值由 React 自行跳过。不取最大值：本地会话被重新映射到新的
+        // 后端会话后 journal 从头计数，回落本身就是 hook 需要看到的信号。
+        setBackendCursor(lastSeq);
       } catch {
         // 后端暂不可达时保持现状；下一个周期再探。
       }
@@ -92,6 +99,7 @@ export function ConversationStatsBarHost(props: {
     liveOwnership: backendOwned ? "observed" : "authoritative",
     authoritativeRevision: backendOwned ? 0 : authoritativeRevision,
     tailRevision: backendOwned ? backendRevision : 0,
+    ...(backendOwned && backendCursor !== undefined ? { tailCursor: backendCursor } : {}),
     enabled,
   });
   const contextUsageTokens = useSyncExternalStore(

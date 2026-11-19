@@ -39,6 +39,8 @@ type CacheEntry = {
   revision: number;
   /** 事件集合的版本号，用于跳过无变化的重建。 */
   version: number;
+  /** 已读窗口覆盖到的权威游标（宿主在窗口响应里带 lastSeq 时才有）。 */
+  tailCursor?: number;
 };
 
 const cache = new Map<string, CacheEntry>();
@@ -60,6 +62,20 @@ export function clearConversationStatsCache(conversationId?: string): void {
     return;
   }
   cache.delete(conversationId.trim());
+}
+
+/** 窗口响应里的权威游标；契约之外的可选字段，只有持有 journal 的宿主会带。 */
+function windowCursor(payload: unknown): number | undefined {
+  const value = (payload as { lastSeq?: unknown } | null)?.lastSeq;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * 条目记住的是「最近一次窗口读到的位置」，不取最大值：本地会话被重新映射到新的
+ * 后端会话后 journal 从头计数，旧的最大值会让之后的游标一直显得已覆盖。
+ */
+function latestCursor(previous: number | undefined, next: number | undefined): number | undefined {
+  return next === undefined ? previous : next;
 }
 
 function scheduleIdle(callback: () => void): () => void {
@@ -95,6 +111,12 @@ export type UseConversationStatsOptions = {
    * 与 authoritativeRevision 的区别：那一个是历史被改写，必须整窗重载。
    */
   tailRevision?: number;
+  /**
+   * 权威方的 journal 游标本身（单调递增，0 表示还没有任何事件）。提供时取代
+   * tailRevision 作为尾部刷新的触发器，并与窗口响应里的 lastSeq 比较：已读窗口
+   * 已经覆盖到这个位置就不再请求——打开会话后的第一次轮询因此不会把首窗重取一遍。
+   */
+  tailCursor?: number;
   /** 条为空或隐藏时不加载。 */
   enabled: boolean;
 };
@@ -108,7 +130,11 @@ export function useConversationStats(
   options: UseConversationStatsOptions,
 ): UseConversationStatsResult {
   const { host, liveEvents, liveOwnership, authoritativeRevision = 0, enabled } = options;
-  const tailRevision = options.tailRevision ?? 0;
+  const tailCursor = options.tailCursor;
+  // 尾部刷新的触发值：有游标用游标，否则退回只表示「变了」的版本号。
+  const tailTrigger = tailCursor ?? options.tailRevision ?? 0;
+  const tailCursorRef = useRef(tailCursor);
+  tailCursorRef.current = tailCursor;
   const conversationId = options.conversationId.trim();
 
   const [loading, setLoading] = useState(false);
@@ -117,6 +143,13 @@ export function useConversationStats(
 
   const hostRef = useRef(host);
   hostRef.current = host;
+  // 首窗没拿到事件（失败，或成功但为空）之后要求主链路整段重来的计数。
+  const [reloadNonce, setReloadNonce] = useState(0);
+  // 首窗落地（或失败）时游标已经到了：补跑一次尾部刷新。
+  const [tailKick, setTailKick] = useState(0);
+  // 「为哪个触发值整段重载过」：同一个值只重载一次，下次游标变化再试。没有这道闸，
+  // 首窗持续为空或持续失败时 tailKick → 重载 → 落地 → tailKick 会无退避地循环。
+  const reloadedForRef = useRef<string | null>(null);
 
   const entryFor = useCallback((): CacheEntry => {
     const existing = cache.get(conversationId);
@@ -137,7 +170,9 @@ export function useConversationStats(
     return fresh;
   }, [conversationId, authoritativeRevision]);
 
-  // 首窗 + 后台向前分页。整个链路一个 effect：conversationId 或权威版本变化即重来。
+  // 首窗 + 后台向前分页。整个链路一个 effect：conversationId 或权威版本变化即重来；
+  // reloadNonce 由尾部刷新在「首窗没拿到事件」时推进，缓存已被它清掉。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadNonce is an intentional re-run trigger; the effect reads the cache it invalidated.
   useEffect(() => {
     if (!enabled || conversationId === "") {
       setLoading(false);
@@ -186,9 +221,28 @@ export function useConversationStats(
             failed: false,
             revision: authoritativeRevision,
             version: latest.version + 1,
+            // 只有尾部窗（首窗）能代表「已读到的尾部位置」。宿主的 lastSeq 取自整份
+            // journal，与请求哪一页无关：更早的页会带回更新的游标，却不含新增的尾部事件。
+            tailCursor:
+              cursor === undefined
+                ? latestCursor(latest.tailCursor, windowCursor(payload))
+                : latest.tailCursor,
           };
           touch(conversationId, next);
           setEventVersion((value) => value + 1);
+          // 首窗在途期间到达的游标被尾部刷新跳过了（那时还没有可合并的窗口）。
+          // 首窗读到的位置与它不相等时补跑一次（与尾部刷新的相等判定一致：更大是有
+          // 新事件，更小是 journal 被替换），否则要等下一次游标变化。
+          const wanted = tailCursorRef.current;
+          if (
+            latest.oldestSegmentIndex === null &&
+            wanted !== undefined &&
+            wanted > 0 &&
+            next.tailCursor !== undefined &&
+            wanted !== next.tailCursor
+          ) {
+            setTailKick((value) => value + 1);
+          }
           if (payload.hasMoreBefore) {
             cancelIdle = scheduleIdle(advance);
           } else {
@@ -198,10 +252,15 @@ export function useConversationStats(
         .catch((error) => {
           if (cancelled) return;
           console.warn("[trajectory] conversation stats window failed", error);
-          // 失败不重试：读数是诊断信息，宁可停在已有窗口也不打扰会话主链路。
+          // 向前分页失败不重试：读数是诊断信息，宁可停在已有窗口也不打扰会话主链路。
           const latest = cache.get(conversationId);
           if (latest !== undefined && latest.revision === authoritativeRevision) {
             cache.set(conversationId, { ...latest, complete: true, failed: true });
+            // 首窗失败时游标可能已经到过（轮询先于首窗返回），空闲会话的游标之后不再变。
+            // 交给尾部刷新重载一次；它按触发值去重，持续失败也只多这一次请求。
+            if (latest.oldestSegmentIndex === null && (tailCursorRef.current ?? 0) > 0) {
+              setTailKick((value) => value + 1);
+            }
           }
           setLoading(false);
           setEventVersion((value) => value + 1);
@@ -220,27 +279,67 @@ export function useConversationStats(
       cancelled = true;
       cancelIdle?.();
     };
-  }, [conversationId, authoritativeRevision, enabled, entryFor]);
+  }, [conversationId, authoritativeRevision, enabled, entryFor, reloadNonce]);
 
   // 尾部例行刷新（K-brain 后端持有 journal 的场景）：游标变化时只取最近一窗
-  // 合并进缓存。首挂载（tailRevision 从 0 起跳）也走这里无妨——主 effect 的
-  // 分页会随后到达，合并是幂等的；主分页尚未开始时这里不产生任何请求。
+  // 合并进缓存。三种不合并的情况：
+  // - 首窗还在路上：跳过，首窗落地时由 tailKick 补跑；
+  // - 首窗没拿到任何事件（失败，或会话当时还没在后端建立）：没有可合并的窗口，
+  //   也不知道更早还有多少段，交回主链路整段重载；
+  // - 已读窗口已经覆盖到这个游标：无事可做。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tailTrigger and tailKick are intentional re-run triggers; the effect reads the cache.
   useEffect(() => {
-    if (!enabled || conversationId === "" || tailRevision === 0) return;
-    let cancelled = false;
+    if (!enabled || conversationId === "" || tailTrigger === 0) return;
     const current = cache.get(conversationId);
-    if (current === undefined || current.events.length === 0 || current.failed) return;
+    if (current === undefined || current.revision !== authoritativeRevision) return;
+    const firstWindowPending = current.oldestSegmentIndex === null && !current.failed;
+    if (firstWindowPending) return;
+    // 条目记的是最近一次窗口读到的位置，同一个 journal 里游标不会比它小。只有相等
+    // 才算已覆盖：更大是有新事件；更小说明本地会话被映射到了新的后端会话、journal
+    // 从头计数。后者直接和缓存比，不依赖本实例见过什么——统计条按会话重挂载，
+    // 回落完全可能发生在它卸载期间。（轮询响应比窗口响应旧时会多取一窗，无害。）
+    const covered = tailCursor !== undefined && current.tailCursor === tailCursor;
+    if (current.events.length === 0) {
+      if (covered) return;
+      const reloadKey = `${conversationId}|${authoritativeRevision}|${tailTrigger}`;
+      if (reloadedForRef.current === reloadKey) return;
+      reloadedForRef.current = reloadKey;
+      cache.delete(conversationId);
+      setReloadNonce((value) => value + 1);
+      return;
+    }
+    if (covered) return;
+    const requested = current;
+    let cancelled = false;
     hostRef.current
       .loadWindow(conversationId)
       .then((payload) => {
         if (cancelled) return;
+        // 向前分页可能在请求期间替换了条目；合并按收敛身份幂等，并进最新的那份即可。
         const entry = cache.get(conversationId);
-        if (entry === undefined || entry !== current) return;
+        if (
+          entry === undefined ||
+          entry.revision !== requested.revision ||
+          entry.oldestSegmentIndex === null
+        ) {
+          return;
+        }
+        const cursor = latestCursor(entry.tailCursor, windowCursor(payload));
         const fresh = parseTrajectoryEvents(payload.eventsJson);
-        if (fresh.length === 0) return;
-        const merged = mergeTrajectoryEventWindows(entry.events, fresh);
-        if (merged.length === entry.events.length) return;
-        touch(conversationId, { ...entry, events: merged, version: entry.version + 1 });
+        const merged =
+          fresh.length === 0 ? entry.events : mergeTrajectoryEventWindows(entry.events, fresh);
+        if (merged.length === entry.events.length) {
+          // 没有新事件也要记住读到的位置，否则同一游标会反复触发请求。
+          if (cursor !== entry.tailCursor)
+            cache.set(conversationId, { ...entry, tailCursor: cursor });
+          return;
+        }
+        touch(conversationId, {
+          ...entry,
+          events: merged,
+          version: entry.version + 1,
+          tailCursor: cursor,
+        });
         setEventVersion((value) => value + 1);
       })
       .catch(() => {
@@ -249,7 +348,7 @@ export function useConversationStats(
     return () => {
       cancelled = true;
     };
-  }, [conversationId, tailRevision, enabled]);
+  }, [conversationId, authoritativeRevision, tailTrigger, tailKick, enabled]);
 
   // live 事件到达时节流 1s 再重建：流式期间事件密集，逐条重建账本没有意义。
   const [liveVersion, setLiveVersion] = useState(0);

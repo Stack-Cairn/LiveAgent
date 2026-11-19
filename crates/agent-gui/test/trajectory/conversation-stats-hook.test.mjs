@@ -527,3 +527,231 @@ test("首次加载后续分页失败时保留已有窗口并标为近似", async
     assert.equal(probe.seen.current.loading, false);
   } finally { console.warn = warn; await probe.unmount(); }
 });
+
+// K-brain 桌面端没有本地实时事件：读数只能靠首窗 + 游标前进后的尾部刷新。下面几条
+// 覆盖「首窗已读完但没拿到任何事件」之后还能不能恢复——这类条目曾被尾部刷新
+// 永久跳过，新对话的统计条因此一直空着。
+
+/** 模拟 K-brain 宿主：窗口响应带 journal 游标 lastSeq。 */
+function createCursorHost(state) {
+  const calls = [];
+  return {
+    calls,
+    host: {
+      loadWindow: async (conversationId, beforeSegmentIndex) => {
+        calls.push({ conversationId, beforeSegmentIndex });
+        if (state.fail) throw new Error("测试后端未就绪");
+        if (state.gate) await state.gate;
+        const pages = state.pages;
+        const index = beforeSegmentIndex === undefined ? pages.length - 1 : beforeSegmentIndex - 1;
+        return {
+          eventsJson: JSON.stringify(pages[index] ?? []),
+          truncated: false,
+          oldestSegmentIndex: Math.max(0, index),
+          returnedSegmentCount: pages.length === 0 ? 0 : 1,
+          totalSegmentCount: pages.length,
+          hasMoreBefore: index > 0,
+          lastSeq: state.lastSeq,
+        };
+      },
+    },
+  };
+}
+
+test("新会话首窗为空：后端 journal 出现后尾部刷新补上读数", async () => {
+  clearConversationStatsCache();
+  // 会话尚未在后端建立：首窗成功返回空窗口。
+  const state = { pages: [], lastSeq: 0 };
+  const { host, calls } = createCursorHost(state);
+  const probe = mountHook({
+    conversationId: "c-new-empty",
+    host,
+    liveEvents: [],
+    liveOwnership: "observed",
+    tailCursor: 0,
+    enabled: true,
+  });
+  try {
+    await probe.mount();
+    await drain();
+    assert.equal(probe.seen.current.stats, null, "发送前没有读数");
+    assert.equal(calls.length, 1, "游标未前进时只有首窗一次请求");
+
+    // 首条消息发出，后端建会话并开始写 journal。
+    state.pages = [turnEvents(1)];
+    state.lastSeq = 13;
+    await probe.update({ tailCursor: 13 });
+    await drain();
+    assert.equal(probe.seen.current.stats?.turns, 1, "首轮必须出现在读数里");
+    assert.equal(probe.seen.current.stats.approximate, false);
+
+    // 切走再切回：缓存里已有读数，不回到空白。
+    await probe.update({ conversationId: "c-other-empty", tailCursor: 0 });
+    await drain();
+    await probe.update({ conversationId: "c-new-empty", tailCursor: 13 });
+    await drain();
+    assert.equal(probe.seen.current.stats?.turns, 1, "切回同一会话仍有读数");
+  } finally {
+    await probe.unmount();
+  }
+});
+
+test("没有游标的宿主：首窗为空后 tailRevision 前进同样补上读数", async () => {
+  clearConversationStatsCache();
+  const state = { pages: [] };
+  const { host } = createCursorHost(state);
+  const probe = mountHook({ conversationId: "c-new-empty-revision", host, liveEvents: [], enabled: true });
+  try {
+    await probe.mount();
+    await drain();
+    assert.equal(probe.seen.current.stats, null);
+    state.pages = [turnEvents(1)];
+    await probe.update({ tailRevision: 1 });
+    await drain();
+    assert.equal(probe.seen.current.stats?.turns, 1);
+  } finally {
+    await probe.unmount();
+  }
+});
+
+test("首窗失败（后端未就绪）：游标前进时整段重载并补齐更早的段", async () => {
+  clearConversationStatsCache();
+  const state = { pages: [turnEvents(1), turnEvents(2), turnEvents(3)], lastSeq: 30, fail: true };
+  const { host, calls } = createCursorHost(state);
+  const probe = mountHook({
+    conversationId: "c-first-window-failed",
+    host,
+    liveEvents: [],
+    liveOwnership: "observed",
+    tailCursor: 0,
+    enabled: true,
+  });
+  const warn = console.warn;
+  try {
+    console.warn = () => {};
+    await probe.mount();
+    await drain();
+    assert.equal(probe.seen.current.stats, null, "首窗失败时没有读数");
+    assert.equal(calls.length, 1, "失败后不自行重试");
+
+    // 后端就绪，轮询第一次拿到游标。
+    state.fail = false;
+    await probe.update({ tailCursor: 30 });
+    await drain();
+    assert.equal(probe.seen.current.stats?.turns, 3, "恢复后必须读到全部三段");
+    assert.equal(probe.seen.current.stats.approximate, false, "重载成功后不再是近似值");
+    assert.equal(probe.seen.current.loading, false);
+  } finally {
+    console.warn = warn;
+    await probe.unmount();
+  }
+});
+
+test("更早的段分页失败后：尾部刷新仍并入新回合，读数保持近似", async () => {
+  clearConversationStatsCache();
+  const state = { tail: turnEvents(3) };
+  const host = {
+    loadWindow: async (_id, cursor) => {
+      if (cursor !== undefined) throw new Error("测试向前分页失败");
+      return { eventsJson: JSON.stringify(state.tail), oldestSegmentIndex: 2, hasMoreBefore: true, truncated: false };
+    },
+  };
+  const probe = mountHook({ conversationId: "c-page-failed-tail", host, liveEvents: [], enabled: true });
+  const warn = console.warn;
+  try {
+    console.warn = () => {};
+    await probe.mount();
+    await drain();
+    assert.equal(probe.seen.current.stats.turns, 1);
+    state.tail = [...state.tail, ...turnEvents(4)];
+    await probe.update({ tailRevision: 1 });
+    await drain();
+    assert.equal(probe.seen.current.stats.turns, 2, "新回合不能因为历史分页失败而冻结");
+    assert.equal(probe.seen.current.stats.approximate, true, "缺失的更早段仍让读数保持近似");
+  } finally {
+    console.warn = warn;
+    await probe.unmount();
+  }
+});
+
+test("游标不超过首窗已读位置时不重复请求首窗", async () => {
+  clearConversationStatsCache();
+  const state = { pages: [turnEvents(1)], lastSeq: 5 };
+  const { host, calls } = createCursorHost(state);
+  const probe = mountHook({
+    conversationId: "c-cursor-dedupe",
+    host,
+    liveEvents: [],
+    liveOwnership: "observed",
+    tailCursor: 0,
+    enabled: true,
+  });
+  try {
+    await probe.mount();
+    await drain();
+    assert.equal(calls.length, 1);
+    // 打开旧会话后第一次轮询：游标与首窗读到的位置相同，首窗不必再取一遍。
+    await probe.update({ tailCursor: 5 });
+    await drain();
+    assert.equal(calls.length, 1, "同一游标不得再取一次首窗");
+    assert.equal(probe.seen.current.stats.turns, 1);
+
+    state.pages = [[...state.pages[0], ...turnEvents(2)]];
+    state.lastSeq = 9;
+    await probe.update({ tailCursor: 9 });
+    await drain();
+    assert.equal(calls.length, 2, "游标前进取一窗");
+    assert.equal(probe.seen.current.stats.turns, 2);
+  } finally {
+    await probe.unmount();
+  }
+});
+
+test("游标先于首窗到达：首窗落地后补一次尾部刷新，不丢中间的事件", async () => {
+  clearConversationStatsCache();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const firstTurn = turnEvents(1);
+  const secondTurn = turnEvents(2);
+  const calls = [];
+  const host = {
+    loadWindow: async () => {
+      calls.push(calls.length);
+      const window = (events, lastSeq) => ({
+        eventsJson: JSON.stringify(events),
+        truncated: false,
+        oldestSegmentIndex: 0,
+        returnedSegmentCount: 1,
+        totalSegmentCount: 1,
+        hasMoreBefore: false,
+        lastSeq,
+      });
+      if (calls.length === 1) {
+        // 首窗在后端读到的是旧位置（lastSeq 5），响应却晚于轮询到达。
+        await gate;
+        return window(firstTurn, 5);
+      }
+      return window([...firstTurn, ...secondTurn], 9);
+    },
+  };
+  const probe = mountHook({
+    conversationId: "c-cursor-race",
+    host,
+    liveEvents: [],
+    liveOwnership: "observed",
+    tailCursor: 0,
+    enabled: true,
+  });
+  try {
+    await probe.mount();
+    await probe.update({ tailCursor: 9 });
+    await drain(2);
+    assert.equal(calls.length, 1, "首窗未落地前不发尾部请求");
+    await act(async () => { release(); });
+    await drain();
+    assert.equal(probe.seen.current.stats?.turns, 2, "首窗落地后必须追上游标 9 的内容");
+    assert.equal(calls.length, 2, "只补一次尾部请求");
+  } finally {
+    await probe.unmount();
+  }
+});
