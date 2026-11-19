@@ -5,6 +5,9 @@
  * view, and only then is the rendered text highlighted in the DOM.
  */
 
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { gfm } from "micromark-extension-gfm";
 import { matchesShortcutCommand } from "../shortcuts/shortcutCommands";
 
 export type TranscriptFindEntry = {
@@ -21,7 +24,7 @@ export type TranscriptFindMatch = {
 };
 
 export function normalizeTranscriptFindQuery(query: string) {
-  return query.trim().toLocaleLowerCase();
+  return foldTranscriptFindText(query.trim());
 }
 
 /**
@@ -60,15 +63,40 @@ export function findOccurrenceOffsets(foldedText: string, foldedNeedle: string):
  * data model line up with what the DOM shows.
  */
 export function stripMarkdownForFind(markdown: string) {
-  return markdown
-    .replace(/^```[^\n]*$/gm, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/<\/?[a-z][^>\n]*>/gi, "")
-    .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, "$2")
-    .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s{0,3}>\s?/gm, "");
+  const tree = fromMarkdown(markdown, {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
+  return visibleText(tree);
+}
+
+type FindNode = {
+  type: string;
+  value?: string;
+  alt?: string | null;
+  children?: FindNode[];
+};
+
+function visibleText(node: FindNode): string {
+  switch (node.type) {
+    case "text":
+    case "code":
+    case "inlineCode":
+      return node.value ?? "";
+    case "html":
+      return (node.value ?? "").replace(/<\/?[a-z][^>\n]*>/gi, "");
+    case "image":
+    case "imageReference":
+      return node.alt ?? "";
+    case "break":
+      return "\n";
+    default: {
+      const block = ["root", "blockquote", "list", "listItem", "table", "tableRow"].includes(
+        node.type,
+      );
+      return (node.children ?? []).map(visibleText).join(block ? "\n" : "");
+    }
+  }
 }
 
 export function buildTranscriptFindMatches(
