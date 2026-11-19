@@ -661,3 +661,58 @@ test("a refresh issued after a local upsert that omits it removes the conversati
   assert.deepEqual(store.getSnapshot().conversations.map((item) => item.id), ["source"]);
   store.stop();
 });
+
+test("refresh removes deleted tail when all remaining rows fill the first page", async () => {
+  const fake = createFakeBackend();
+  const rows = ["a", "b", "c"].map((id, i) =>
+    conversation(id, { cwd: SCOPE_A.cwd, updatedAt: 3 - i }),
+  );
+  fake.state.pages.set("cwd:/tmp/a", rows);
+  const store = createSidebarStore(fake.backend, { pageSize: 2 });
+  store.setScope(SCOPE_A);
+  store.start();
+  try {
+    await tick();
+    await store.loadMore();
+    fake.state.pages.set("cwd:/tmp/a", rows.slice(0, 2));
+    await store.refresh();
+    assert.deepEqual(
+      store.getSnapshot().conversations.map((row) => row.id),
+      ["a", "b"],
+    );
+    assert.equal(store.getSnapshot().byId.has("c"), false);
+  } finally {
+    store.stop();
+  }
+});
+
+test("an older second page cannot restore a deleted row or its count", async () => {
+  const fake = createFakeBackend();
+  const rows = ["a", "b", "c"].map((id, i) =>
+    conversation(id, { cwd: SCOPE_A.cwd, updatedAt: 3 - i }),
+  );
+  fake.state.pages.set("cwd:/tmp/a", rows);
+  const store = createSidebarStore(fake.backend, { pageSize: 2 });
+  store.setScope(SCOPE_A);
+  store.start();
+  try {
+    await tick();
+    let resolvePage;
+    fake.state.listImpl = (page) =>
+      page === 2
+        ? new Promise((resolve) => {
+            resolvePage = resolve;
+          })
+        : { items: rows.slice(0, 2), totalCount: 2 };
+    const pending = store.loadMore();
+    fake.emit({ kind: "delete", conversationId: "c" });
+    resolvePage({ items: [rows[2]], totalCount: 3 });
+    await pending;
+    await tick();
+    assert.equal(store.getSnapshot().byId.has("c"), false);
+    assert.equal(store.getSnapshot().totalCount, 2);
+    assert.equal(store.getSnapshot().hasMore, false);
+  } finally {
+    store.stop();
+  }
+});
