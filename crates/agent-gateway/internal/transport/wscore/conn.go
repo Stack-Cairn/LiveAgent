@@ -354,6 +354,14 @@ func writeQueueDropReason(err error) string {
 }
 
 // StartWriteLoop 启动写泵（幂等），协议层在鉴权成功后调用——鉴权前队列无人消费。
+// WriteSync 绕过两条队列同步写出一帧。只用于必须先于其它任何帧到达的握手应答：
+// 入队只保证同队 FIFO，写泵在两条都就绪的队列之间随机取帧，控制队列的帧（心跳、
+// 恢复状态）因此可能抢在数据队列里的握手应答之前写出。调用方必须在 StartWriteLoop
+// 之前调用，写失败时自行关闭连接。
+func (c *Conn) WriteSync(frame Frame) error {
+	return c.writeFrameDirect(frame)
+}
+
 func (c *Conn) StartWriteLoop() {
 	c.writeLoopOnce.Do(func() {
 		go c.writeLoop()

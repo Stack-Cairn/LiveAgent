@@ -2,6 +2,7 @@ package wscore
 
 import (
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -228,5 +229,95 @@ func TestFirstWriteErrorClosesWithoutRetry(t *testing.T) {
 	}
 	if got := c.WriterCloses(); got != 1 {
 		t.Fatalf("WriterCloses = %d, want 1", got)
+	}
+}
+
+// recordWrites 让写泵把帧的 Kind 记进切片，并在写满 want 帧后关闭 done。
+func recordWrites(c *Conn, want int) (func() []string, <-chan struct{}) {
+	var mu sync.Mutex
+	var kinds []string
+	done := make(chan struct{})
+	c.writeOverride = func(frame Frame) error {
+		mu.Lock()
+		defer mu.Unlock()
+		kinds = append(kinds, frame.Kind)
+		if len(kinds) == want {
+			close(done)
+		}
+		return nil
+	}
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), kinds...)
+	}, done
+}
+
+// 握手应答曾经只是「先入队」：它在数据队列，随后的心跳与恢复状态在控制队列。写泵开始
+// 消费时若两条队列都已就绪，取哪一条是随机的——先入队不等于先写出。这条用例固定这个
+// 前提，说明握手应答为什么不能靠入队顺序保证先到。
+func TestQueuedDataFrameCanBeOvertakenByControlLane(t *testing.T) {
+	t.Parallel()
+
+	overtaken := false
+	for attempt := 0; attempt < 200 && !overtaken; attempt++ {
+		c := NewConn(nil, Config{QueueSize: 4, WriteTimeout: time.Second})
+		written, done := recordWrites(c, 2)
+		if err := c.Enqueue(Frame{Class: FrameResponse, Kind: "hello", Data: []byte("h")}); err != nil {
+			t.Fatalf("Enqueue hello = %v", err)
+		}
+		if err := c.Enqueue(Frame{Class: FrameControl, Kind: "status", Data: []byte("s")}); err != nil {
+			t.Fatalf("Enqueue status = %v", err)
+		}
+		c.StartWriteLoop()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("write loop did not drain both lanes")
+		}
+		overtaken = written()[0] == "status"
+		c.Close()
+	}
+	if !overtaken {
+		t.Fatal("control lane never overtook an earlier data frame in 200 attempts; the ordering premise changed")
+	}
+}
+
+// WriteSync 在写泵启动前同步写出，之后入队的帧无论走哪条队列都排在它后面。
+func TestWriteSyncPrecedesBothLanes(t *testing.T) {
+	t.Parallel()
+
+	for attempt := 0; attempt < 200; attempt++ {
+		c := NewConn(nil, Config{QueueSize: 4, WriteTimeout: time.Second})
+		written, done := recordWrites(c, 3)
+		if err := c.WriteSync(Frame{Class: FrameResponse, Kind: "hello", Data: []byte("h")}); err != nil {
+			t.Fatalf("WriteSync = %v", err)
+		}
+		if err := c.Enqueue(Frame{Class: FrameControl, Kind: "status", Data: []byte("s")}); err != nil {
+			t.Fatalf("Enqueue status = %v", err)
+		}
+		if err := c.Enqueue(Frame{Class: FrameData, Kind: "replay", Data: []byte("r")}); err != nil {
+			t.Fatalf("Enqueue replay = %v", err)
+		}
+		c.StartWriteLoop()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("write loop did not drain both lanes")
+		}
+		if first := written()[0]; first != "hello" {
+			t.Fatalf("attempt %d: first written frame = %q, want hello", attempt+1, first)
+		}
+		c.Close()
+	}
+}
+
+func TestWriteSyncReportsWriteError(t *testing.T) {
+	t.Parallel()
+
+	c := NewConn(nil, Config{WriteTimeout: time.Second})
+	c.writeOverride = func(Frame) error { return errors.New("write failed") }
+	if err := c.WriteSync(Frame{Class: FrameResponse, Kind: "hello", Data: []byte("h")}); err == nil {
+		t.Fatal("WriteSync = nil, want the write error")
 	}
 }
