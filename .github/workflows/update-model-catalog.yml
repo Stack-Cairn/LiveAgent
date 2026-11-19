@@ -47,14 +47,14 @@ jobs:
       - name: Create GitHub App token
         id: app-token
         if: ${{ vars.MODEL_CATALOG_APP_ID != '' }}
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.MODEL_CATALOG_APP_ID }}
           private-key: ${{ secrets.MODEL_CATALOG_APP_PRIVATE_KEY }}
 
       - name: Create or update model catalog PR
         id: cpr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.app-token.outputs.token || github.token }}
           base: main
