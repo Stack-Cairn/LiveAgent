@@ -6,6 +6,7 @@ export type AppUpdateChannel = "stable" | "prerelease";
 export type AppUpdateCheckResult = {
   configured: boolean;
   available: boolean;
+  installed?: boolean;
   currentVersion: string;
   version?: string | null;
   date?: string | null;
@@ -260,6 +261,10 @@ export function useAppUpdateController({
       const nextResult = await invoke<AppUpdateCheckResult>("app_update_install", {
         include_prerelease: includePrereleases,
       });
+      if (!nextResult.installed) {
+        setUpdateState({ status: "ready", result: nextResult });
+        return undefined;
+      }
       setUpdateState({ status: "installed", result: nextResult });
       return nextResult;
     } catch (error) {

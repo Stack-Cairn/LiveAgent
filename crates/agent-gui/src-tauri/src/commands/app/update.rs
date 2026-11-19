@@ -16,6 +16,7 @@ const UPDATE_MANIFEST_ASSET: &str = "latest.json";
 pub struct AppUpdateCheckResponse {
     configured: bool,
     available: bool,
+    installed: bool,
     current_version: String,
     version: Option<String>,
     date: Option<String>,
@@ -438,6 +439,7 @@ fn no_update_response(
     AppUpdateCheckResponse {
         configured: true,
         available: false,
+        installed: false,
         current_version: current_version(app),
         version: None,
         date: None,
@@ -464,6 +466,7 @@ fn response_for_release(
     AppUpdateCheckResponse {
         configured: true,
         available,
+        installed: false,
         current_version: current_version(app),
         version: update_version.or_else(|| Some(version_from_tag(&release.tag_name))),
         date: update_date.or_else(|| release.published_at.clone()),
@@ -728,7 +731,7 @@ pub async fn app_update_install(
         .await
         .map_err(|error| format!("failed to install update: {error}"))?;
 
-    Ok(response_for_release(
+    let mut response = response_for_release(
         &app,
         repository,
         &release,
@@ -736,7 +739,9 @@ pub async fn app_update_install(
         Some(version),
         date,
         body,
-    ))
+    );
+    response.installed = true;
+    Ok(response)
 }
 
 #[tauri::command]
