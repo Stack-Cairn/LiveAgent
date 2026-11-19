@@ -1090,7 +1090,6 @@ test("cost-aware overscan spends one giant unit instead of five fixed rows", () 
 
 test("transcript virtualizer keeps scroll updates off the full React measurement path", () => {
   assert.match(transcriptListSource, /const estimateRowSize = useCallback/);
-  assert.match(transcriptListSource, /const getRowKey = useCallback/);
   assert.match(transcriptListSource, /const extractVirtualRange = useCallback/);
   assert.match(transcriptListSource, /estimateSize:\s*estimateRowSize/);
   assert.match(transcriptListSource, /getItemKey:\s*getRowKey/);
@@ -1413,5 +1412,43 @@ test("live: an idle manual compaction still settles into a standalone checkpoint
   assert.deepEqual(
     settled.rows.map((row) => row.kind),
     ["user", "assistant-unit", "assistant-unit", "summary"],
+  );
+});
+
+test("reordering middle history rows moves measured heights with their keys", async () => {
+  const { createHarness } = await import("../../../virtual-core/test/helpers/harness.mjs");
+  const model = createTranscriptRowModel();
+  const history = ["a", "b", "c", "d"].map((id) => userItem(id));
+  let snapshot = model.build(history, idleLive);
+  const first = snapshot.getRowKey;
+  const { virtualizer } = createHarness({
+    count: 4,
+    viewport: 600,
+    initialOffset: 0,
+    getItemKey: first,
+  });
+  virtualizer.getVirtualItems();
+  virtualizer.resizeItem(1, 180);
+  virtualizer.getVirtualItems();
+  snapshot = model.build([history[0], history[2], history[1], history[3]], idleLive);
+  virtualizer.setOptions({ ...virtualizer.options, getItemKey: snapshot.getRowKey });
+  virtualizer._willUpdate();
+  assert.deepEqual(
+    virtualizer.getVirtualItems().map((item) => [item.key, item.size]),
+    snapshot.rows.map((row, index) => [row.key, index === 2 ? 180 : 100]),
+  );
+});
+
+test("streamed text keeps the same row-key lookup while history and live identity are stable", () => {
+  const model = createTranscriptRowModel();
+  const history = [userItem("u")];
+  const build = (text) =>
+    model.build(history, { ...idleLive, isSending: true, draftAssistantText: text });
+  const first = build("a");
+  const updated = build("abc");
+  assert.equal(first.getRowKey, updated.getRowKey);
+  assert.deepEqual(
+    updated.rows.map((row, i) => updated.getRowKey(i)),
+    updated.rows.map((row) => row.key),
   );
 });
