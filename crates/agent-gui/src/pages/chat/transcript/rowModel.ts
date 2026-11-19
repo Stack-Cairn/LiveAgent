@@ -229,6 +229,7 @@ export type AssistantActivityRow = {
 export type TranscriptRow = SummaryRow | UserRow | AssistantUnitRow | AssistantActivityRow;
 
 export type TranscriptRowsSnapshot = {
+  getRowKey: (index: number) => string | number;
   rows: TranscriptRow[];
   // Exactly one stable activity row is force-mounted for the active reply.
   // Its completed and mutable child units reconcile inside that outer row.
@@ -653,6 +654,13 @@ export function createTranscriptRowModel(): TranscriptRowModel {
     }
   >();
   let historyRowsCache: { items: RenderTimelineItem[]; rows: TranscriptRow[] } | null = null;
+  let keyLookup:
+    | {
+        prefix: TranscriptRow[];
+        tailKey: string | undefined;
+        getRowKey: TranscriptRowsSnapshot["getRowKey"];
+      }
+    | undefined;
   let streamOrigins = new Map<string, string>();
   let turnSeq = 0;
   let activeTurn: {
@@ -670,6 +678,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
   const reset = () => {
     rowCache = new WeakMap();
     historyRowsCache = null;
+    keyLookup = undefined;
     streamOrigins = new Map();
     turnSeq = 0;
     activeTurn = null;
@@ -729,6 +738,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
       if (rowCache.has(leader)) {
         rowCache.delete(leader);
         historyRowsCache = null;
+        keyLookup = undefined;
       }
       return true;
     }
@@ -908,6 +918,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
     }
 
     let rows = historyRows;
+    let prefix = historyRows;
     let liveStartIndex = -1;
     if ((liveTailVisible || pendingSettle) && activeTurn) {
       // 运行中压缩：前半段回复已经作为历史项落库（assistant → summary），后半段
@@ -977,11 +988,22 @@ export function createTranscriptRowModel(): TranscriptRowModel {
           ? activeTurn.lastActivityRow
           : buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
       activeTurn.lastActivityRow = liveActivity;
-      rows = [...visibleHistoryRows, liveActivity];
+      prefix = visibleHistoryRows;
+      rows = [...prefix, liveActivity];
       liveStartIndex = rows.length - 1;
     }
 
-    return { rows, liveStartIndex };
+    // The virtualizer keys its measurements by the lookup's identity. Retain
+    // it for streamed text updates, but replace it when the row order changes.
+    const tailKey = liveStartIndex < 0 ? undefined : rows[liveStartIndex]?.key;
+    if (!keyLookup || keyLookup.prefix !== prefix || keyLookup.tailKey !== tailKey) {
+      keyLookup = {
+        prefix,
+        tailKey,
+        getRowKey: (index) => (index === prefix.length ? tailKey : prefix[index]?.key) ?? index,
+      };
+    }
+    return { rows, liveStartIndex, getRowKey: keyLookup.getRowKey };
   };
 
   return { build, reset };
