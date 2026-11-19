@@ -32,7 +32,7 @@ function createAppUpdateControllerHarness(options = {}) {
     channel: "stable",
     repository: "Stack-Cairn/LiveAgent",
   };
-  const installedResult = { ...checkResult, available: false };
+  const installedResult = { ...checkResult, available: false, installed: true, ...options.installResult };
   let resolveCheck;
   const pendingCheck = options.deferCheckAfterFirst
     ? new Promise((resolve) => {
@@ -261,4 +261,17 @@ test("restart guard visually prioritizes the safe action", () => {
     confirmDialogSource,
     /text-destructive hover:bg-destructive\/10 hover:text-destructive/,
   );
+});
+
+test("withdrawn and manual-only releases do not trigger restart", async () => {
+  for (const manualDownload of [false, true]) {
+    const harness = createAppUpdateControllerHarness({
+      installResult: { installed: false, manualDownload },
+    });
+    await harness.render().runCheck();
+    assert.equal(await harness.render().installAndRestart(), undefined);
+    assert.equal(harness.render().status, "ready");
+    assert.equal(harness.render().result.manualDownload, manualDownload);
+    assert.deepEqual(harness.invokeCalls, ["app_update_check", "app_update_install"]);
+  }
 });
