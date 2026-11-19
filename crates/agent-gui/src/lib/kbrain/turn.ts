@@ -695,13 +695,32 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
       ...(params.promptCommand ? { prompt_command: true } : {}),
     };
     if (params.goal) {
-      const state = await client.postGoal(
-        kbrainSessionId,
-        params.goal.action === "set"
-          ? { action: "set", goal: params.goal.goal, run }
-          : { action: "resume", run },
-        params.signal,
-      );
+      let state: KBrainGoalState;
+      try {
+        state = await client.postGoal(
+          kbrainSessionId,
+          params.goal.action === "set"
+            ? { action: "set", goal: params.goal.goal, run }
+            : { action: "resume", run },
+          params.signal,
+        );
+      } catch (error) {
+        const receipt = await client.recoverRunAcceptance(
+          error,
+          kbrainSessionId,
+          clientRequestId,
+          params.signal,
+        );
+        if (!params.signal.aborted && params.onGoalUpdate) {
+          // Restoring the goal bar is best effort; a failed read must not
+          // prevent an accepted run from being followed or cancelled.
+          const snapshot = await client
+            .getGoal(kbrainSessionId, AbortSignal.any([params.signal, AbortSignal.timeout(5_000)]))
+            .catch(() => undefined);
+          if (snapshot && !params.signal.aborted) params.onGoalUpdate(snapshot);
+        }
+        return receipt;
+      }
       params.onGoalUpdate?.(state);
       if (!state.run) throw new Error("K-brain goal response has no run");
       return state.run;
