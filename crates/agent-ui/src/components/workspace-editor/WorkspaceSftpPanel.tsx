@@ -48,6 +48,7 @@ import { joinPath, normalizePath, parentPath } from "./workspaceSftpPaths";
 export type SftpOpenFileRequest = {
   side: SftpSide;
   path: string;
+  sizeBytes?: number;
 };
 
 type WorkspaceSftpPanelProps = {
@@ -1209,7 +1210,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 }
                                 if (!onOpenFile || entry.kind !== "file") return;
                                 if (side === "remote" && !canEditRemoteEntry(entry)) return;
-                                onOpenFile({ side, path: entry.path });
+                                onOpenFile({ side, path: entry.path, sizeBytes: entry.sizeBytes });
                               }}
                               onDragOver={(event) => {
                                 if (entry.kind === "directory") {
@@ -1385,7 +1386,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                 contextMenu.kind !== "file"
               }
               onClick={() => {
-                const request = { side: contextMenu.side, path: contextMenu.path };
+                const pane = contextMenu.side === "local" ? localPane : remotePane;
+                const entry = pane.entries.find(({ path }) => path === contextMenu.path);
+                const request = {
+                  side: contextMenu.side,
+                  path: contextMenu.path,
+                  sizeBytes: entry?.sizeBytes,
+                };
                 setContextMenu(null);
                 onOpenFile(request);
               }}

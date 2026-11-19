@@ -159,6 +159,8 @@ impl GatewayController {
                         // check" (a genuine epoch-0 mtime skips it too).
                         (request.expected_mtime > 0).then_some(request.expected_mtime),
                         (request.expected_size_bytes > 0).then_some(request.expected_size_bytes),
+                        (!request.expected_content_hash.is_empty())
+                            .then_some(request.expected_content_hash),
                     )
                     .await?;
                 // response.action is "write_text" or "conflict"; the conflict
@@ -269,6 +271,7 @@ pub(crate) fn sftp_action_response_to_proto(
         entry: response.entry.map(sftp_entry_to_proto),
         exists: false,
         transfer: response.transfer.map(sftp_transfer_to_proto),
+        content_hash: response.content_hash.unwrap_or_default(),
         ..Default::default()
     }
 }
@@ -301,6 +304,7 @@ pub(crate) fn sftp_read_text_response_to_proto(
         bytes_read: response.bytes_read as u64,
         size_bytes: response.size_bytes,
         truncated: response.truncated,
+        content_hash: response.content_hash.unwrap_or_default(),
         ..Default::default()
     }
 }

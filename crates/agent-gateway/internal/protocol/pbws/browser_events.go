@@ -83,6 +83,7 @@ func (s *workspaceSubscription) close() {
 // releaseSubscriptions 由 core 关闭回调（恰好一次），释放 chat/workspace 订阅；
 // 九路广播转发器各自监听 done 退出并 defer cleanup。
 func (c *browserConn) releaseSubscriptions() {
+	c.releaseTextSave()
 	c.chatStreamsMu.Lock()
 	for subKey, cancel := range c.chatStreams {
 		cancel()

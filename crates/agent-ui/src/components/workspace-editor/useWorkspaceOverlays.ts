@@ -5,6 +5,7 @@ import type { WorkspaceFilePreviewOpenRequest } from "./WorkspaceFilePreviewOver
 import type { SftpOpenFileRequest } from "./WorkspaceSftpPanel";
 import type { WorkspaceSshTerminalOpenRequest } from "./WorkspaceSshTerminalOverlay";
 import { isWorkspacePreviewPath } from "./workspaceImagePreview";
+import { WORKSPACE_EDITABLE_TEXT_MAX_BYTES } from "./workspaceTextRange";
 
 type UseWorkspaceOverlaysParams = {
   terminalProjectPath: string;
@@ -16,9 +17,9 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
   const { terminalProjectPath, terminalProjectPathKey, rightDockFileTreeOpen } = params;
   const previousRightDockFileTreeOpenRef = useRef(false);
   const [workspaceEditorMounted, setWorkspaceEditorMounted] = useState(false);
-  const workspaceEditorMountedRef = useRef(false);
-  workspaceEditorMountedRef.current = workspaceEditorMounted;
   const [workspaceEditorOpen, setWorkspaceEditorOpen] = useState(false);
+  const workspaceEditorOpenRef = useRef(workspaceEditorOpen);
+  workspaceEditorOpenRef.current = workspaceEditorOpen;
   const [workspaceEditorCleanupPending, setWorkspaceEditorCleanupPending] = useState(false);
   const [workspaceEditorOpenRequest, setWorkspaceEditorOpenRequest] =
     useState<WorkspaceCodeEditorOpenRequest | null>(null);
@@ -149,15 +150,26 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
         returnToSshTerminalRef.current = true;
         return;
       }
-      openWorkspaceEditorFile({
+      const file = {
         projectPathKey: terminalProjectPathKey,
         workdir: terminalProjectPath,
         path: request.path,
         remote: { sessionId: session.id },
-      });
+      };
+      if ((request.sizeBytes ?? 0) > WORKSPACE_EDITABLE_TEXT_MAX_BYTES) {
+        openWorkspaceFilePreview({ ...file, textRange: true });
+      } else {
+        openWorkspaceEditorFile(file);
+      }
       returnToSshTerminalRef.current = true;
     },
-    [handleOpenWorkspaceFile, openWorkspaceEditorFile, terminalProjectPath, terminalProjectPathKey],
+    [
+      handleOpenWorkspaceFile,
+      openWorkspaceEditorFile,
+      openWorkspaceFilePreview,
+      terminalProjectPath,
+      terminalProjectPathKey,
+    ],
   );
 
   const handleOpenSshTerminal = useCallback(
@@ -183,7 +195,7 @@ export function useWorkspaceOverlays(params: UseWorkspaceOverlaysParams) {
     setWorkspaceFilePreviewOpenRequest(null);
     // Only restore when the editor isn't taking over (preview -> editor
     // switch closes the preview while the editor stays in front).
-    if (!workspaceEditorMountedRef.current) {
+    if (!workspaceEditorOpenRef.current) {
       restoreSshTerminalIfRequested();
     }
   }, [restoreSshTerminalIfRequested]);

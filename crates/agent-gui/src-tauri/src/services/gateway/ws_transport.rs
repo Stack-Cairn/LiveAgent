@@ -12,9 +12,9 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::SEC_WEBSOCKET_PROTOCOL;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
 
 use super::ensure_rustls_crypto_provider;
 use super::gateway_proto::v2;
@@ -211,6 +211,17 @@ async fn connect_and_hello(
         .map_err(|_| "gateway v2 handshake timed out".to_string())?
 }
 
+// Gateway reassembles browser write chunks into a single desktop protobuf.
+// Allow 16 MiB of text plus 1 MiB for paths, checkpoint data and envelopes.
+const GATEWAY_WS_MAX_FRAME_BYTES: usize = 17 * 1024 * 1024;
+
+fn gateway_ws_config() -> WebSocketConfig {
+    WebSocketConfig::default()
+        .max_frame_size(Some(GATEWAY_WS_MAX_FRAME_BYTES))
+        // Preserve tungstenite's bounded 64 MiB message budget for other RPCs.
+        .max_message_size(Some(64 * 1024 * 1024))
+}
+
 /// 以 v2 子协议发起 WS 升级并校验服务端回显（旧网关兜底路由可能接受升级却不认识 v2 帧）。
 async fn connect_ws(url: &str) -> Result<WsStream, String> {
     if url.starts_with("wss://") {
@@ -224,7 +235,7 @@ async fn connect_ws(url: &str) -> Result<WsStream, String> {
         SEC_WEBSOCKET_PROTOCOL,
         HeaderValue::from_static(GATEWAY_WS_SUBPROTOCOL),
     );
-    let (stream, response) = connect_async(request)
+    let (stream, response) = connect_async_with_config(request, Some(gateway_ws_config()), false)
         .await
         .map_err(|error| format!("gateway v2 connect failed: {error}"))?;
     let echoed = response
@@ -413,6 +424,77 @@ mod tests {
                 _ => continue,
             }
         }
+    }
+
+    #[tokio::test]
+    async fn gateway_accepts_single_frame_16_mib_write_with_protobuf_overhead() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(stream, echo_subprotocol)
+                .await
+                .unwrap();
+            let frame = v2::AgentServerFrame {
+                payload: Some(v2::agent_server_frame::Payload::Envelope(
+                    proto::GatewayEnvelope {
+                        request_id: "large-write".into(),
+                        payload: Some(proto::gateway_envelope::Payload::FsWriteText(
+                            proto::FsWriteTextRequest {
+                                workdir: "/workspace".into(),
+                                path: "large.txt".into(),
+                                mode: "rewrite".into(),
+                                content: "a".repeat(16 * 1024 * 1024),
+                                ..Default::default()
+                            },
+                        )),
+                        ..Default::default()
+                    },
+                )),
+            };
+            assert!(frame.encoded_len() > 16 * 1024 * 1024);
+            assert!(frame.encoded_len() < GATEWAY_WS_MAX_FRAME_BYTES);
+            ws.send(encode_ws_frame(&frame)).await.unwrap();
+        });
+        let mut ws = connect_ws(&format!("ws://{addr}")).await.unwrap();
+        let Message::Binary(data) = ws.next().await.unwrap().unwrap() else {
+            panic!("expected binary write frame");
+        };
+        let frame: v2::AgentServerFrame = decode_ws_frame(&data).unwrap();
+        let Some(v2::agent_server_frame::Payload::Envelope(envelope)) = frame.payload else {
+            panic!("expected envelope");
+        };
+        let Some(proto::gateway_envelope::Payload::FsWriteText(request)) = envelope.payload else {
+            panic!("expected write request");
+        };
+        assert_eq!(request.content.len(), 16 * 1024 * 1024);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn gateway_rejects_frames_above_bounded_cap() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(stream, echo_subprotocol)
+                .await
+                .unwrap();
+            // The client may reject the header and close before the body is sent.
+            let _ = ws
+                .send(Message::Binary(
+                    vec![0; GATEWAY_WS_MAX_FRAME_BYTES + 1].into(),
+                ))
+                .await;
+        });
+        let mut ws = connect_ws(&format!("ws://{addr}")).await.unwrap();
+        let error = ws.next().await.unwrap().unwrap_err();
+        assert!(matches!(
+            error,
+            tokio_tungstenite::tungstenite::Error::Capacity(_)
+        ));
+        drop(ws);
+        server.await.unwrap();
     }
 
     #[tokio::test]

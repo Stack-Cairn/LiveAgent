@@ -68,6 +68,39 @@ impl TerminalSessionRegistry {
         Ok((TerminalSftpConnection { session }, connection_id))
     }
 
+    /// The high-level SFTP client does not expose extension requests. Open a
+    /// short-lived raw channel for atomic editor replacement; never emulate
+    /// replacement with remove + rename, which could lose the original file.
+    pub(crate) async fn open_ssh_sftp_atomic_session(
+        &self,
+        session_id: &str,
+    ) -> Result<russh_sftp::client::RawSftpSession, String> {
+        let entry = self.entry(session_id)?;
+        let TerminalSessionBackend::Ssh { runtime } = &entry.backend else {
+            return Err("terminal session is not an SSH connection".to_string());
+        };
+        let Some(handle) = runtime.current_handle().await else {
+            return Err("SSH connection is not connected".to_string());
+        };
+        let channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|error| format!("SFTP channel open failed: {error}"))?;
+        channel
+            .request_subsystem(true, "sftp")
+            .await
+            .map_err(|error| format!("SFTP subsystem request failed: {error}"))?;
+        let session = russh_sftp::client::RawSftpSession::new(channel.into_stream());
+        let version = session
+            .init()
+            .await
+            .map_err(|error| format!("SFTP session failed: {error}"))?;
+        if version.extensions.get("posix-rename@openssh.com").map(String::as_str) != Some("1") {
+            return Err("SFTP server does not support atomic editor replacement".to_string());
+        }
+        Ok(session)
+    }
+
     pub(crate) fn ssh_connection_id(&self, session_id: &str) -> Result<usize, String> {
         let entry = self.entry(session_id)?;
         let TerminalSessionBackend::Ssh { runtime } = &entry.backend else {

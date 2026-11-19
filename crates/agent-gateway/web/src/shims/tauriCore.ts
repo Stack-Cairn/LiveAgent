@@ -208,6 +208,7 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
       return (await getGatewayWebSocketClient(loadToken().trim()).readEditableTextFile(
         String(args?.workdir ?? ""),
         String(args?.path ?? ""),
+        typeof args?.preview_offset === "number" ? args.preview_offset : undefined,
       )) as T;
     case "fs_read_workspace_image":
       return (await getGatewayWebSocketClient(loadToken().trim()).readWorkspaceImageFile(

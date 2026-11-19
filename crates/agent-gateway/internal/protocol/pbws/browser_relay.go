@@ -216,6 +216,7 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		ctx, cancel := context.WithTimeout(context.Background(), c.srv.requestTimeout())
 		defer cancel()
 		if response, handled, err := c.srv.kbrainRelay.Filesystem(ctx, env); handled {
+			c.finishTextSaveRequest(env)
 			if err != nil {
 				_ = c.sendLocalError(requestID, errorMessage(err))
 				return
@@ -392,6 +393,7 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 	}
 	view := c.sm.AgentView(agentID)
 	if err := vetAgentRequest(view, env); err != nil {
+		c.finishTextSaveRequest(env)
 		_ = c.sendLocalError(requestID, err.Error())
 		return
 	}
@@ -419,6 +421,7 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		defer unwatch()
 	}
 	response, err := c.sm.AwaitUnaryResponse(ctx, agentID, agentRequestID, env)
+	c.finishTextSaveRequest(env)
 	if err != nil {
 		_ = c.sendLocalError(requestID, errorMessage(err))
 		return

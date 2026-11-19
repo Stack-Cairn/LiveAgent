@@ -1,5 +1,6 @@
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
+import { WORKSPACE_EDITABLE_TEXT_MAX_BYTES } from "./workspaceTextRange";
 
 // Data-source dispatch for WorkspaceCodeEditorOverlay tabs. Local tabs go
 // through the workspace fs backend; remote tabs go through the SFTP session
@@ -9,9 +10,16 @@ export type EditorRemoteSource = {
   sessionId: string;
 };
 
-// Mirrors EDITABLE_TEXT_MAX_BYTES (fs.rs) and SFTP_READ_TEXT_MAX_BYTES so
-// remote files can be opened up to the same size as local ones.
-export const REMOTE_EDITABLE_TEXT_MAX_BYTES = 3 * 1024 * 1024;
+class EditorFileTooLargeError extends Error {}
+
+export function isEditorFileTooLarge(error: unknown) {
+  if (error instanceof EditorFileTooLargeError) return true;
+  if (isFsBackendError(error) && error.code === "too_large") return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /file is too large to edit|file exceeds [\d.]+ MiB|exceeds the editable file limit/i.test(
+    message,
+  );
+}
 
 export type EditorReadResult = {
   path: string;
@@ -55,6 +63,7 @@ type LocalReadResponse = {
 
 type LocalWriteResponse = {
   path: string;
+  bytesWritten: number;
   mtimeMs: number;
   contentHash: string;
   totalLines: number;
@@ -63,7 +72,7 @@ type LocalWriteResponse = {
 function isLocalVersionConflict(error: unknown) {
   if (isFsBackendError(error) && error.code === "stale_file") return true;
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return message.includes("File changed since the last full Read");
+  return /file changed since (?:the last full )?read/i.test(message);
 }
 
 function countLines(content: string) {
@@ -96,7 +105,7 @@ export const localEditorFileIo: EditorFileIo = {
         kind: "ok",
         mtimeMs: response.mtimeMs,
         contentHash: response.contentHash,
-        sizeBytes: new TextEncoder().encode(params.content).length,
+        sizeBytes: response.bytesWritten,
         totalLines: response.totalLines,
       };
     } catch (error) {
@@ -120,21 +129,17 @@ export function createRemoteSftpEditorFileIo(params: {
         projectPathKey,
         workdir: readParams.workdir,
         path: readParams.path,
-        maxBytes: REMOTE_EDITABLE_TEXT_MAX_BYTES,
+        maxBytes: WORKSPACE_EDITABLE_TEXT_MAX_BYTES,
         strictUtf8: true,
       });
-      // A truncated buffer written back would destroy the file's tail, so
-      // oversized files are rejected outright instead of opened read-only.
       if (response.truncated) {
-        throw new Error(onTooLarge());
+        throw new EditorFileTooLargeError(onTooLarge());
       }
       return {
         path: response.path,
         content: response.content,
         mtimeMs: response.entry?.mtime ?? 0,
-        // Remote conflict detection uses mtime+size (checked server-side
-        // under the SFTP connection lock); there is no content hash.
-        contentHash: "",
+        contentHash: response.contentHash ?? "",
         sizeBytes: response.entry?.sizeBytes ?? response.sizeBytes,
         totalLines: countLines(response.content),
       };
@@ -149,17 +154,18 @@ export function createRemoteSftpEditorFileIo(params: {
         // 0 means "no baseline" (missing entry / empty file): skip that guard
         // instead of passing 0, matching the gateway's 0→None convention so
         // both transports behave identically.
+        expectedContentHash: writeParams.expectedContentHash || undefined,
         expectedMtime: writeParams.expectedMtimeMs > 0 ? writeParams.expectedMtimeMs : undefined,
         expectedSizeBytes:
           writeParams.expectedSizeBytes > 0 ? writeParams.expectedSizeBytes : undefined,
       });
       if (response.action === "conflict") return { kind: "conflict" };
-      const contentBytes = new TextEncoder().encode(writeParams.content).length;
       return {
         kind: "ok",
         mtimeMs: response.entry?.mtime ?? 0,
-        contentHash: "",
-        sizeBytes: response.entry?.sizeBytes ?? contentBytes,
+        contentHash: response.contentHash ?? "",
+        sizeBytes:
+          response.entry?.sizeBytes ?? new TextEncoder().encode(writeParams.content).length,
         totalLines: null,
       };
     },

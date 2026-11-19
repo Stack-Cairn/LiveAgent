@@ -68,6 +68,7 @@ pub async fn sftp_write_text(
     create_parent_dirs: Option<bool>,
     expected_mtime: Option<u64>,
     expected_size_bytes: Option<u64>,
+    expected_content_hash: Option<String>,
 ) -> Result<SftpActionResponse, String> {
     registry
         .write_text(
@@ -79,6 +80,7 @@ pub async fn sftp_write_text(
             create_parent_dirs.unwrap_or(true),
             expected_mtime,
             expected_size_bytes,
+            expected_content_hash,
         )
         .await
 }

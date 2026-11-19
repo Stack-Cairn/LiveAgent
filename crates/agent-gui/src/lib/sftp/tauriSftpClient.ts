@@ -100,6 +100,7 @@ export const tauriSftpClient: SftpClient = {
         session_id: params.sessionId,
         project_path_key: params.projectPathKey,
         path: params.path,
+        offset: params.offset,
         max_bytes: params.maxBytes,
         strict_utf8: params.strictUtf8 ?? false,
       }),
@@ -116,6 +117,7 @@ export const tauriSftpClient: SftpClient = {
         create_parent_dirs: false,
         expected_mtime: params.expectedMtime,
         expected_size_bytes: params.expectedSizeBytes,
+        expected_content_hash: params.expectedContentHash,
       }),
     );
   },

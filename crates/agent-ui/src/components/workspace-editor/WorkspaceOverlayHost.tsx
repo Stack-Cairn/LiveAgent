@@ -52,7 +52,7 @@ type WorkspaceOverlayHostProps = {
   workspaceEditorCloseRequestId: number;
   workspaceEditorOpen: boolean;
   workspaceEditorCleanupPending: boolean;
-  onWorkspaceEditorPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
+  onWorkspaceEditorPreviewFile: (request: WorkspaceFilePreviewOpenRequest) => void;
   onWorkspaceEditorInsertCodeMention?: (reference: CodeMentionReference) => void;
   onWorkspaceEditorHide: () => void;
   onWorkspaceEditorClose: () => void;
@@ -176,6 +176,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
           <WorkspaceFilePreviewOverlay
             openRequest={workspaceFilePreviewOpenRequest}
             isOpen={workspaceFilePreviewOpen}
+            sftpClient={sftpClient ?? undefined}
             onOpenEditor={onWorkspaceFilePreviewOpenEditor}
             onRequestClose={onWorkspaceFilePreviewRequestClose}
             onClose={onWorkspaceFilePreviewClose}

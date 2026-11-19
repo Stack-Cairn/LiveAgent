@@ -164,7 +164,23 @@ message WebClientFrame {
     AgentListRequest agent_list = 14;
     HistoryResyncRequest history_resync = 15;
     HistoryResyncAck history_resync_ack = 16;
+    AgentRequestChunk agent_request_chunk = 17;
   }
+}
+
+// Bounded browser saves. The first chunk carries a FsWriteText or Sftp
+// write_text request with empty content; subsequent chunks omit request. All
+// chunks use the same request_id, agent_id and total_bytes, and contiguous byte
+// offsets. Non-final chunks receive AckResult; the final chunk receives the
+// ordinary agent response. No destination is touched until all UTF-8 bytes are
+// collected. One transfer per authenticated socket, at most 16 MiB of content,
+// at most 1 MiB per encoded WebClientFrame. cancel releases an unfinished save.
+message AgentRequestChunk {
+  GatewayEnvelope request = 1;
+  uint64 total_bytes = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  bool cancel = 5;
 }
 
 // WebServerFrame 为网关 → 浏览器方向的帧。

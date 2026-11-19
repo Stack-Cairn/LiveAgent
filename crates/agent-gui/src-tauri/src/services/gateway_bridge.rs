@@ -1289,7 +1289,7 @@ pub async fn handle_fs_read_editable_text(
     request: proto::FsReadEditableTextRequest,
 ) -> Result<proto::FsReadEditableTextResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        fs_read_editable_text_sync(request.workdir, request.path)
+        fs_read_editable_text_sync(request.workdir, request.path, request.preview_offset)
     })
     .await
     .map_err(|e| format!("gateway fs read editable text join failed: {e}"))?
@@ -1301,6 +1301,8 @@ pub async fn handle_fs_read_editable_text(
         content_hash: response.content_hash,
         size_bytes: u64::try_from(response.size_bytes).unwrap_or(u64::MAX),
         total_lines: u64::try_from(response.total_lines).unwrap_or(u64::MAX),
+        preview_offset: response.preview_offset,
+        preview_next_offset: response.preview_next_offset,
     })
 }
 
@@ -2349,6 +2351,62 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[tokio::test]
+    async fn editable_text_bridge_preserves_preview_presence_offsets_and_full_metadata() {
+        use prost::Message;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("bridge.txt"), "a😀tail").unwrap();
+        let request = |preview_offset| {
+            let request = proto::FsReadEditableTextRequest {
+                workdir: dir.path().display().to_string(),
+                path: "bridge.txt".into(),
+                preview_offset,
+            };
+            // Zero is a preview request; absence requests the complete editable text.
+            proto::FsReadEditableTextRequest::decode(request.encode_to_vec().as_slice()).unwrap()
+        };
+        let full = super::handle_fs_read_editable_text(request(None))
+            .await
+            .unwrap();
+        assert_eq!(full.content, "a😀tail");
+        assert_eq!(full.size_bytes, 9);
+        assert!(!full.content_hash.is_empty());
+        assert_eq!(full.preview_offset, None);
+        let first = super::handle_fs_read_editable_text(request(Some(0)))
+            .await
+            .unwrap();
+        assert_eq!(first.preview_offset, Some(0));
+        assert_eq!(first.content, full.content);
+        assert_eq!(first.size_bytes, full.size_bytes);
+        assert_eq!(first.mtime_ms, full.mtime_ms);
+        assert!(first.content_hash.is_empty());
+        let aligned = super::handle_fs_read_editable_text(request(Some(2)))
+            .await
+            .unwrap();
+        assert_eq!(aligned.content, "tail");
+        assert_eq!(aligned.preview_offset, Some(5));
+        assert_eq!(aligned.preview_next_offset, None);
+        assert_eq!(aligned.size_bytes, full.size_bytes);
+
+        std::fs::write(dir.path().join("bridge.txt"), "a".repeat(256 * 1024 + 1)).unwrap();
+        let first = super::handle_fs_read_editable_text(request(Some(0)))
+            .await
+            .unwrap();
+        assert_eq!(first.content.len(), 256 * 1024);
+        assert_eq!(first.preview_next_offset, Some(256 * 1024));
+        let first =
+            proto::FsReadEditableTextResponse::decode(first.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(first.preview_offset, Some(0));
+        assert_eq!(first.preview_next_offset, Some(256 * 1024));
+        let next = super::handle_fs_read_editable_text(request(first.preview_next_offset))
+            .await
+            .unwrap();
+        assert_eq!(next.content, "a");
+        assert_eq!(next.preview_offset, Some(256 * 1024));
+        assert_eq!(next.preview_next_offset, None);
     }
 
     #[test]
