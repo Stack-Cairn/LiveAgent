@@ -32,6 +32,9 @@ func (r *Relay) backendQueueProjection(conversationID string, out backendQueueRe
 	if out.Item != nil {
 		item := *out.Item
 		out.Item = &item
+		if item.Request != nil {
+			item.UploadedFilesJSON = queuedAttachmentsJSON(item.ID, item.Request.Content)
+		}
 		if alias := aliases[out.Item.ID]; alias != "" {
 			out.Item.ID = alias
 		}
@@ -218,16 +221,13 @@ func (r *Relay) backendQueueAction(ctx context.Context, req *gatewayv2.ChatQueue
 			if !detail.Accepted || detail.Item == nil || detail.Item.Request == nil {
 				return queueError("not_found", "queue edit not found")
 			}
-			prompt, draft, uploads, editErr := editedPrompt(req.GetDraftJson(), req.GetUploadedFilesJson(), detail.Item.Request.Prompt)
+			request, editErr := r.editedQueueRequest(detail.Item.ID, *detail.Item.Request, req.GetDraftJson(), req.GetUploadedFilesJson())
 			if editErr != nil {
 				return queueError("invalid_payload", editErr.Error())
 			}
-			request := *detail.Item.Request
-			request.Prompt = prompt
-			if !strings.HasPrefix(strings.TrimSpace(prompt), "/") {
-				request.PromptCommand = false
-			}
-			input["request"], input["draft_json"], input["uploaded_files_json"] = request, draft, uploads
+			// K-brain accepts resolved content, not WebUI upload references.
+			input["request"], input["draft_json"], input["uploaded_files_json"] = request, req.GetDraftJson(), "[]"
+
 		}
 		if queueActionAdvancesWork(action) {
 			if err := r.client.requireHandshake(ctx, ""); err != nil {
