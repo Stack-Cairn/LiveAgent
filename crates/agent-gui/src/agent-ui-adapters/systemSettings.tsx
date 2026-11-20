@@ -1,11 +1,17 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import { RefreshCw } from "@liveagent/ui/components/IconSet";
 import {
   SettingsSelectContent,
   SettingsSelectTrigger,
 } from "@liveagent/ui/components/settings/SettingsSelect";
-import { Button } from "@liveagent/ui/components/ui/button";
+import { Button, RefreshButton } from "@liveagent/ui/components/ui/button";
 import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  loadDetectedEditors,
+  useEditors,
+  writePreferredEditorId,
+} from "@liveagent/ui/lib/editors/editors";
 import { updateRunNotifications } from "@liveagent/ui/lib/settings/index";
 import {
   AgentActivationSwitch,
@@ -139,6 +145,8 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
         />
       </SettingsGroup>
 
+      {isTauriHost() && <PreferredEditorSettings />}
+
       <SettingsGroup title={t("settings.trayTitle")}>
         <SettingsRow
           title={t("settings.trayShowTitles")}
@@ -168,5 +176,68 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
         ) : null}
       </SettingsGroup>
     </>
+  );
+}
+
+function PreferredEditorSettings() {
+  const { t } = useLocale();
+  const { loaded, editors, preferred } = useEditors();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadDetectedEditors({ refresh: true });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <SettingsGroup title={t("settings.editorGroup")}>
+      <SettingsRow
+        title={t("settings.preferredEditor")}
+        description={
+          !loaded || preferred
+            ? t("settings.preferredEditorDesc")
+            : t("settings.preferredEditorNoneDetected")
+        }
+        control={
+          <div className="flex items-center gap-2">
+            <RefreshButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("settings.preferredEditorRefresh")}
+              title={t("settings.preferredEditorRefresh")}
+              aria-busy={refreshing}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw data-refresh-icon className="size-4" />
+            </RefreshButton>
+            {preferred ? (
+              <Select
+                value={preferred.id}
+                onValueChange={(value) => writePreferredEditorId(String(value))}
+              >
+                <SettingsSelectTrigger
+                  data-testid="preferred-editor-select"
+                  className="min-w-32 justify-between"
+                >
+                  <SelectValue>{preferred.name}</SelectValue>
+                </SettingsSelectTrigger>
+                <SettingsSelectContent>
+                  {editors.map((editor) => (
+                    <SelectItem key={editor.id} value={editor.id}>
+                      {editor.name}
+                    </SelectItem>
+                  ))}
+                </SettingsSelectContent>
+              </Select>
+            ) : null}
+          </div>
+        }
+      />
+    </SettingsGroup>
   );
 }

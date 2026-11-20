@@ -2739,4 +2739,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
     "This model's API has no native web search. Set up a search service in Settings → Web Search",
   "chat.runtime.webSearchVia": "via {provider}",
   "chat.runtime.webSearchViaService": "via search service",
+  "editors.openIn": "Open in {name}",
+  "editors.openInOther": "Open in Other Editor",
+  "editors.openFailed": "Failed to open in the editor",
+  "editors.workspaceOpenFailed": "Failed to open the workspace in the editor",
 } as const satisfies Record<string, string>;

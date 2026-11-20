@@ -179,6 +179,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    openInEditor,
     isExternalPath,
     getDisplayPath,
     search,
@@ -525,6 +526,16 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
     [openWorkspacePath, t],
   );
 
+  const handleOpenInEditor = useCallback(
+    (path: string, editorId: string) => {
+      setActionError(null);
+      void openInEditor(path, editorId).catch((error: unknown) => {
+        setActionError(hostAwareErrorMessage(error, t("projectTools.runtimeUnsupported")));
+      });
+    },
+    [openInEditor, t],
+  );
+
   const handleOpenContainingDirectory = useCallback(
     (path: string) => {
       setActionError(null);
@@ -788,6 +799,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
           onClose={() => setContextMenu(null)}
           onOpenFile={handleOpenFile}
           onOpenExternal={handleOpenExternal}
+          onOpenInEditor={handleOpenInEditor}
           onOpenContainingDirectory={handleOpenContainingDirectory}
           onStartAction={startAction}
           onDelete={(path) => void deletePath(path)}

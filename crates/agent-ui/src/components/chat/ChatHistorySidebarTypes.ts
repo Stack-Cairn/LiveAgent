@@ -105,6 +105,8 @@ export type ChatHistorySidebarProps = {
   onBrowseProjectInFileTree?: (project: WorkspaceProject) => void;
   onConfigureProject?: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
+  /** Desktop only: opens the workspace root in a detected code editor. */
+  onOpenProjectInEditor?: (project: WorkspaceProject, editorId: string) => void;
   onSetProjectPinned?: (project: WorkspaceProject, isPinned: boolean) => void;
   onRemoveProject?: (project: WorkspaceProject, options?: WorkspaceProjectRemoveOptions) => void;
   onArchiveProject?: (project: WorkspaceProject) => void;
@@ -195,6 +197,7 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
   | "onNewConversationForProject"
   | "onBrowseProjectInFileTree"
   | "onBrowseProjectInSystemFileManager"
+  | "onOpenProjectInEditor"
   | "onConfigureProject"
   | "onSetProjectPinned"
   | "onRemoveProject"
@@ -217,6 +220,7 @@ type OptionalWorkspaceSourceKey =
   | "onMoveProjectToGroup"
   | "onToggleWorkspaceGroupCollapsed"
   | "onBrowseProjectInSystemFileManager"
+  | "onOpenProjectInEditor"
   | "archivedProjectPathKeys";
 
 export type ChatHistorySidebarContainerSource = Required<
@@ -382,6 +386,7 @@ export function buildChatHistorySidebarWorkspaceProps(
     onNewConversationForProject: source.onNewConversationForProject,
     onBrowseProjectInFileTree: source.onBrowseProjectInFileTree,
     onBrowseProjectInSystemFileManager: source.onBrowseProjectInSystemFileManager,
+    onOpenProjectInEditor: source.onOpenProjectInEditor,
     onConfigureProject: source.onConfigureProject,
     onSetProjectPinned: source.onSetProjectPinned,
     onRemoveProject: source.onRemoveProject,

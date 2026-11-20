@@ -12,7 +12,7 @@ export type ChatFileLinkMenuState =
     })
   | (MenuPoint & { kind: "url"; url: string });
 
-export type ChatFileLinkMenuIntent = "open" | "reveal" | "default-app";
+export type ChatFileLinkMenuIntent = "open" | "reveal" | "default-app" | { editorId: string };
 
 export type ChatFileLinkMenuSnapshot = {
   menu: ChatFileLinkMenuState | null;
@@ -68,12 +68,14 @@ export function closeChatFileLinkMenu() {
 }
 
 /** Link click handlers pass their link through this so a menu item can turn
- * the click into "reveal in the file manager" or "open with the default app". */
+ * the click into "reveal in the file manager", "open with the default app" or
+ * "open in a code editor". */
 export function withChatFileLinkMenuIntent(link: ChatFileLink): ChatFileLink {
   const intent = pendingIntent;
   pendingIntent = "open";
   if (intent === "reveal") return { ...link, openInFileManager: true };
   if (intent === "default-app") return { ...link, openWithDefaultApp: true };
+  if (typeof intent === "object") return { ...link, openInEditor: intent.editorId };
   return link;
 }
 

@@ -26,7 +26,9 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { useEditors } from "@liveagent/ui/lib/editors/editors";
 import { type MouseEvent as ReactMouseEvent, type RefObject, useCallback } from "react";
+import { OpenInEditorMenuItems } from "../../editors/OpenInEditorMenuItems";
 import {
   isWorkspaceEditablePreviewPath,
   isWorkspacePreviewPath,
@@ -47,6 +49,7 @@ export type FileTreeContextMenuProps = {
   onClose: () => void;
   onOpenFile: (path: string) => void;
   onOpenExternal: (path: string) => void;
+  onOpenInEditor: (path: string, editorId: string) => void;
   onOpenContainingDirectory: (path: string) => void;
   onStartAction: (action: "file" | "folder" | "rename", path: string) => void;
   onDelete: (path: string) => void;
@@ -70,6 +73,7 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
     onClose,
     onOpenFile,
     onOpenExternal,
+    onOpenInEditor,
     onOpenContainingDirectory,
     onStartAction,
     onDelete,
@@ -83,6 +87,17 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
   const { copied, showCopied } = useCopyFeedback(false, COPY_FEEDBACK_DURATION.short);
 
   const hasPathAction = Boolean(path);
+  // Folders (the root included) and files alike open in a detected editor.
+  const { preferred: preferredEditor } = useEditors();
+  const showOpenInEditor = FILE_TREE_HAS_OS_INTEGRATION && preferredEditor !== null;
+  const openInEditorItems = showOpenInEditor ? (
+    <OpenInEditorMenuItems
+      onOpen={(editorId) => {
+        onOpenInEditor(path, editorId);
+        onClose();
+      }}
+    />
+  ) : null;
 
   const handleCopy = useCallback(
     async (event: ReactMouseEvent) => {
@@ -140,6 +155,12 @@ export function FileTreeContextMenu(props: FileTreeContextMenuProps) {
               {t("projectTools.fileTree.openExternal")}
             </ContextMenuItem>
           ) : null}
+          {openInEditorItems}
+          <ContextMenuSeparator />
+        </>
+      ) : showOpenInEditor ? (
+        <>
+          {openInEditorItems}
           <ContextMenuSeparator />
         </>
       ) : null}

@@ -437,6 +437,7 @@ function ChatPageContent(props: ChatPageProps) {
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     handleBrowseWorkspaceProjectInSystemFileManager,
+    handleOpenWorkspaceProjectInEditor,
     handleOpenCreateWorkspaceProject,
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,
@@ -4550,6 +4551,7 @@ function ChatPageContent(props: ChatPageProps) {
           onNewConversationForProject={handleNewConversationForProject}
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
           onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
+          onOpenProjectInEditor={handleOpenWorkspaceProjectInEditor}
           onConfigureProject={setProjectSettingsProject}
           onSetProjectPinned={handleSetWorkspaceProjectPinned}
           onRemoveProject={handleRemoveWorkspaceProject}
