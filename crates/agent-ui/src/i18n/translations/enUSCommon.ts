@@ -271,6 +271,19 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsPrimaryDirectory": "Primary directory",
   "chat.workspaceSettingsPrimaryHint":
     "The primary directory is the default location for conversations, Git, terminals, and the file tree.",
+  "chat.folderTrustTitle": "Folder trust",
+  "chat.folderTrustTrusted": "Trusted",
+  "chat.folderTrustNotTrusted": "Not trusted",
+  "chat.folderTrustChecking": "Checking",
+  "chat.folderTrustUnavailable": "Unavailable",
+  "chat.folderTrustUnknown": "Unknown",
+  "chat.folderTrustGrant": "Trust folder",
+  "chat.folderTrustRevoke": "Revoke trust",
+  "chat.folderTrustDescription":
+    "Trusting this folder lets its project prompts, slash commands and other project files take effect. Only trust folders whose contents you trust. Changes apply immediately.",
+  "chat.folderTrustInherited": "Trusted because its parent folder {path} is trusted.",
+  "chat.folderTrustUnsupported":
+    "This backend version cannot change folder trust. Open the folder once in the kn terminal to trust it.",
   "chat.workspaceSettingsDirectoriesDescription":
     "Additional directory grants only apply to structured file tools; command and process tools still follow existing tool policy.",
   "chat.workspaceSettingsAddDirectory": "Add directory",

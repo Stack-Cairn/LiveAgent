@@ -253,6 +253,19 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.workspaceSettingsKindHistory": "历史工作区",
   "chat.workspaceSettingsPrimaryDirectory": "主目录",
   "chat.workspaceSettingsPrimaryHint": "主目录是会话、Git、终端和文件树的默认工作位置。",
+  "chat.folderTrustTitle": "目录信任",
+  "chat.folderTrustTrusted": "已信任",
+  "chat.folderTrustNotTrusted": "未信任",
+  "chat.folderTrustChecking": "检查中",
+  "chat.folderTrustUnavailable": "不可用",
+  "chat.folderTrustUnknown": "未知",
+  "chat.folderTrustGrant": "信任此目录",
+  "chat.folderTrustRevoke": "撤销信任",
+  "chat.folderTrustDescription":
+    "信任此目录后，其中的项目提示词、斜杠指令和其他项目文件才会生效。只信任内容可靠的目录。修改立即生效。",
+  "chat.folderTrustInherited": "因上级目录 {path} 已受信任而受信任。",
+  "chat.folderTrustUnsupported":
+    "当前后端版本不支持修改目录信任。请在 kn 终端中打开一次该目录来信任它。",
   "chat.workspaceSettingsDirectoriesDescription":
     "附加目录授权仅作用于结构化文件工具，命令与进程工具仍遵循现有策略。",
   "chat.workspaceSettingsAddDirectory": "添加目录",

@@ -2,8 +2,10 @@ import type { WorkspaceProject } from "@liveagent/app/lib/settings";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import { Input } from "@liveagent/ui/components/ui/input";
+import type { WorkspaceFolderTrustClient } from "@liveagent/ui/contracts/workspaceFolderTrust";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { WorkspaceFolderTrustSection } from "./WorkspaceFolderTrustSection";
 
 export function WorkspaceGeneralSettingsPanel(props: {
   project: WorkspaceProject;
@@ -13,6 +15,8 @@ export function WorkspaceGeneralSettingsPanel(props: {
   projectNameInvalid: boolean;
   saving: boolean;
   onProjectNameChange: (name: string) => void;
+  /** Omitted where the host cannot reach a backend that owns folder trust. */
+  trustClient?: WorkspaceFolderTrustClient;
 }) {
   const {
     project,
@@ -22,6 +26,7 @@ export function WorkspaceGeneralSettingsPanel(props: {
     projectNameInvalid,
     saving,
     onProjectNameChange,
+    trustClient,
   } = props;
   const { t } = useLocale();
 
@@ -101,6 +106,10 @@ export function WorkspaceGeneralSettingsPanel(props: {
       <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
         {t("chat.workspaceSettingsPrimaryHint")}
       </p>
+
+      {trustClient ? (
+        <WorkspaceFolderTrustSection path={project.path} client={trustClient} />
+      ) : null}
     </section>
   );
 }
