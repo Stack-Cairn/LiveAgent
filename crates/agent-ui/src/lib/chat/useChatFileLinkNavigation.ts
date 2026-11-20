@@ -2,6 +2,7 @@ import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
 import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import { useCallback } from "react";
+import { type OpenInEditorRequest, openPathInEditor } from "../editors/editors";
 import type { ChatFileLink } from "./chatFileLinks";
 import {
   type OpenChatFileLinkParams,
@@ -21,6 +22,7 @@ type UseChatFileLinkNavigationParams = {
   openWorkspaceEditorFile: (request: WorkspaceOpenRequest) => void;
   openWorkspaceFilePreview: (request: WorkspacePreviewRequest) => void;
   openLink?: (params: OpenChatFileLinkParams) => Promise<OpenChatFileLinkResult>;
+  openInEditor?: (request: OpenInEditorRequest) => Promise<unknown>;
   getErrorMessage?: (error: unknown) => string;
 };
 
@@ -43,6 +45,7 @@ export function useChatFileLinkNavigation(params: UseChatFileLinkNavigationParam
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
     openLink = openChatFileLink,
+    openInEditor = openPathInEditor,
     getErrorMessage = defaultErrorMessage,
   } = params;
 
@@ -61,6 +64,19 @@ export function useChatFileLinkNavigation(params: UseChatFileLinkNavigationParam
           const resultPath = result.path?.trim() ?? "";
           if (!resultWorkdir || !resultPath) {
             notifyError(FILE_OPEN_FAILED);
+            return;
+          }
+          // "Open in <Editor>": the host resolved and vetted the target the
+          // same way as a plain click; hand it to the editor instead of the
+          // in-app editor, preview or file tree.
+          if (link.openInEditor) {
+            await openInEditor({
+              editorId: link.openInEditor,
+              workdir: resultWorkdir,
+              path: resultPath,
+              line: result.line,
+              column: result.column,
+            });
             return;
           }
           if (result.action === "directory") {
@@ -114,6 +130,7 @@ export function useChatFileLinkNavigation(params: UseChatFileLinkNavigationParam
       getErrorMessage,
       notifyError,
       onRevealInFileTree,
+      openInEditor,
       openLink,
       openWorkspaceEditorFile,
       openWorkspaceFilePreview,

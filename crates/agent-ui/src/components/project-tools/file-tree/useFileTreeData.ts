@@ -7,6 +7,7 @@
 
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { openPathInEditor } from "../../../lib/editors/editors";
 import { invokeFs, isFsBackendError } from "../../../lib/tools/fsBackend";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import {
@@ -96,6 +97,7 @@ export type UseFileTreeDataResult = {
   renameEntry: (fromPath: string, name: string) => Promise<string>;
   deleteEntry: (path: string) => Promise<void>;
   openWorkspacePath: (path: string, mode: "open" | "reveal") => Promise<void>;
+  openInEditor: (path: string, editorId: string) => Promise<void>;
   isExternalPath: (path: string) => boolean;
   getDisplayPath: (path: string) => string;
   search: FileTreeSearchState;
@@ -601,6 +603,22 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     [resolveTreePath, t],
   );
 
+  // Desktop-only like openWorkspacePath; the menu hides without editors.
+  const openInEditor = useCallback(
+    async (path: string, editorId: string) => {
+      const target = resolveTreePath(path);
+      if (!target) {
+        throw new Error(t("editors.openFailed"));
+      }
+      try {
+        await openPathInEditor({ editorId, workdir: target.workdir, path: target.fsPath });
+      } catch (error) {
+        throw new Error(toFileTreeErrorMessage(error, t("editors.openFailed")));
+      }
+    },
+    [resolveTreePath, t],
+  );
+
   const isExternalPath = useCallback(
     (path: string) => Boolean(resolveTreePath(path)?.external),
     [resolveTreePath],
@@ -648,6 +666,7 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     renameEntry,
     deleteEntry,
     openWorkspacePath,
+    openInEditor,
     isExternalPath,
     getDisplayPath,
     search,

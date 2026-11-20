@@ -1,6 +1,7 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { revealItemInDir } from "@liveagent/app/shims/tauriOpener";
 import type { ApplicationViewId } from "@liveagent/ui/application/ApplicationView";
+import { openPathInEditor } from "@liveagent/ui/lib/editors/editors";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { sidebarScopeKey } from "@liveagent/ui/lib/sidebar/scope";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
@@ -425,6 +426,21 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [checkWorkspaceProjectDirectory, setErrorMessage, t],
   );
 
+  const handleOpenWorkspaceProjectInEditor = useCallback(
+    async (project: WorkspaceProject, editorId: string) => {
+      if (!(await checkWorkspaceProjectDirectory(project))) {
+        return;
+      }
+
+      try {
+        await openPathInEditor({ editorId, workdir: project.path.trim(), path: "" });
+      } catch (error) {
+        setErrorMessage(asErrorMessage(error, t("editors.workspaceOpenFailed")));
+      }
+    },
+    [checkWorkspaceProjectDirectory, setErrorMessage, t],
+  );
+
   const handleOpenCreateWorkspaceProject = useCallback(() => {
     setWorkspaceCreateModalOpen(true);
   }, []);
@@ -760,6 +776,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     handleBrowseWorkspaceProjectInSystemFileManager,
+    handleOpenWorkspaceProjectInEditor,
     handleOpenCreateWorkspaceProject,
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,

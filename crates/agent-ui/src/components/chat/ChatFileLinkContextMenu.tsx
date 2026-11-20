@@ -1,4 +1,5 @@
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { OpenInEditorMenuItems } from "@liveagent/ui/components/editors/OpenInEditorMenuItems";
 import { AppWindow, Copy, FileText, FolderOpen, Globe } from "@liveagent/ui/components/IconSet";
 import {
   ContextMenuItem,
@@ -20,8 +21,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 const WEB_PAGE_PATTERN = /\.(?:html?|xhtml|svg)$/i;
 
 type ChatFileLinkContextMenuHostProps = {
-  /** Desktop only: launching the host's default app means nothing to a
-   * WebUI viewer on another device. */
+  /** Desktop only: launching the host's default app (or a code editor)
+   * means nothing to a WebUI viewer on another device. */
   canOpenWithDefaultApp?: boolean;
 };
 
@@ -58,6 +59,11 @@ export function ChatFileLinkContextMenuHost({
             <FolderOpen className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1">{t("chat.fileLink.openContainingDirectory")}</span>
           </ContextMenuItem>
+          {canOpenWithDefaultApp ? (
+            <OpenInEditorMenuItems
+              onOpen={(editorId) => openFromChatFileLinkMenu(state, { editorId })}
+            />
+          ) : null}
           {canOpenWithDefaultApp ? (
             <ContextMenuItem onClick={() => openFromChatFileLinkMenu(state, "default-app")}>
               {WEB_PAGE_PATTERN.test(state.link.path) ? (

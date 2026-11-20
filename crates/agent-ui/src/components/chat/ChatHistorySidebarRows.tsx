@@ -55,6 +55,7 @@ import {
   clearActiveConversationReferenceDrag,
   writeConversationReferenceDragPayload,
 } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
+import { useEditors } from "@liveagent/ui/lib/editors/editors";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   memo,
@@ -70,6 +71,7 @@ import {
 import { type SidebarConversation, sameExternalRun } from "../../lib/sidebar/types";
 import type { SidebarReorderPointer } from "../../lib/sidebar/useSidebarReorderDrag";
 import type { WorkspaceProjectGroup } from "../../lib/workspaceProjectTypes";
+import { OpenInEditorMenuItems } from "../editors/OpenInEditorMenuItems";
 import { SidebarMenuAction, SidebarMenuButton } from "../ui/sidebar";
 import {
   HISTORY_RENAME_INPUT_CLASS,
@@ -1353,6 +1355,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
   onBrowseProjectInFileTree?: (project: WorkspaceProject) => void;
   onConfigureProject: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
+  onOpenProjectInEditor?: (project: WorkspaceProject, editorId: string) => void;
   onSetProjectPinned: (project: WorkspaceProject, isPinned: boolean) => void;
   onRemoveProject: (project: WorkspaceProject, options?: WorkspaceProjectRemoveOptions) => void;
   // Archived rows render disabled: no selection (so no new conversations),
@@ -1396,6 +1399,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
     onBrowseProjectInFileTree,
     onConfigureProject,
     onBrowseProjectInSystemFileManager,
+    onOpenProjectInEditor,
     onSetProjectPinned,
     onRemoveProject,
     isArchived,
@@ -1487,6 +1491,18 @@ export const ProjectRow = memo(function ProjectRow(props: {
     }
     onBrowseProjectInSystemFileManager?.(project);
   }, [isInteractionDisabled, onBrowseProjectInSystemFileManager, project]);
+
+  const handleOpenInEditor = useCallback(
+    (editorId: string) => {
+      if (isInteractionDisabled) {
+        return;
+      }
+      onOpenProjectInEditor?.(project, editorId);
+    },
+    [isInteractionDisabled, onOpenProjectInEditor, project],
+  );
+  const hasEditor = useEditors().preferred !== null;
+  const canOpenInEditor = Boolean(onOpenProjectInEditor) && hasEditor && !isMissing;
 
   const handleArchive = useCallback(() => {
     if (isInteractionDisabled) {
@@ -1892,7 +1908,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     </DropdownMenuItem>
                   ) : null}
                   {/* 第二组：浏览定位 —— 在文件树 / 系统资源管理器中打开。 */}
-                  {onBrowseProjectInFileTree || onBrowseProjectInSystemFileManager ? (
+                  {onBrowseProjectInFileTree ||
+                  onBrowseProjectInSystemFileManager ||
+                  canOpenInEditor ? (
                     <DropdownMenuSeparator />
                   ) : null}
                   {onBrowseProjectInFileTree ? (
@@ -1914,6 +1932,14 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       <FolderOpen className="size-3.5 text-muted-foreground" />
                       {t("chat.workspaceBrowseInSystemFileManager")}
                     </DropdownMenuItem>
+                  ) : null}
+                  {canOpenInEditor ? (
+                    <OpenInEditorMenuItems
+                      variant="dropdown"
+                      disabled={isInteractionDisabled}
+                      iconClassName="text-muted-foreground"
+                      onOpen={handleOpenInEditor}
+                    />
                   ) : null}
                   {/* 第三组：危险操作 —— 固定在菜单底部并以分隔线隔开。 */}
                   {!isDefaultProject ? (

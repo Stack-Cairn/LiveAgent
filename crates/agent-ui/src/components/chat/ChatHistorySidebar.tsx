@@ -270,6 +270,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onBrowseProjectInFileTree,
     onConfigureProject,
     onBrowseProjectInSystemFileManager,
+    onOpenProjectInEditor,
     onSetProjectPinned,
     onRemoveProject,
     onArchiveProject,
@@ -832,6 +833,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       onBrowseProjectInSystemFileManager?.(project);
     }
   });
+  const handleOpenProjectInEditor = useStableEvent(
+    (project: WorkspaceProject, editorId: string) => {
+      if (!sectionsDisabled) {
+        onOpenProjectInEditor?.(project, editorId);
+      }
+    },
+  );
   const handleSetProjectPinned = useStableEvent((project: WorkspaceProject, isPinned: boolean) => {
     if (!sectionsDisabled) {
       onSetProjectPinned?.(project, isPinned);
@@ -1476,6 +1484,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           onBrowseProjectInSystemFileManager={
             onBrowseProjectInSystemFileManager ? handleBrowseProjectInSystemFileManager : undefined
           }
+          onOpenProjectInEditor={onOpenProjectInEditor ? handleOpenProjectInEditor : undefined}
           onConfigureProject={handleConfigureProject}
           onSetProjectPinned={handleSetProjectPinned}
           onRemoveProject={handleRemoveProject}

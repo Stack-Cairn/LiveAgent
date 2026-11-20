@@ -2591,4 +2591,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
     "当前模型接口不支持原生联网搜索，可在 设置 → 联网搜索 配置搜索服务",
   "chat.runtime.webSearchVia": "经由 {provider}",
   "chat.runtime.webSearchViaService": "经由搜索服务",
+  "editors.openIn": "在 {name} 中打开",
+  "editors.openInOther": "在其他编辑器中打开",
+  "editors.openFailed": "在编辑器中打开失败",
+  "editors.workspaceOpenFailed": "在编辑器中打开工作空间失败",
 } as const satisfies Record<string, string>;

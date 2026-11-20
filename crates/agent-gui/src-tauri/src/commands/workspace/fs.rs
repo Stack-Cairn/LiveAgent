@@ -157,7 +157,7 @@ pub struct FsCommandError {
 }
 
 impl FsCommandError {
-    fn other(message: impl Into<String>) -> Self {
+    pub(crate) fn other(message: impl Into<String>) -> Self {
         Self {
             code: FsErrorCode::Other,
             message: message.into(),
@@ -3814,23 +3814,59 @@ pub(crate) fn fs_open_workspace_path_sync(
         .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
+/// A workspace entry about to be handed to an external program (the default
+/// app, the file manager or a code editor).
+#[derive(Debug)]
+pub(crate) struct WorkspaceLaunchTarget {
+    /// Canonical absolute path, inside the workspace root.
+    pub path: PathBuf,
+    pub is_dir: bool,
+}
+
+fn resolve_scoped_launch_target(path: &ScopedFsPath) -> Result<WorkspaceLaunchTarget, FsError> {
+    let target = resolve_target(&path.root, &path.relative_path)
+        .map_err(|error| remap_scoped_path_error(path, error))?;
+    let meta = fs::metadata(&target)?;
+    if !meta.is_file() && !meta.is_dir() {
+        return Err(FsError::Other(
+            "Only regular files and directories can be opened".to_string(),
+        ));
+    }
+    Ok(WorkspaceLaunchTarget {
+        path: target,
+        is_dir: meta.is_dir(),
+    })
+}
+
+/// Resolves `path` inside `workdir` for an external launch. An empty path
+/// (or ".") names the workspace root itself.
+pub(crate) fn resolve_workspace_launch_target(
+    workdir: &str,
+    path: &str,
+) -> Result<WorkspaceLaunchTarget, FsCommandError> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "." {
+        let root = canonicalize_workdir(workdir)?;
+        return Ok(WorkspaceLaunchTarget {
+            path: root,
+            is_dir: true,
+        });
+    }
+    let scoped = resolve_scoped_fs_path(workdir, path)?;
+    resolve_scoped_launch_target(&scoped)
+        .map_err(|e| FsCommandError::from(e).with_workdir(&scoped.root))
+}
+
 fn fs_open_workspace_path_impl(
     path: &ScopedFsPath,
     mode: Option<String>,
 ) -> Result<OpenWorkspacePathResponse, FsError> {
     let logical_path = path.logical_path.clone();
-    let target = resolve_target(&path.root, &path.relative_path)
-        .map_err(|error| remap_scoped_path_error(path, error))?;
-    let meta = fs::metadata(&target)?;
-    let kind = if meta.is_file() {
-        "file"
-    } else if meta.is_dir() {
-        "dir"
-    } else {
-        return Err(FsError::Other(
-            "Only regular files and directories can be opened".to_string(),
-        ));
-    };
+    let WorkspaceLaunchTarget {
+        path: target,
+        is_dir,
+    } = resolve_scoped_launch_target(path)?;
+    let kind = if is_dir { "dir" } else { "file" };
     let normalized_mode = mode
         .as_deref()
         .unwrap_or("open")

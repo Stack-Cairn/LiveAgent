@@ -92,6 +92,9 @@ macro_rules! app_invoke_handler {
             commands::fs::fs_edit_text,
             commands::fs::fs_delete,
             commands::fs::fs_open_workspace_path,
+            // Open in external code editor
+            commands::editors::editor_list,
+            commands::editors::editor_open_path,
             commands::fs::fs_create_dir,
             commands::fs::fs_rename,
             commands::fs::fs_roots,
