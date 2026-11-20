@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/Stack-Cairn/K-brain",
-  "sourceRevision": "e4133bff50ae4d92fdbb405432f9afc697b32a16",
+  "sourceRevision": "f4b63357107b17c0450b195a8b12f5daa7ad2e51",
   "protocol": "kbrain.agent.v1",
   "requiredBackendFlags": [
     "-parent-stdio",
@@ -46,63 +46,63 @@
   },
   "downloads": {
     "aarch64-apple-darwin": {
-      "sourceRevision": "e4133bff50ae4d92fdbb405432f9afc697b32a16",
+      "sourceRevision": "f4b63357107b17c0450b195a8b12f5daa7ad2e51",
       "assets": {
         "backend": "k-brain-darwin-arm64",
         "computer": "k-brain-computer-darwin-arm64"
       },
       "sha256": {
-        "backend": "9210e19b87985c50f1b6bc130bb8b4e36754d29f1cfff54d21fc3a3a57d3d09c",
-        "computer": "807e2cfa8b2fcf7ec673ddeafff115bbc351546e72642fe78c06e83a6d3fbdf7"
+        "backend": "cb6bb375dd207adf5dc6d2f46fb353ba2d50e00d38cfeb4f1107dfe9fa60ffc0",
+        "computer": "478c7bc5449b937c61b8e8d50ba8c83873dc3748c0a85cfe38a24a2d06a30899"
       },
       "urls": {
-        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-darwin-arm64",
-        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-computer-darwin-arm64"
+        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-darwin-arm64",
+        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-computer-darwin-arm64"
       }
     },
     "x86_64-apple-darwin": {
-      "sourceRevision": "e4133bff50ae4d92fdbb405432f9afc697b32a16",
+      "sourceRevision": "f4b63357107b17c0450b195a8b12f5daa7ad2e51",
       "assets": {
         "backend": "k-brain-darwin-x64",
         "computer": "k-brain-computer-darwin-x64"
       },
       "sha256": {
-        "backend": "152ef2456eb9181628891e8073ec7d8f9a31507017333a4138f5b96bba40bf5d",
-        "computer": "94d52b939281f13d5963458f3d1f1b7c1e592ee6c3610f0d1122f75869a4ff72"
+        "backend": "8b017ff5693614d64ca31511e9899c81a3c4796802ac0b684546462a21d911fc",
+        "computer": "8ff54c6316bdf3285e4172da66bff5b3fe94453d4dea23809304b2b168c56441"
       },
       "urls": {
-        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-darwin-x64",
-        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-computer-darwin-x64"
+        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-darwin-x64",
+        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-computer-darwin-x64"
       }
     },
     "x86_64-unknown-linux-gnu": {
-      "sourceRevision": "e4133bff50ae4d92fdbb405432f9afc697b32a16",
+      "sourceRevision": "f4b63357107b17c0450b195a8b12f5daa7ad2e51",
       "assets": {
         "backend": "k-brain-linux-x64",
         "computer": "k-brain-computer-linux-x64"
       },
       "sha256": {
-        "backend": "bbb2db8f9000a8f16e953b91a3b36e277d0eb63145102944469f3a7d7ba85a1d",
-        "computer": "6146ed20b31d160ba246462e6890182a87ba2fbb6757853c0ca9a64dae92292f"
+        "backend": "310ef7fdc56bc57d3eb5dbcfb680e68ae455f4d572bb02eb767668a66acd4bec",
+        "computer": "740b2d6d7054259b8f7895af9d7768a585fabd2df5eb9bb6e7fd9074f01f7ff2"
       },
       "urls": {
-        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-linux-x64",
-        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-computer-linux-x64"
+        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-linux-x64",
+        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-computer-linux-x64"
       }
     },
     "x86_64-pc-windows-msvc": {
-      "sourceRevision": "e4133bff50ae4d92fdbb405432f9afc697b32a16",
+      "sourceRevision": "f4b63357107b17c0450b195a8b12f5daa7ad2e51",
       "assets": {
         "backend": "k-brain-windows-x64.exe",
         "computer": "k-brain-computer-windows-x64.exe"
       },
       "sha256": {
-        "backend": "0d476d105278dffadccd354da783c3a29c91175dcc3b9c57fcf7f7e16202719c",
-        "computer": "7b8a3b929f09733f0bc3c88783f1c67ecf8f76242b29b058b1e7580d5e52c9f9"
+        "backend": "f165dc2c777ca801f46824b077239f5d39db63909d3531e2efc5333cba3f2097",
+        "computer": "3b338d8b3580f0ea48ee5bf656c47ecdd97a1428f192f0a9b643ada042aacb86"
       },
       "urls": {
-        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-windows-x64.exe",
-        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.39/k-brain-computer-windows-x64.exe"
+        "backend": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-windows-x64.exe",
+        "computer": "https://github.com/Stack-Cairn/K-brain/releases/download/v0.107.40/k-brain-computer-windows-x64.exe"
       }
     }
   },
