@@ -168,6 +168,10 @@ import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { isKBrainBackendEnabled, isKBrainBrowserHost } from "../lib/host";
 import { useKBrainCatalogSettings } from "../lib/kbrain/catalog";
 import { createKBrainClient } from "../lib/kbrain/client";
+import {
+  createKBrainFolderTrustClient,
+  subscribeKBrainFolderTrustChanged,
+} from "../lib/kbrain/folderTrust";
 import { publishGoalState } from "../lib/kbrain/goalStore";
 import { subscribeHistoryImported } from "../lib/kbrain/manualHistoryImport";
 import { getKBrainSessionId } from "../lib/kbrain/mapping";
@@ -1918,6 +1922,22 @@ function ChatPageContent(props: ChatPageProps) {
       clearTimeout(retry);
     };
   }, [currentConversationId, isSending, kBrainClient, watchedKBrainSessionId]);
+  const folderTrustClient = useMemo(
+    () => (kBrainBackendEnabled ? createKBrainFolderTrustClient() : undefined),
+    [kBrainBackendEnabled],
+  );
+  const [folderTrustRevision, setFolderTrustRevision] = useState(0);
+  useEffect(
+    () =>
+      subscribeKBrainFolderTrustChanged(() => {
+        // Project slash commands follow folder trust. New host references make
+        // every composer refetch its command catalog right away.
+        backgroundComposerCommandHostsRef.current.clear();
+        setFolderTrustRevision((revision) => revision + 1);
+      }),
+    [],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folderTrustRevision renews the host so the composer refetches trust-gated project commands.
   const composerCommandHost = useMemo<ComposerCommandHost>(
     () =>
       createGuiComposerCommandHost({
@@ -1952,7 +1972,7 @@ function ChatPageContent(props: ChatPageProps) {
         getModelOptions: () => composerCommandLatestRef.current.modelOptions,
         selectModel: (selection) => composerCommandLatestRef.current.handleSelectModel(selection),
       }),
-    [currentConversationId, displayedConversationWorkdir, kBrainClient, t],
+    [currentConversationId, displayedConversationWorkdir, folderTrustRevision, kBrainClient, t],
   );
 
   const activeViewRef = useRef(activeView);
@@ -4819,6 +4839,7 @@ function ChatPageContent(props: ChatPageProps) {
           settings={settings}
           skills={availableSkills}
           rootClient={desktopWorkspaceProjectRootClient}
+          trustClient={folderTrustClient}
           onClose={() => setProjectSettingsProject(null)}
           onRenameProject={(name) => {
             commitWorkspaceProjectRename(projectSettingsProject, name);
