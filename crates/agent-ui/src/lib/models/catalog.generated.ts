@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-18";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-19";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -75,6 +75,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "gemini-4-argon", contextWindow: 1048576, maxOutputToken: 32768, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
     { id: "gemini-4-carbon", contextWindow: 1048576, maxOutputToken: 32768, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
     { id: "gemini-4-hydrogen", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
+    { id: "gemini-4-neon", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
     { id: "gemini-embedding-001", contextWindow: 2048, maxOutputToken: 1, inputModalities: ["text"] },
     { id: "gemini-embedding-2", contextWindow: 8192, maxOutputToken: 1, inputModalities: ["text", "image", "audio", "video", "pdf"] },
     { id: "gemini-flash-latest", contextWindow: 1048576, maxOutputToken: 65536, inputModalities: ["text", "image", "audio", "video", "pdf"], thinking: { levels: ["low", "medium", "high"], off: false } },
