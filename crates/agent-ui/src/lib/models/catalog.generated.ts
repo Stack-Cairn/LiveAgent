@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-19";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-11-21";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -145,7 +145,6 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "grok-4.5", contextWindow: 500000, maxOutputToken: 32000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
     { id: "grok-4.6", contextWindow: 500000, maxOutputToken: 32000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
     { id: "grok-4.7", contextWindow: 500000, maxOutputToken: 32000, inputModalities: ["text", "image", "pdf"], thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
-    { id: "grok-build-0.1", contextWindow: 256000, maxOutputToken: 32000, inputModalities: ["text", "image", "pdf"], thinking: { levels: [], off: false } },
   ],
   deepseek: [
     { id: "deepseek-v4-flash", contextWindow: 1048576, maxOutputToken: 393216, inputModalities: ["text", "image"], thinking: { levels: ["low", "high", "max"], off: true } },
