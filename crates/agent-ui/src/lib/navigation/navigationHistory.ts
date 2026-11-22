@@ -5,6 +5,9 @@ import {
   type SidebarShortcuts,
 } from "../settings/sidebarShortcuts";
 
+// Clicks inside an open modal (shared Dialog/AlertDialog) never navigate.
+const MODAL_ROLE_SELECTOR = ["dialog", "alertdialog"].map((role) => `[role="${role}"]`).join(", ");
+
 /**
  * Back / forward history of what the main area shows (a conversation or a
  * full-page view such as a resource hub). Locations are opaque strings chosen
@@ -176,7 +179,7 @@ export function useNavigationHistory(options: {
       if (event.button !== 3 && event.button !== 4) return;
       // A dialog over the workbench keeps what is behind it in place.
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('[role="dialog"], [role="alertdialog"]')) return;
+      if (target?.closest(MODAL_ROLE_SELECTOR)) return;
       if (go(event.button === 3 ? -1 : 1)) event.preventDefault();
     };
     window.addEventListener("mouseup", handleMouseUp);
