@@ -142,9 +142,8 @@ function renderTurn(root, { expandByDefault, running = false, active = false }) 
             React.Fragment,
             null,
             React.createElement(ThinkingDisclosure, {
-              text: "先读取文件，再检查测试。",
-              trackKey: "turn-1:r1:thinking-1",
-              active,
+              segments: [{ key: "turn-1:r1:thinking-1", text: "先读取文件，再检查测试。" }],
+              activeKey: active ? "turn-1:r1:thinking-1" : null,
             }),
             React.createElement(ToolTraceGroup, {
               items: [toolItem],
@@ -233,19 +232,20 @@ test("a manual collapse still belongs to the user while the preference is on", (
   act(() => root.unmount());
 });
 
-// A live turn with the preference off: the running batch and the streaming
-// thinking segment are open, and fold when they settle — unless the reader has
-// scrolled away from the bottom, where a fold would shift what they are reading.
-function renderLiveRows(root, { live, following }) {
+// A live turn with the preference off and detailed progress on: the running
+// batch and the streaming thinking segment are open, and fold when they settle
+// — unless the reader has scrolled away from the bottom, where a fold would
+// shift what they are reading. The quiet view (detailed progress off) keeps
+// them folded throughout.
+function renderLiveRows(root, { live, following, detailedProgress = true }) {
   act(() => {
     root.render(
       React.createElement(
         ProcessDisclosureProvider,
-        { expandByDefault: false, isViewportFollowing: () => following },
+        { expandByDefault: false, detailedProgress, isViewportFollowing: () => following },
         React.createElement(ThinkingDisclosure, {
-          text: "先读取文件，再检查测试。",
-          trackKey: "turn-2:r1:thinking-1",
-          active: live,
+          segments: [{ key: "turn-2:r1:thinking-1", text: "先读取文件，再检查测试。" }],
+          activeKey: live ? "turn-2:r1:thinking-1" : null,
         }),
         React.createElement(ToolTraceGroup, {
           items: [live ? { toolCall: toolItem.toolCall } : toolItem],
@@ -276,6 +276,21 @@ test("live rows stay open on settle while the reader is scrolled away", () => {
   renderLiveRows(root, { live: true, following: false });
   renderLiveRows(root, { live: false, following: false });
   assert.deepEqual(disclosureStates(container), ["true", "true"]);
+
+  act(() => root.unmount());
+});
+
+test("the quiet view keeps live reasoning and tool rows folded", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderLiveRows(root, { live: true, following: true, detailedProgress: false });
+  assert.deepEqual(disclosureStates(container), ["false", "false"]);
+  // No spinner or shimmer on the folded rows: the turn's status row is the one live indicator.
+  assert.doesNotMatch(container.innerHTML, /animate-spin|shimmer/);
+
+  renderLiveRows(root, { live: false, following: true, detailedProgress: false });
+  assert.deepEqual(disclosureStates(container), ["false", "false"]);
 
   act(() => root.unmount());
 });

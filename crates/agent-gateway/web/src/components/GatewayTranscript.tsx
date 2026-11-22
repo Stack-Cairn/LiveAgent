@@ -126,6 +126,7 @@ type GatewayTranscriptProps = {
   redactToolContent?: boolean;
   /** Start the agent process disclosures expanded (settings, #1154). */
   expandProcessByDefault?: boolean;
+  showDetailedProgress?: boolean;
   /** Selected message text → composer blockquote. Omit to disable the quote button. */
   onQuoteSelection?: (text: string) => void;
 };
@@ -1069,6 +1070,7 @@ export function GatewayTranscript({
   readOnly = false,
   redactToolContent = false,
   expandProcessByDefault = false,
+  showDetailedProgress = false,
   onQuoteSelection,
 }: GatewayTranscriptProps) {
   const transcriptListRef = useRef<HTMLDivElement | null>(null);
@@ -1129,6 +1131,7 @@ export function GatewayTranscript({
             never collide across conversations in the itemSizeCache. */}
         <ProcessDisclosureProvider
           expandByDefault={expandProcessByDefault}
+          detailedProgress={showDetailedProgress}
           isViewportFollowing={isViewportFollowing}
         >
           <GatewayTranscriptListRegion

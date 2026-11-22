@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/index";
-import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/assistantStatus";
-import { parseRunProgress } from "../../lib/chat/runProgress";
+import { VIBING_STATUS } from "../../lib/chat/assistantStatus";
 import { cn } from "../../lib/shared/utils";
 import { Loader2, Square } from "../IconSet";
 import { CompactionBand } from "./CompactionBand";
-import { LiveSparkle } from "./LiveSparkle";
-import { RunProgressStatus } from "./RunProgressStatus";
+import { LiveTurnStatus } from "./LiveTurnStatus";
 
 export { isStoppedReply, VIBING_STATUS } from "../../lib/chat/assistantStatus";
 
@@ -51,21 +49,22 @@ export function CompactingText({ className }: { className?: string }) {
   );
 }
 
+/**
+ * The single live status row of a running turn (see LiveTurnStatus). Every
+ * surface that shows a reply in progress renders exactly one of these, below
+ * the turn's content; nothing else in the turn carries a spinner.
+ */
 export function LiveAssistantStatus(props: {
   status: string | null;
   isCompaction?: boolean;
+  awaitingDecision?: boolean;
+  startedAtMs?: number;
+  hasRunningTool?: boolean;
+  toolActivity?: { label: string; title?: string } | null;
   className?: string;
 }) {
-  const { status, isCompaction = false, className } = props;
-  const normalizedStatus = normalizeLiveToolStatus(status);
-  if (isCompaction) return <CompactingText className={className} />;
-  if (parseRunProgress(status)) return <RunProgressStatus status={status} />;
-  if (!normalizedStatus || normalizedStatus === VIBING_STATUS) {
-    // No concrete activity to report — show the liveness sparkle instead of a
-    // filler phrase, matching the turn-level indicator under live replies.
-    return <LiveSparkle className={className} />;
-  }
-  return <AssistantStatus className={className}>{normalizedStatus}</AssistantStatus>;
+  const { isCompaction = false, ...rest } = props;
+  return <LiveTurnStatus {...rest} compacting={isCompaction} />;
 }
 
 export function AssistantStatus({

@@ -19,6 +19,10 @@ const guiBubbleSource = readSource("../../src/pages/chat/components/AssistantBub
 const activityRowSource = readSource("../../src/pages/chat/transcript/AssistantActivityRow.tsx");
 const rowModelSource = readSource("../../src/pages/chat/transcript/rowModel.ts");
 
+const liveTurnStatusSource = readSource(
+  "../../../agent-ui/src/components/chat/LiveTurnStatus.tsx",
+);
+
 test("reasoning renders as expandable disclosures instead of vanishing status text", () => {
   assert.match(roundContentSource, /<ThinkingDisclosure/);
   assert.match(roundContentSource, /resolveActiveThinkingEntryKey/);
@@ -28,8 +32,10 @@ test("reasoning renders as expandable disclosures instead of vanishing status te
   assert.match(disclosureSource, /data-thinking-disclosure/);
   assert.match(disclosureSource, /<Markdown/);
   assert.match(disclosureSource, /resolveThinkingDurationMs/);
-  assert.match(disclosureSource, /chat\.thoughtFor/);
+  assert.match(disclosureSource, /chat\.thoughtDuration/);
   assert.match(disclosureSource, /chat\.thinkingProcess/);
+  // Reasoning between tool calls folds into the tool group instead of its own rows.
+  assert.match(toolTraceSource, /<ThinkingDisclosure/);
 });
 
 test("collapsing the live work trace re-homes the active block below the header", () => {
@@ -37,42 +43,36 @@ test("collapsing the live work trace re-homes the active block below the header"
   assert.match(workTraceSource, /running && hasDetails && !expanded && collapsedTail/);
   assert.match(workTraceSource, /data-chat-work-collapsed-tail/);
 
-  assert.match(roundContentSource, /resolveActiveWorkEntry/);
-  assert.match(
-    roundContentSource,
-    /collapsedTail=\{collapsedTailEntry \? renderEntry\(collapsedTailEntry, true\) : null\}/,
-  );
-  assert.match(guiBubbleSource, /resolveActiveWorkEntry/);
-  assert.match(
-    guiBubbleSource,
-    /collapsedTail=\{collapsedTailEntry \? renderWorkEntry\(collapsedTailEntry\) : null\}/,
-  );
+  // Detailed view only: the quiet view leaves the status row to say what runs.
+  assert.match(roundContentSource, /resolveActiveWorkItem/);
+  assert.match(roundContentSource, /detailed && model\.activeItem/);
+  assert.match(roundContentSource, /collapsedTail=\{collapsedTail\}/);
+  assert.match(guiBubbleSource, /useWorkTraceRows/);
+  assert.match(guiBubbleSource, /collapsedTail=\{collapsedTail\}/);
 });
 
-test("live turns show verified progress with a paused sparkle fallback for user decisions", () => {
-  assert.match(
-    roundContentSource,
-    /!attentionRequired && parseRunProgress\(normalizedToolStatus\)/,
-  );
-  assert.match(roundContentSource, /<LiveAssistantStatus status=\{normalizedToolStatus\} \/>/);
-  assert.match(roundContentSource, /<LiveSparkle paused=\{attentionRequired\} \/>/);
-  assert.match(activityRowSource, /!awaitingDecision && parseRunProgress\(toolStatus\)/);
-  assert.match(activityRowSource, /<LiveAssistantStatus status=\{toolStatus\} \/>/);
-  assert.match(activityRowSource, /<LiveSparkle className="pt-1" paused=\{awaitingDecision\} \/>/);
-  // The latest tool batch no longer fakes a "思考中" phase while idle — a real
-  // reasoning segment shows its own row and the sparkle covers gaps.
-  assert.doesNotMatch(toolTraceSource, /t\("chat\.thinking"\)/);
+test("every live turn renders exactly one status row, at the bottom", () => {
+  assert.match(roundContentSource, /<LiveAssistantStatus\s/);
+  assert.doesNotMatch(roundContentSource, /LiveSparkle|CompactingText/);
+  assert.match(activityRowSource, /<LiveAssistantStatus\s/);
+  assert.doesNotMatch(activityRowSource, /LiveSparkle/);
+  // The GUI trace no longer renders its own compaction status inside the trace.
+  assert.doesNotMatch(guiBubbleSource, /LiveAssistantStatus/);
+  // No row inside the trace spins or fakes a phase.
+  assert.doesNotMatch(toolTraceSource, /t\("chat\.thinking"\)|AssistantStatus|Loader2/);
+  assert.doesNotMatch(disclosureSource, /Loader2|shimmer/);
+  assert.doesNotMatch(workTraceSource, /WorkPixelGrid|shimmer/);
 });
 
 test("a turn waiting on the user freezes its progress indicators", () => {
-  assert.match(workTraceSource, /<WorkPixelGrid active=\{!awaitingDecision\} \/>/);
-  assert.match(workTraceSource, /running && !awaitingDecision \? "shimmer"/);
+  assert.match(liveTurnStatusSource, /<WorkPixelGrid active=\{!awaitingDecision\} \/>/);
+  assert.match(liveTurnStatusSource, /!awaitingDecision && "shimmer"/);
   assert.match(
     activityRowSource,
     /hasPendingToolApproval \|\| hasPendingInteractionCard\(row\.units\)/,
   );
-  assert.match(activityRowSource, /paused=\{awaitingDecision\}/);
-  assert.match(guiBubbleSource, /awaitingDecision=\{awaitingDecision\}/);
+  assert.match(activityRowSource, /awaitingDecision=\{awaitingDecision\}/);
+  assert.match(roundContentSource, /awaitingDecision=\{attentionRequired\}/);
 });
 
 test("a settled turn with a final answer collapses its work trace on both surfaces", () => {
@@ -85,15 +85,12 @@ test("a settled turn with a final answer collapses its work trace on both surfac
 });
 
 test("GUI transcript keeps live interaction content outside the work trace", () => {
-  assert.match(
-    roundContentSource,
-    /layout\.interaction\.map\(\(entry\) => renderEntry\(entry, false, true\)\)/,
-  );
-  assert.match(roundContentSource, /isLive=\{running && \(insideWorkTrace \|\| liveInteraction\)\}/);
+  assert.match(roundContentSource, /layout\.interaction\.map\(\(entry\) => renderEntry\(entry, true\)\)/);
+  assert.match(roundContentSource, /isLive=\{running && liveInteraction\}/);
   assert.match(roundContentSource, /attentionRequired=\{attentionRequired\}/);
   assert.match(
     roundContentSource,
     /hasInteractionRequiringAttention\(\[\.\.\.layout\.work, \.\.\.layout\.interaction\]\)/,
   );
-  assert.match(roundContentSource, /showTurnStatus=\{insideWorkTrace && running/);
+  assert.match(roundContentSource, /showTurnStatus=\{running && item\.key === model\.latestActivityKey\}/);
 });

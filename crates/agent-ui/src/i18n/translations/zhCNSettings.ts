@@ -402,6 +402,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.expandProcessByDefault": "默认展开执行过程",
   "settings.expandProcessByDefaultDesc":
     "对话中的处理过程、思考过程和工具调用（如“运行了命令”）默认展开显示，回合结束后也不自动折叠。仅保存在本机。",
+  "settings.showDetailedProgress": "显示详细进度",
+  "settings.showDetailedProgressDesc":
+    "回复进行中时显示每个后端阶段及其耗时，并自动展开正在进行的思考和工具输出。关闭时只保留一行状态，细节可点开查看。",
   "settings.defaultTimeZoneAuto": "自动（跟随系统：{zone}）",
   "settings.timeZoneSearch": "搜索时区或城市",
   "settings.timeZoneEmpty": "没有匹配的时区",

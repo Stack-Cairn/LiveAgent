@@ -166,6 +166,12 @@ export type ChatTranscriptSettings = {
   width: number;
   /** Start thinking segments and tool-trace groups expanded (#1154). */
   expandProcessByDefault: boolean;
+  /**
+   * Detailed reply progress: name every backend stage with its timings and
+   * open live reasoning/tool output. Off (default) is the quiet view with a
+   * single status line per running turn.
+   */
+  showDetailedProgress: boolean;
 };
 
 /**

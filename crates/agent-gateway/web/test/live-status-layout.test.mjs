@@ -11,7 +11,7 @@ const sharedAssistantStatusSource = fs.readFileSync(
   "utf8",
 );
 
-test("the streaming assistant keeps live status inside its stable work trace", () => {
+test("the streaming assistant keeps one live status row inside its stable turn", () => {
   assert.doesNotMatch(transcriptSource, /function shouldShowLiveStatusForRounds/);
   assert.doesNotMatch(transcriptSource, /function LiveStatusFooter/);
   assert.match(
@@ -23,10 +23,9 @@ test("the streaming assistant keeps live status inside its stable work trace", (
     transcriptSource,
     /toolStatusVariant=\{displayedToolStatusIsCompaction \? "compaction" : "default"\}/,
   );
+  // One live status row for every phase, compaction included.
   assert.match(sharedAssistantStatusSource, /export function LiveAssistantStatus/);
-  assert.match(sharedAssistantStatusSource, /if \(isCompaction\) return <CompactingText/);
-  assert.match(sharedAssistantStatusSource, /return <LiveSparkle/);
-  assert.match(sharedAssistantStatusSource, /return <AssistantStatus/);
+  assert.match(sharedAssistantStatusSource, /<LiveTurnStatus \{\.\.\.rest\} compacting=\{isCompaction\} \/>/);
 });
 
 test("compaction does not add a second pending bubble after assistant output", () => {

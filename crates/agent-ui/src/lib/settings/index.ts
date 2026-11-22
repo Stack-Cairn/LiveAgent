@@ -2478,6 +2478,13 @@ export function updateExpandProcessByDefault(prev: AppSettings, enabled: boolean
   });
 }
 
+export function updateShowDetailedProgress(prev: AppSettings, enabled: boolean): AppSettings {
+  if (prev.customSettings.chatTranscript.showDetailedProgress === enabled) return prev;
+  return updateCustomSettings(prev, {
+    chatTranscript: { ...prev.customSettings.chatTranscript, showDetailedProgress: enabled },
+  });
+}
+
 export function updateRunNotifications(prev: AppSettings, enabled: boolean): AppSettings {
   if (prev.customSettings.runNotifications === enabled) return prev;
   return updateCustomSettings(prev, { runNotifications: enabled });

@@ -17,6 +17,7 @@ import {
   type Theme,
   updateCustomSettings,
   updateExpandProcessByDefault,
+  updateShowDetailedProgress,
   updateSystem,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
@@ -484,6 +485,25 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
                   updateExpandProcessByDefault(
                     prev,
                     !prev.customSettings.chatTranscript.expandProcessByDefault,
+                  ),
+                )
+              }
+            />
+          }
+        />
+
+        <SettingsRow
+          title={t("settings.showDetailedProgress")}
+          description={t("settings.showDetailedProgressDesc")}
+          control={
+            <AgentActivationSwitch
+              checked={settings.customSettings.chatTranscript.showDetailedProgress}
+              title={t("settings.showDetailedProgress")}
+              onToggle={() =>
+                setSettings((prev) =>
+                  updateShowDetailedProgress(
+                    prev,
+                    !prev.customSettings.chatTranscript.showDetailedProgress,
                   ),
                 )
               }

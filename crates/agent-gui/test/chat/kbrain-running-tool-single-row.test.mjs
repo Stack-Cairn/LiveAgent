@@ -48,6 +48,9 @@ const { React, act, createRoot } = env;
 const { ToolTraceGroup } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/ToolTraceGroup.tsx",
 );
+const { ProcessDisclosureProvider } = env.loadModule(
+  "@liveagent/ui/components/chat/processDisclosure.tsx",
+);
 const { groupRoundBlocks } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
 );
@@ -164,7 +167,7 @@ function countMatches(text, pattern) {
 
 // Renders the round as the transcript does and reads what the reader sees in the
 // state the batch mounts in, then after one click: collapsed and expanded.
-function renderRound(round, { approvalPending = false } = {}) {
+function renderRound(round, { approvalPending = false, detailedProgress = true } = {}) {
   if (approvalPending) pendingApprovals.add("bash-1");
   try {
     const groups = groupRoundBlocks(round.blocks);
@@ -173,8 +176,8 @@ function renderRound(round, { approvalPending = false } = {}) {
     act(() =>
       root.render(
         React.createElement(
-          React.Fragment,
-          null,
+          ProcessDisclosureProvider,
+          { expandByDefault: false, detailedProgress },
           groups.map((group) =>
             React.createElement(ToolTraceGroup, {
               key: group.key,
@@ -225,6 +228,7 @@ function renderRound(round, { approvalPending = false } = {}) {
 
 test.after(() => env.cleanup());
 
+
 test("a running K-brain command shows one running row, collapsed or expanded", async () => {
   const { result, snapshots } = await runTurn([runEvents]);
   assert.equal(result.stopReason, "stop");
@@ -236,20 +240,32 @@ test("a running K-brain command shows one running row, collapsed or expanded", a
   for (const { stage, round } of snapshots) {
     assert.equal(round.blocks.length, 1, `${stage}: one block for bash-1`);
     const view = renderRound(round, { approvalPending: stage === "approval" });
+    const quiet = renderRound(round, { approvalPending: stage === "approval", detailedProgress: false });
     assert.deepEqual(view.groups, [["toolGroup", ["bash-1"]]], stage);
     assert.equal(view.expanded.rows, 1, `${stage}: one row inside the batch`);
-    // Open while the command runs; a finished batch mounts folded.
+    // Detailed progress: open while the command runs; a finished batch mounts
+    // folded. The quiet default always mounts folded.
     assert.equal(view.initiallyOpen, stage !== "result", `${stage}: default disclosure`);
+    assert.equal(quiet.initiallyOpen, false, `${stage}: quiet disclosure`);
+    // Expanded, both views show the same single row.
+    assert.deepEqual(quiet.expanded, view.expanded, `${stage}: quiet expanded`);
 
     if (stage === "result") {
       assert.deepEqual(view.collapsed, { running: 0, waitingApproval: 0, headerNamesCommand: 0 });
+      assert.deepEqual(quiet.collapsed, view.collapsed);
       assert.equal(view.expanded.running, 0);
       assert.equal(view.expanded.header, "chat.tool.batch.command", "result: past tense");
       continue;
     }
-    // Collapsed, the batch header stands in for the call.
-    assert.equal(view.collapsed.running, 1, `${stage}: collapsed status`);
+    // Collapsed, the batch never repeats a running status: the turn's single
+    // status row says what runs. The detailed header also names the command.
+    assert.equal(view.collapsed.running, 0, `${stage}: collapsed status`);
     assert.equal(view.collapsed.headerNamesCommand, 1, `${stage}: collapsed header`);
+    assert.deepEqual(
+      quiet.collapsed,
+      { running: 0, waitingApproval: 0, headerNamesCommand: 0 },
+      `${stage}: quiet collapsed`,
+    );
     // Expanded, the call's own row carries its status and the header no longer
     // repeats the running command.
     assert.equal(view.expanded.headerNamesCommand, 0, `${stage}: expanded header`);
@@ -283,7 +299,7 @@ test("a reconnect that replays the run keeps one block and one running row", asy
     const view = renderRound(round, { approvalPending: stage === "approval" });
     assert.equal(view.expanded.rows, 1, `${stage}: one row inside the batch`);
     if (stage === "output") {
-      assert.equal(view.collapsed.running, 1, `${stage}: collapsed status`);
+      assert.equal(view.collapsed.running, 0, `${stage}: collapsed status`);
       assert.equal(view.expanded.running, 1, `${stage}: expanded status`);
     }
   }

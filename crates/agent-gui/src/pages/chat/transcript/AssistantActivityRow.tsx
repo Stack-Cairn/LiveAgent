@@ -1,9 +1,8 @@
 import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { isPendingUserInteractionBlock } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
-import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
+import { useRunningToolActivity } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
-import { parseRunProgress } from "@liveagent/ui/lib/chat/runProgress";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { memo, useMemo } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
@@ -59,6 +58,13 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
     () => row.live && (hasPendingToolApproval || hasPendingInteractionCard(row.units)),
     [hasPendingToolApproval, row.live, row.units],
   );
+  const workTrace = useMemo(() => {
+    for (const unit of row.units) {
+      if (unit.unit.kind === "work-trace") return unit.unit;
+    }
+    return null;
+  }, [row.units]);
+  const toolActivity = useRunningToolActivity(row.live ? workTrace?.entries : undefined);
 
   return (
     <div data-live-activity={row.live ? "true" : undefined} className="min-w-0 w-full max-w-full">
@@ -82,14 +88,19 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
           ) : null}
         </div>
       ))}
-      {/* 整个回合存活期间常驻的脉冲星标：工具/思考的空档、压缩总结阶段都
-          保持可见，告诉用户对话仍在进行；回合落定（live=false）即消失。 */}
+      {/* The turn's single live status row, present for the whole turn: the
+          current phase in plain words plus elapsed time (compaction shows its
+          band here). Nothing above it carries a spinner; it disappears once
+          the turn settles (live=false). */}
       {row.live ? (
-        !awaitingDecision && parseRunProgress(toolStatus) ? (
-          <LiveAssistantStatus status={toolStatus} />
-        ) : (
-          <LiveSparkle className="pt-1" paused={awaitingDecision} />
-        )
+        <LiveAssistantStatus
+          className="pt-1"
+          status={toolStatus}
+          isCompaction={isCompactionRunning}
+          awaitingDecision={awaitingDecision}
+          startedAtMs={workTrace?.startedAtMs}
+          toolActivity={toolActivity}
+        />
       ) : null}
     </div>
   );

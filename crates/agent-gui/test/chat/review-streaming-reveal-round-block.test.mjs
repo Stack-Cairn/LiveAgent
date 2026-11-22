@@ -27,6 +27,9 @@ const { React, act, createRoot } = env;
 const { RoundBlockContent } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/RoundContent.tsx",
 );
+const { ProcessDisclosureProvider } = env.loadModule(
+  "@liveagent/ui/components/chat/processDisclosure.tsx",
+);
 
 /** What the last render of the text block drew: frozen segments + live tail. */
 function lastRender() {
@@ -150,17 +153,22 @@ test("thinking area: streaming reasoning keeps typing after a same-frame flush",
     const container = document.createElement("div");
     const root = createRoot(container);
     // Through RoundBlockContent's thinking branch → real ThinkingDisclosure.
+    // Detailed progress keeps the live reasoning open so its text renders.
     const render = (text) =>
       root.render(
-        React.createElement(RoundBlockContent, {
-          block: { kind: "thinking", key: "review-thinking", text },
-          isLive: true,
-          thinkingOpen: true,
-          isLatestThinking: true,
-          traceKey: "review-thinking",
-          renderMode: "streaming",
-          runningToolCallIds: [],
-        }),
+        React.createElement(
+          ProcessDisclosureProvider,
+          { expandByDefault: false, detailedProgress: true },
+          React.createElement(RoundBlockContent, {
+            block: { kind: "thinking", key: "review-thinking", text },
+            isLive: true,
+            thinkingOpen: true,
+            isLatestThinking: true,
+            traceKey: "review-thinking",
+            renderMode: "streaming",
+            runningToolCallIds: [],
+          }),
+        ),
       );
     let text = "先看";
     act(() => render(text));

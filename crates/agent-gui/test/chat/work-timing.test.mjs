@@ -18,7 +18,7 @@ test("work duration rejects row offsets, zero, seconds, invalid values and rever
 test("three agent traces survive missing clocks, independent completion and remount", async () => {
   const env = await createDomTestEnv({ mocks: {
     "@liveagent/ui/components/IconSet": { ChevronDown: () => null },
-    "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => key === "chat.work.activity" ? "已处理" : "处理中" }) },
+    "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => ({ "chat.work.activity": "已处理", "chat.work.trace": "执行过程" })[key] ?? key }) },
   } });
   const { AssistantWorkTrace, formatElapsedTime } = env.loadModule("@liveagent/ui/components/chat/AssistantWorkTrace.tsx");
   const host = document.body.appendChild(document.createElement("div"));
@@ -29,12 +29,17 @@ test("three agent traces survive missing clocks, independent completion and remo
   Date.now = () => now;
   const render = (running, remount = false) => env.act(async () => root.render(env.React.createElement("div", null,
     ...[firstStartedAt, 2, 3].map((startedAtMs, index) => env.React.createElement(AssistantWorkTrace, {
-      key: `${remount}:${index}`, running: running[index], startedAtMs, hasDetails: false,
+      key: `${remount}:${index}`, running: running[index], startedAtMs, hasDetails: true,
     }, `agent ${index + 1}`)),
   )));
   try {
     await render([true, true, true]);
-    assert.ok(host.textContent.includes("处理中 8s"));
+    // While running the header is a static label: the ticking clock lives in
+    // the turn's single status row, not in the trace.
+    assert.equal(host.querySelectorAll("[data-chat-work-summary]").length, 3);
+    for (const summary of host.querySelectorAll("[data-chat-work-summary]")) {
+      assert.equal(summary.textContent, "执行过程");
+    }
     assert.doesNotMatch(host.textContent, /\d{5,}h|NaN|Infinity/);
     now += 5000;
     await render([false, false, true]);

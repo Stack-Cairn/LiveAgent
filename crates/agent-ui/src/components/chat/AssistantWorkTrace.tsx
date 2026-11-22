@@ -3,58 +3,10 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { chatTimestamp, workDuration } from "@liveagent/ui/lib/chat/workTiming";
 import { isDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LazyCollapse } from "./LazyCollapse";
 import { useExpandProcessByDefault, useProcessDefaultChange } from "./processDisclosure";
 import { useAttentionDisclosure } from "./useAttentionDisclosure";
-
-const PIXEL_KEYS = [
-  "top-start",
-  "top",
-  "top-end",
-  "start",
-  "center",
-  "end",
-  "bottom-start",
-  "bottom",
-  "bottom-end",
-] as const;
-
-// Diagonal wave from the left column outward: 90ms per step away from the middle row.
-const PIXEL_DELAYS = PIXEL_KEYS.map((_, index) => {
-  const row = Math.floor(index / 3);
-  const column = index % 3;
-  return (column + Math.abs(row - 1)) * 90;
-});
-
-type WorkPixelStyle = CSSProperties & { "--chat-work-delay": `${number}ms` };
-
-function WorkPixelGrid({ active }: { active: boolean }) {
-  return (
-    // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
-    // 宽度的盒子里，表头的像素格才和思考/工具图标共用同一条竖中轴。
-    <span
-      aria-hidden="true"
-      className="flex w-3 shrink-0 items-center justify-center"
-      data-chat-work-grid=""
-    >
-      <span className="grid shrink-0 grid-cols-activity-dots gap-1p5px">
-        {PIXEL_KEYS.map((key, index) => (
-          <span
-            key={key}
-            // Frozen while the turn waits on the user: still legible, visibly not cycling.
-            className={cn(
-              "size-1 bg-foreground opacity-15 animate-chat-work-pixel motion-reduce:animate-none",
-              "data-paused:animate-none data-paused:opacity-45",
-            )}
-            data-paused={active ? undefined : ""}
-            style={{ "--chat-work-delay": `${PIXEL_DELAYS[index] ?? 0}ms` } as WorkPixelStyle}
-          />
-        ))}
-      </span>
-    </span>
-  );
-}
 
 export function formatElapsedTime(elapsedMs: number) {
   if (workDuration(elapsedMs) === undefined) return "";
@@ -68,67 +20,21 @@ export function formatElapsedTime(elapsedMs: number) {
     .join("");
 }
 
-export function AssistantWorkTrace({
-  children,
-  collapsedTail,
-  className,
-  durationMs,
-  hasDetails,
-  attentionRequired = false,
-  awaitingDecision = false,
-  running,
-  startedAtMs,
-  collapseAfterAnswer = false,
-}: {
-  children: ReactNode;
-  /**
-   * 当前正在进行的活动区块（运行中的工具组 / 思考中 / 正在流式输出的
-   * 进度文本）。仅在「运行中且用户手动折叠了本区块」时渲染在折叠头下方，
-   * 这样折叠后外面不至于空无一物；展开时内容本就可见，不再重复。
-   */
-  collapsedTail?: ReactNode;
-  className?: string;
-  durationMs?: number;
-  hasDetails: boolean;
-  attentionRequired?: boolean;
-  /**
-   * 回合停在用户决策上（提问 / 计划审批 / 工具审批）：进度还在，但没有任何
-   * 东西在跑。此时像素格与标题冻结成静态，避免用闪烁把「等你」误报成「在忙」。
-   */
-  awaitingDecision?: boolean;
+/**
+ * Elapsed time of a turn: the persisted duration once known, otherwise the time
+ * since the turn's real start (or since mount). With `tick` it re-reads the
+ * clock every second while the turn runs — only the live status row needs
+ * that; the work trace header only reads the settled value.
+ */
+export function useTurnElapsedMs(options: {
   running: boolean;
-  /**
-   * 回合真实起点（epoch ms，通常是触发本回合的用户消息时间戳）。组件会随
-   * 切换会话、虚拟列表回收而卸载重挂；只靠挂载时刻计时会让「处理中」归零。
-   * 缺省时退回挂载时刻。
-   */
   startedAtMs?: number;
-  /** 回复有总结文案（answer）时：回合结束（流停止）后自动折叠一次。 */
-  collapseAfterAnswer?: boolean;
+  durationMs?: number;
+  tick?: boolean;
 }) {
-  const { t } = useLocale();
-  const validStartedAt = chatTimestamp(startedAtMs);
-  const validDuration = workDuration(durationMs);
-  // 没有总结文案的回合（被打断、失败、只有过程）挂载时展开：折叠后只剩标题，
-  // 用户看不到已经执行过的步骤。有文案的历史回合仍折叠，只露出回答。
-  // 设置里开了「默认展开执行过程」时，过程区块始终以展开态挂载，且回合结束后不再自动折叠。
-  const expandProcessByDefault = useExpandProcessByDefault();
-  const [expanded, setExpanded] = useAttentionDisclosure(
-    attentionRequired,
-    running || !collapseAfterAnswer || expandProcessByDefault,
-  );
-
-  // 有总结文案时，回合完成（running 变 false）后自动折叠「处理中」区块一次；
-  // 之后 disclosure 所有权交还给用户，手动展开/折叠不再被强制收回，
-  // 也不会和 attentionRequired（待用户交互的卡片）的强制展开打架。
-  useEffect(() => {
-    if (!running && !attentionRequired && collapseAfterAnswer && !expandProcessByDefault) {
-      setExpanded(false);
-    }
-  }, [running, attentionRequired, collapseAfterAnswer, expandProcessByDefault, setExpanded]);
-  useProcessDefaultChange(expandProcessByDefault, (expand) =>
-    setExpanded(expand || running || !collapseAfterAnswer || attentionRequired),
-  );
+  const { running, tick = false } = options;
+  const validStartedAt = chatTimestamp(options.startedAtMs);
+  const validDuration = workDuration(options.durationMs);
   const [elapsedMs, setElapsedMs] = useState(
     () =>
       validDuration ??
@@ -148,28 +54,127 @@ export function AssistantWorkTrace({
 
     if (validStartedAt !== undefined) startedAtRef.current = validStartedAt;
     else if (startedAtRef.current === null) startedAtRef.current = Date.now();
+    if (!tick) return;
     const updateElapsed = () => {
       const startedAt = startedAtRef.current;
       if (startedAt !== null) setElapsedMs(Math.max(0, Date.now() - startedAt));
     };
     updateElapsed();
-    // 不可见时停表：work trace 的秒表只服务于"看着它跑"的观感，隐藏窗口里的
-    // 每秒重渲染纯属白烧 CPU；重新可见时 effect 重跑，读数立即补上。
-    const timer = window.setInterval(() => {
+    // 不可见时停表：秒表只服务于"看着它跑"的观感，隐藏窗口里的每秒重渲染
+    // 纯属白烧 CPU；重新可见时 effect 重跑，读数立即补上。
+    const timer = setInterval(() => {
       if (isDocumentHidden()) return;
       updateElapsed();
     }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [validDuration, running, validStartedAt]);
+    return () => clearInterval(timer);
+  }, [validDuration, running, validStartedAt, tick]);
 
-  const elapsedLabel = formatElapsedTime(elapsedMs);
-  const label = `${running ? t("chat.work.running") : t("chat.work.activity")}${
-    elapsedLabel ? ` ${elapsedLabel}` : ""
-  }`;
+  return elapsedMs;
+}
+
+export type WorkTraceStats = {
+  /** Tool calls made so far. */
+  toolCount: number;
+  /** Settled reasoning time, or null when none was measured (e.g. after a reload). */
+  thinkingMs: number | null;
+};
+
+/** "3 个工具 · 思考 8s": the trace's summary parts, empty when there is nothing to count. */
+export function formatWorkTraceStats(
+  stats: WorkTraceStats | undefined,
+  t: (key: string) => string,
+): string[] {
+  if (!stats) return [];
+  const parts: string[] = [];
+  if (stats.toolCount > 0) {
+    parts.push(
+      stats.toolCount === 1
+        ? t("chat.work.toolCountOne")
+        : t("chat.work.toolCount").replace("{count}", String(stats.toolCount)),
+    );
+  }
+  const thinking = stats.thinkingMs === null ? "" : formatElapsedTime(stats.thinkingMs);
+  if (thinking) parts.push(t("chat.work.thinkingTotal").replace("{duration}", thinking));
+  return parts;
+}
+
+/**
+ * The collapsible processing trace of one turn. Its header is a summary, not a
+ * status: while the turn runs it reads "执行过程 · 3 个工具 · 思考 8s" with no
+ * spinner or ticking clock (the turn's single live status row carries those),
+ * and once the turn ends it folds — when there is an answer — into one
+ * "已处理 12s · 3 个工具 · 思考 8s" row so the answer is the visual focus.
+ */
+export function AssistantWorkTrace({
+  children,
+  collapsedTail,
+  className,
+  durationMs,
+  hasDetails,
+  attentionRequired = false,
+  running,
+  startedAtMs,
+  stats,
+  collapseAfterAnswer = false,
+}: {
+  children: ReactNode;
+  /**
+   * 当前正在进行的活动区块（运行中的工具组 / 思考 / 正在流式输出的
+   * 进度文本）。仅在「运行中且用户手动折叠了本区块」时渲染在折叠头下方，
+   * 这样折叠后外面不至于空无一物；展开时内容本就可见，不再重复。
+   */
+  collapsedTail?: ReactNode;
+  className?: string;
+  durationMs?: number;
+  hasDetails: boolean;
+  attentionRequired?: boolean;
+  running: boolean;
+  /**
+   * 回合真实起点（epoch ms，通常是触发本回合的用户消息时间戳）。组件会随
+   * 切换会话、虚拟列表回收而卸载重挂；只靠挂载时刻计时会让「已处理」读数归零。
+   * 缺省时退回挂载时刻。
+   */
+  startedAtMs?: number;
+  /** Counts for the summary header. */
+  stats?: WorkTraceStats;
+  /** 回复有总结文案（answer）时：回合结束（流停止）后自动折叠一次。 */
+  collapseAfterAnswer?: boolean;
+}) {
+  const { t } = useLocale();
+  // 没有总结文案的回合（被打断、失败、只有过程）挂载时展开：折叠后只剩标题，
+  // 用户看不到已经执行过的步骤。有文案的历史回合仍折叠，只露出回答。
+  // 设置里开了「默认展开执行过程」时，过程区块始终以展开态挂载，且回合结束后不再自动折叠。
+  const expandProcessByDefault = useExpandProcessByDefault();
+  const [expanded, setExpanded] = useAttentionDisclosure(
+    attentionRequired,
+    running || !collapseAfterAnswer || expandProcessByDefault,
+  );
+
+  // 有总结文案时，回合完成（running 变 false）后自动折叠过程区块一次；
+  // 之后 disclosure 所有权交还给用户，手动展开/折叠不再被强制收回，
+  // 也不会和 attentionRequired（待用户交互的卡片）的强制展开打架。
+  useEffect(() => {
+    if (!running && !attentionRequired && collapseAfterAnswer && !expandProcessByDefault) {
+      setExpanded(false);
+    }
+  }, [running, attentionRequired, collapseAfterAnswer, expandProcessByDefault, setExpanded]);
+  useProcessDefaultChange(expandProcessByDefault, (expand) =>
+    setExpanded(expand || running || !collapseAfterAnswer || attentionRequired),
+  );
+  const elapsedMs = useTurnElapsedMs({ running, startedAtMs, durationMs });
+
+  // A running turn with nothing to show yet renders no header at all: the
+  // live status row says what is happening.
+  if (running && !hasDetails) return null;
+
+  const elapsedLabel = running ? "" : formatElapsedTime(elapsedMs);
+  const lead = running
+    ? t("chat.work.trace")
+    : `${t("chat.work.activity")}${elapsedLabel ? ` ${elapsedLabel}` : ""}`;
+  const label = [lead, ...formatWorkTraceStats(stats, t)].join(" · ");
   const header = (
     <>
-      {running ? <WorkPixelGrid active={!awaitingDecision} /> : null}
-      <span className={cn(running && !awaitingDecision ? "shimmer" : "text-foreground/65")}>
+      <span className="min-w-0 truncate text-foreground/65" data-chat-work-summary="">
         {label}
       </span>
       {hasDetails ? (
@@ -189,7 +194,7 @@ export function AssistantWorkTrace({
     <section
       className={cn("my-0 text-foreground/60", className)}
       aria-label={t("chat.work.activity")}
-      aria-busy={running && !awaitingDecision}
+      aria-busy={running}
       data-chat-work-trace=""
     >
       {hasDetails ? (

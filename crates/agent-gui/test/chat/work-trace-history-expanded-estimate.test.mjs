@@ -19,6 +19,19 @@ const env = await createDomTestEnv({
     "@liveagent/ui/components/chat/assistant-bubble/RoundContent": {
       RoundBlockContent: (props) =>
         env.React.createElement("div", { "data-testid": "work-entry", "data-key": props.traceKey }),
+      // One rendered row per work entry, as the real merge does for entries
+      // that are neither reasoning nor tool batches.
+      useWorkTraceModel: (entries) => ({ entries, stats: { toolCount: 0, thinkingMs: null } }),
+      useWorkTraceRows: (model) => ({
+        rows: model.entries.map((entry) =>
+          env.React.createElement("div", {
+            key: entry.key,
+            "data-testid": "work-entry",
+            "data-key": entry.key,
+          }),
+        ),
+        collapsedTail: null,
+      }),
     },
     "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils": {
       resolveActiveThinkingEntryKey: () => null,
