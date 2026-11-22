@@ -9,7 +9,9 @@ import {
   useState,
 } from "react";
 import { Button } from "../../components/ui/button";
+import { type ConfirmDialogOptions, useConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Input } from "../../components/ui/input";
+import { useLocale } from "../../i18n";
 import type {
   ImageConnection,
   ImageStudioClient,
@@ -46,9 +48,10 @@ export interface ImageSettingsProps {
   /** Replace client identity whenever owner/backend changes. */
   client: ImageStudioClient;
   onDirtyChange?: (dirty: boolean) => void;
-  /** Host navigation calls this guard before switching settings tabs/routes;
-   * return a cleanup that unregisters this specific guard. */
-  registerLeaveGuard?: (guard: () => boolean) => () => void;
+  /** Host navigation calls this guard before switching settings tabs/routes and
+   * leaves only once it resolves to true (it asks through an in-app dialog when
+   * there are unsaved edits); return a cleanup that unregisters this guard. */
+  registerLeaveGuard?: (guard: () => boolean | Promise<boolean>) => () => void;
 }
 const clientKeys = new WeakMap<ImageStudioClient, number>();
 let clientSequence = 0;
@@ -115,6 +118,19 @@ function ImageSettingsScope({
   const [status, setStatus] = useState("");
   const [secretDirty, setSecretDirty] = useState(false);
   const [purpose, setPurpose] = useState<ImageSecretPurpose>("apiKey");
+  const { t } = useLocale();
+  const { confirm, dialog } = useConfirmDialog();
+  const ask = (options: Omit<ConfirmDialogOptions, "cancelLabel"> & { cancelLabel?: string }) =>
+    confirm({ cancelLabel: t("confirmDialog.cancel"), ...options });
+  // The leave guard is registered once; it reads the current locale through this ref.
+  const confirmLeaveRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
+  confirmLeaveRef.current = () =>
+    ask({
+      title: t("imageSettings.confirm.leaveTitle"),
+      description: t("imageSettings.confirm.leaveDescription"),
+      confirmLabel: t("imageSettings.confirm.leave"),
+      cancelLabel: t("confirmDialog.keepEditing"),
+    });
   const secretInput = useRef<HTMLInputElement>(null);
   const bindSecretInput = useCallback((node: HTMLInputElement | null) => {
     if (secretInput.current && secretInput.current !== node) secretInput.current.value = "";
@@ -193,12 +209,8 @@ function ImageSettingsScope({
       }
     };
     window.addEventListener("beforeunload", beforeUnload);
-    const unregister = registerLeaveGuard?.(
-      () =>
-        !dirtyRef.current ||
-        window.confirm(
-          "图像设置有未保存的修改或正在等待的操作。离开将丢弃本页草稿；已发出的请求可能仍会完成。确定离开？",
-        ),
+    const unregister = registerLeaveGuard?.(() =>
+      dirtyRef.current ? confirmLeaveRef.current() : true,
     );
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
@@ -219,8 +231,16 @@ function ImageSettingsScope({
     });
     setStatus("");
   }
-  function selectConnection(id: string) {
-    if (secretDirty && !window.confirm("切换连接将清空尚未写入的凭据。确定继续？")) return;
+  async function selectConnection(id: string) {
+    if (
+      secretDirty &&
+      !(await ask({
+        title: t("imageSettings.confirm.switchConnectionTitle"),
+        description: t("imageSettings.confirm.switchConnectionDescription"),
+        confirmLabel: t("imageSettings.confirm.switchConnection"),
+      }))
+    )
+      return;
     clearSecret();
     setConnectionId(id);
     setPurpose("apiKey");
@@ -376,8 +396,16 @@ function ImageSettingsScope({
       wasMutation ? "已停止等待。请求可能已完成；请读取最新设置后再操作。" : "已停止读取。",
     );
   }
-  function cancelEdits() {
-    if (dirty && !window.confirm("确定放弃未保存的图像设置和凭据输入？")) return;
+  async function cancelEdits() {
+    if (
+      dirty &&
+      !(await ask({
+        title: t("imageSettings.confirm.cancelEditsTitle"),
+        description: t("imageSettings.confirm.cancelEditsDescription"),
+        confirmLabel: t("imageSettings.confirm.cancelEdits"),
+      }))
+    )
+      return;
     clearSecret();
     setAdvanced({});
     setDraft(saved);
@@ -393,16 +421,23 @@ function ImageSettingsScope({
     setStatus("已放弃本地修改。");
     // An ambiguous write still requires a fresh read, even after local discard.
   }
-  function resolveConflict(prefer: "local" | "remote") {
+  async function resolveConflict(prefer: "local" | "remote") {
     if (!saved || !remote) return;
     const local = advancedSettings();
     if (!local) return;
     const result = mergeImageSettings(saved, local, remote, prefer);
     if (
       result.conflicts.length &&
-      !window.confirm(
-        `有 ${result.conflicts.length} 个连接或目标被同时修改。冲突项将使用${prefer === "local" ? "我的草稿" : "服务器版本"}，其余远端修改会保留。确定继续？`,
-      )
+      !(await ask({
+        title: t("imageSettings.confirm.mergeTitle"),
+        description: t(
+          prefer === "local"
+            ? "imageSettings.confirm.mergeDescriptionLocal"
+            : "imageSettings.confirm.mergeDescriptionRemote",
+        ).replace("{count}", String(result.conflicts.length)),
+        confirmLabel: t("imageSettings.confirm.merge"),
+        tone: "default",
+      }))
     )
       return;
     setSaved(remote);
@@ -446,7 +481,7 @@ function ImageSettingsScope({
         <Button variant="outline" disabled={!!busy} onClick={() => void refresh()}>
           读取最新设置
         </Button>
-        <Button variant="ghost" disabled={!!busy || !dirty} onClick={cancelEdits}>
+        <Button variant="ghost" disabled={!!busy || !dirty} onClick={() => void cancelEdits()}>
           取消编辑
         </Button>
         {busy && (
@@ -502,22 +537,27 @@ function ImageSettingsScope({
                 <Button
                   variant="outline"
                   disabled={!!busy}
-                  onClick={() => resolveConflict("local")}
+                  onClick={() => void resolveConflict("local")}
                 >
                   合并，冲突用我的草稿
                 </Button>
                 <Button
                   variant="outline"
                   disabled={!!busy}
-                  onClick={() => resolveConflict("remote")}
+                  onClick={() => void resolveConflict("remote")}
                 >
                   合并，冲突用服务器版本
                 </Button>
                 <Button
                   variant="ghost"
                   disabled={!!busy}
-                  onClick={() => {
-                    if (window.confirm("确定丢弃本地草稿并采用服务器全部设置？")) {
+                  onClick={async () => {
+                    const confirmed = await ask({
+                      title: t("imageSettings.confirm.adoptRemoteTitle"),
+                      description: t("imageSettings.confirm.adoptRemoteDescription"),
+                      confirmLabel: t("imageSettings.confirm.adoptRemote"),
+                    });
+                    if (confirmed) {
                       accept(remote);
                       clearSecret();
                       setError("");
@@ -540,8 +580,15 @@ function ImageSettingsScope({
                 <h3 className="text-sm font-semibold">连接</h3>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (secretDirty && !window.confirm("新增连接将清空尚未写入的凭据。确定继续？"))
+                  onClick={async () => {
+                    if (
+                      secretDirty &&
+                      !(await ask({
+                        title: t("imageSettings.confirm.addConnectionTitle"),
+                        description: t("imageSettings.confirm.addConnectionDescription"),
+                        confirmLabel: t("imageSettings.confirm.addConnection"),
+                      }))
+                    )
                       return;
                     clearSecret();
                     const next = newImageConnection(
@@ -558,7 +605,7 @@ function ImageSettingsScope({
                 <select
                   className={selectClass}
                   value={connection?.id ?? ""}
-                  onChange={(e) => selectConnection(e.target.value)}
+                  onChange={(e) => void selectConnection(e.target.value)}
                 >
                   <option value="" disabled>
                     请选择连接
@@ -757,8 +804,16 @@ function ImageSettingsScope({
                   <Button
                     variant="destructive"
                     disabled={dependencies.length > 0}
-                    onClick={() => {
-                      if (window.confirm(`确定删除连接“${connection.name}”？保存设置后生效。`)) {
+                    onClick={async () => {
+                      const confirmed = await ask({
+                        title: t("imageSettings.confirm.deleteConnectionTitle").replace(
+                          "{name}",
+                          connection.name,
+                        ),
+                        description: t("imageSettings.confirm.deleteDescription"),
+                        confirmLabel: t("imageSettings.confirm.delete"),
+                      });
+                      if (confirmed) {
                         setDraft(removeImageConnection(draft, connection.id));
                         clearSecret();
                         setConnectionId("");
@@ -1092,8 +1147,16 @@ function ImageSettingsScope({
                   )}
                   <Button
                     variant="destructive"
-                    onClick={() => {
-                      if (window.confirm(`确定删除目标“${target.name}”？保存设置后生效。`)) {
+                    onClick={async () => {
+                      const confirmed = await ask({
+                        title: t("imageSettings.confirm.deleteTargetTitle").replace(
+                          "{name}",
+                          target.name,
+                        ),
+                        description: t("imageSettings.confirm.deleteDescription"),
+                        confirmLabel: t("imageSettings.confirm.delete"),
+                      });
+                      if (confirmed) {
                         setDraft({
                           ...draft,
                           targets: draft.targets.filter((t) => t.id !== target.id),
@@ -1115,6 +1178,7 @@ function ImageSettingsScope({
           )}
         </fieldset>
       )}
+      {dialog}
     </div>
   );
 }

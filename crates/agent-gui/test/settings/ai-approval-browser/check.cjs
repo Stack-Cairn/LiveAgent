@@ -24,9 +24,16 @@ failSave=true;await save().click();await page.getByRole('alert').filter({hasText
 failSave=false;await save().click();await page.getByRole('status').filter({hasText:'已保存'}).waitFor();
 await page.reload();await page.getByRole('button',{name:'仅风险提示',exact:true,pressed:true}).waitFor();
 await page.getByRole('button',{name:'自动审批',exact:true}).click();
-page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'重新加载',exact:true}).click();
+const confirmDialog=()=>page.getByRole('alertdialog');
+await page.getByRole('button',{name:'重新加载',exact:true}).click();await confirmDialog().waitFor();
+const confirmAction=name=>confirmDialog().locator(`[data-confirm-dialog-action="${name}"]`);
+if(!await confirmAction('cancel').evaluate(e=>e===document.activeElement))throw Error('Cancel is not focused');
+// Focus guards redirect asynchronously, so wait for focus to settle inside the dialog after each Tab.
+for(const key of ['Tab','Tab','Tab','Tab','Shift+Tab']){await page.keyboard.press(key);await page.waitForFunction(()=>document.querySelector('[role="alertdialog"]').contains(document.activeElement),null,{timeout:2000});}
+await page.keyboard.press('Escape');await confirmDialog().waitFor({state:'hidden'});
 await page.getByRole('button',{name:'自动审批',exact:true,pressed:true}).waitFor();
-page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'重新加载',exact:true}).click();
+await page.getByRole('button',{name:'重新加载',exact:true}).click();
+await confirmAction('confirm').focus();await page.keyboard.press('Enter');
 await page.getByRole('button',{name:'仅风险提示',exact:true,pressed:true}).waitFor();
 await page.screenshot({path:'/tmp/la-ai-approval-desktop.png',fullPage:true});
 await page.setViewportSize({width:390,height:844});

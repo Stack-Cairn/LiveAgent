@@ -198,12 +198,15 @@ test('mounted settings protects dirty navigation, clears secrets and isolates cl
     'react/jsx-runtime': jsxRuntime,
     '../../components/ui/button': { Button: ({ variant: _variant, ...props }) => React.createElement('button', props) },
     '../../components/ui/input': { Input: props => React.createElement('input', props) },
+    // The in-app dialog has its own DOM tests; here we only record what was asked.
+    '../../components/ui/confirm-dialog': { useConfirmDialog: () => ({
+      confirm: async options => { asked.push(options); return allowLeave; }, dialog: null,
+    }) },
   } });
   const { ImageSettings } = loader.loadModule('@liveagent/ui/pages/settings/ImageSettings');
   const container = dom.window.document.getElementById('root');
   const root = createRoot(container);
-  let guard; let latestDirty; let confirms = 0; let allowLeave = false;
-  dom.window.confirm = () => { confirms++; return allowLeave; };
+  let guard; let latestDirty; let allowLeave = false; const asked = [];
   const registerLeaveGuard = value => { guard = value; return () => { if (guard === value) guard = undefined; }; };
   const onDirtyChange = value => { latestDirty = value; };
   const render = client => root.render(React.createElement(ImageSettings, { client, registerLeaveGuard, onDirtyChange }));
@@ -213,10 +216,13 @@ test('mounted settings protects dirty navigation, clears secrets and isolates cl
     await React.act(async () => render(client));
     assert.equal(guard(), true); assert.equal(latestDirty, false);
     await click('新增连接');
-    assert.equal(latestDirty, true); assert.equal(guard(), false); assert.equal(confirms, 1);
+    assert.equal(latestDirty, true); assert.equal(await guard(), false);
+    assert.deepEqual(asked.map(options => options.title), ['离开图像设置？']);
+    assert.equal(asked[0].confirmLabel, '放弃并离开'); assert.equal(asked[0].cancelLabel, '继续编辑');
     const unload = new dom.window.Event('beforeunload', { cancelable: true });
     dom.window.dispatchEvent(unload); assert.equal(unload.defaultPrevented, true);
     allowLeave = true; await click('取消编辑'); assert.equal(latestDirty, false);
+    assert.equal(asked.at(-1).title, '放弃未保存的修改？');
     const firstPassword = container.querySelector('input[type=password]');
     // Keep a detached DOM reference: cleanup must erase it, not only hide the field.
     firstPassword.value = 'SENTINEL';
