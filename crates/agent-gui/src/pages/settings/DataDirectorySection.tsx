@@ -86,6 +86,7 @@ export function DataDirectorySection() {
       <SettingsSection description={t("settings.dataDirDesc")}>
         <SettingsCard>
           <SettingsRow
+            data-settings-anchor="data-dir"
             title={t("settings.dataDirCurrent")}
             description={
               status?.custom

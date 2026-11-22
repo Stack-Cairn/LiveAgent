@@ -224,6 +224,7 @@ export function AboutSection(props: AboutSectionProps) {
           <KBrainBackendRow loadHealth={getKBrainHealth} />
 
           <SettingsRow
+            data-settings-anchor="about-update"
             title={t("settings.aboutSoftwareUpdate")}
             description={t("settings.aboutSoftwareUpdateDesc")}
             control={
@@ -339,6 +340,7 @@ export function AboutSection(props: AboutSectionProps) {
 
           {import.meta.env.DEV ? (
             <SettingsRow
+              data-settings-anchor="about-debug"
               title={t("settings.aboutDebugMode")}
               description={t("settings.aboutDebugModeDesc")}
               control={
@@ -360,6 +362,7 @@ export function AboutSection(props: AboutSectionProps) {
           ) : null}
 
           <SettingsRow
+            data-settings-anchor="about-prerelease"
             title={t("settings.aboutPrereleaseTitle")}
             description={t("settings.aboutPrereleaseDesc")}
             control={

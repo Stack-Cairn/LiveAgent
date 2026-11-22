@@ -85,7 +85,10 @@ export function HooksSection(_props: SettingsSectionProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div
+        data-settings-anchor="hooks-lifecycle"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <p className="text-sm text-muted-foreground">{t("settings.hooksDesc")}</p>
         <span className="text-xs text-muted-foreground">
           {t("settings.hooksActiveHooks")} {enabledCount} / {hooks.length}

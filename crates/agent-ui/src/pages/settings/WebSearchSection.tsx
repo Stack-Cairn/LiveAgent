@@ -221,6 +221,7 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
     <SettingsSection {...header} data-testid="web-search-settings" aria-busy={!!busy}>
       <SettingsCard>
         <SettingsRow
+          data-settings-anchor="web-search-provider"
           title={t("settings.webSearch.provider")}
           description={t("settings.webSearch.providerHint")}
           control={
@@ -253,6 +254,7 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
         />
         {usesKey && (
           <SettingsRow
+            data-settings-anchor="web-search-api-key"
             title={<label htmlFor={`${fieldId}-key`}>{t("settings.webSearch.apiKey")}</label>}
             description={
               <>
@@ -342,6 +344,7 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
         )}
         {provider !== "" && (
           <SettingsRow
+            data-settings-anchor="web-search-max-results"
             title={<label htmlFor={`${fieldId}-max`}>{t("settings.webSearch.maxResults")}</label>}
             description={t("settings.webSearch.maxResultsHint")}
             control={

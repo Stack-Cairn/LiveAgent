@@ -40,17 +40,60 @@ export type CommandPaletteActionsProvider = () => readonly CommandPaletteAction[
 
 /** `>` restricts the palette to actions, like editor command palettes. */
 export const COMMAND_PALETTE_ACTIONS_PREFIX = ">";
+/** `@` quick-opens files of the current workspace. */
+export const COMMAND_PALETTE_FILES_PREFIX = "@";
+/** `#` searches conversations only. */
+export const COMMAND_PALETTE_CONVERSATIONS_PREFIX = "#";
 
-export function parseCommandPaletteQuery(raw: string): { actionsOnly: boolean; query: string } {
+/**
+ * What the palette searches: everything (actions next to conversations), or a
+ * single source picked with a leading prefix character.
+ */
+export type CommandPaletteScope = "all" | "actions" | "files" | "conversations";
+
+export const COMMAND_PALETTE_SCOPE_PREFIXES: ReadonlyArray<{
+  scope: Exclude<CommandPaletteScope, "all">;
+  prefix: string;
+}> = [
+  { scope: "actions", prefix: COMMAND_PALETTE_ACTIONS_PREFIX },
+  { scope: "files", prefix: COMMAND_PALETTE_FILES_PREFIX },
+  { scope: "conversations", prefix: COMMAND_PALETTE_CONVERSATIONS_PREFIX },
+];
+
+export type ParsedCommandPaletteQuery = {
+  scope: CommandPaletteScope;
+  /** Shorthand for `scope === "actions"`. */
+  actionsOnly: boolean;
+  query: string;
+};
+
+export function parseCommandPaletteQuery(raw: string): ParsedCommandPaletteQuery {
   const trimmed = raw.trim();
-  if (trimmed.startsWith(COMMAND_PALETTE_ACTIONS_PREFIX)) {
-    return {
-      actionsOnly: true,
-      query: trimmed.slice(COMMAND_PALETTE_ACTIONS_PREFIX.length).trim(),
-    };
+  for (const { scope, prefix } of COMMAND_PALETTE_SCOPE_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      return {
+        scope,
+        actionsOnly: scope === "actions",
+        query: trimmed.slice(prefix.length).trim(),
+      };
+    }
   }
-  return { actionsOnly: false, query: trimmed };
+  return { scope: "all", actionsOnly: false, query: trimmed };
 }
+
+/**
+ * Workspace the `@` scope searches. Hosts return null when no project folder
+ * is open; the palette then explains why there is nothing to search.
+ */
+export type CommandPaletteFileSource = {
+  /** Absolute workspace folder; file paths are relative to it. */
+  workdir: string;
+  /** Opens a file through the host's normal preview / editor flow. */
+  open: (relativePath: string) => void;
+};
+
+/** Read lazily when the palette opens, like the actions provider. */
+export type CommandPaletteFileSourceProvider = () => CommandPaletteFileSource | null;
 
 function normalize(value: string) {
   return value.toLocaleLowerCase();

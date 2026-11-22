@@ -45,9 +45,9 @@ test("command palette filter is case-insensitive, token based and keeps group or
     assert.deepEqual(ids("settings"), ["settings:providers", "open-settings"], "label prefix ranks first");
     assert.deepEqual(ids("nothing-matches"), []);
 
-    assert.deepEqual(parseCommandPaletteQuery("  > theme "), { actionsOnly: true, query: "theme" });
-    assert.deepEqual(parseCommandPaletteQuery(" theme "), { actionsOnly: false, query: "theme" });
-    assert.deepEqual(parseCommandPaletteQuery(">"), { actionsOnly: true, query: "" });
+    assert.deepEqual(parseCommandPaletteQuery("  > theme "), { scope: "actions", actionsOnly: true, query: "theme" });
+    assert.deepEqual(parseCommandPaletteQuery(" theme "), { scope: "all", actionsOnly: false, query: "theme" });
+    assert.deepEqual(parseCommandPaletteQuery(">"), { scope: "actions", actionsOnly: true, query: "" });
   } finally {
     env.cleanup();
   }
@@ -289,5 +289,42 @@ test("desktop and WebUI hosts wire the palette and suppress it under settings", 
   }
   for (const settingsHost of ["../../src/App.tsx", "../../../agent-gateway/web/src/app/GatewayAppView.tsx"]) {
     assert.match(read(settingsHost), /data-command-palette-suppressed=""/, settingsHost);
+  }
+});
+
+// Mirrors e2e/specs/05-command-palette: with every desktop action wired and
+// the real English strings, typing "settings" keeps "Open settings" and drops
+// "Toggle sidebar" even now that the view commands and setting rows are listed.
+test("typing settings keeps Open settings and drops the sidebar toggle", async () => {
+  const env = await createEnv();
+  try {
+    const { createTsModuleLoader } = await import("../helpers/load-ts-module.mjs");
+    const loader = createTsModuleLoader();
+    const en = loader.loadModule("src/i18n/config.ts").translations["en-US"];
+    const { desktopSettingsSearch } = loader.loadModule("src/agent-ui-adapters/settingsSearch.ts");
+    const { buildCommandPaletteActions } = env.loadModule("@liveagent/ui/lib/chat/commandPaletteActions.ts");
+    const { filterCommandPaletteActions } = env.loadModule("@liveagent/ui/lib/chat/commandPalette.ts");
+    const noop = () => {};
+    const actions = buildCommandPaletteActions({
+      t: (key) => en[key] ?? key,
+      isMac: false,
+      onNewConversation: noop,
+      onOpenSettings: noop,
+      sidebar: { open: true, onToggle: noop },
+      theme: { current: "system", onToggle: noop },
+      terminal: { onToggle: noop },
+      thinking: { onCycle: noop },
+      zoom: { level: 1, onZoomIn: noop, onZoomOut: noop, onReset: noop },
+      closeContext: { onClose: noop },
+      history: { canGoBack: true, canGoForward: true, goBack: () => true, goForward: () => true },
+      settingsSearch: { host: desktopSettingsSearch },
+    });
+    const home = filterCommandPaletteActions(actions, "").map((item) => item.id);
+    assert.ok(home.includes("toggle-sidebar"));
+    const ids = filterCommandPaletteActions(actions, "settings").map((item) => item.id);
+    assert.ok(ids.includes("open-settings"));
+    assert.equal(ids.includes("toggle-sidebar"), false);
+  } finally {
+    env.cleanup();
   }
 });

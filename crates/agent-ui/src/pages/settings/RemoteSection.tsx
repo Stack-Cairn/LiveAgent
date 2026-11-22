@@ -322,6 +322,7 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
   return (
     <div className="space-y-6">
       <SettingsRow
+        data-settings-anchor="remote-gateway"
         title={t("settings.remoteTitle")}
         description={t("settings.remoteDesc")}
         control={
@@ -362,6 +363,7 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
       <SettingsSection>
         {showLocalGateway ? (
           <SettingsRow
+            data-settings-anchor="remote-managed-local"
             title={t("settings.remoteManagedLocal")}
             description={t("settings.remoteManagedLocalHint")}
             control={
@@ -383,6 +385,7 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
           }
         />
         <SettingsRow
+          data-settings-anchor="remote-options"
           title={t("settings.remoteOptionsTitle")}
           description={t("settings.remoteOptionsHint")}
           control={

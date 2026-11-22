@@ -1,4 +1,6 @@
 import {
+  ArrowLeft,
+  ArrowRight,
   Blend,
   Bot,
   Brain,
@@ -10,19 +12,32 @@ import {
   FolderTree,
   GitBranch,
   ImageIcon,
+  Lightbulb,
   MessageSquare,
   MessageSquareText,
+  Minus,
   MonitorSmartphone,
   Moon,
   PanelLeft,
   PanelRightOpen,
   Pin,
+  Plus,
+  RotateCcw,
   Settings,
   Square,
   SquarePen,
   Sun,
+  Terminal,
   Waypoints,
+  X,
 } from "../../components/IconSet";
+import type { NavigationHistoryControls } from "../navigation/navigationHistory";
+import {
+  SETTINGS_SEARCH_SECTION_LABEL_KEYS,
+  type SettingsSearchExtension,
+  settingsSearchEntriesFor,
+} from "../settings/settingsSearchIndex";
+import { requestSettingsAnchor } from "../settings/settingsSearchNavigation";
 import type { SidebarShortcutId } from "../settings/sidebarShortcuts";
 import { getNextTheme } from "../settings/themeAndMemory";
 import type { Theme } from "../settings/types";
@@ -79,6 +94,11 @@ export type BuildCommandPaletteActionsInput = {
   onOpenWorkspace?: () => void;
   onOpenSettings?: (section?: string) => void;
   settingsSections?: readonly CommandPaletteSettingsSection[];
+  /**
+   * Individual settings from the settings search index (typed queries only).
+   * Each opens its section and scrolls to the row.
+   */
+  settingsSearch?: { host?: SettingsSearchExtension; hiddenSections?: readonly string[] };
   sidebar?: { open: boolean; onToggle: () => void };
   theme?: { current: Theme; onToggle: () => void };
   /** Right-hand project tools dock (terminal / file tree / Git review). */
@@ -103,6 +123,16 @@ export type BuildCommandPaletteActionsInput = {
   };
   onStopRun?: () => void;
   windowPin?: { pinned?: boolean; onToggle: () => void };
+  /** Back / forward history; each action is listed only while it can move. */
+  history?: Pick<NavigationHistoryControls, "canGoBack" | "canGoForward" | "goBack" | "goForward">;
+  /** Show / hide the terminal in the right dock (see resolveTerminalToggle). */
+  terminal?: { onToggle: () => void };
+  /** Next thinking level of the current model; omitted when it has none to cycle. */
+  thinking?: { onCycle: () => void };
+  /** Whole-window zoom (desktop only); `level` is the current factor. */
+  zoom?: { level: number; onZoomIn: () => void; onZoomOut: () => void; onReset: () => void };
+  /** Closes the current hub / pane / dock; omitted when nothing is closable. */
+  closeContext?: { onClose: () => void };
 };
 
 function format(template: string, values: Record<string, string>) {
@@ -175,6 +205,27 @@ export function buildCommandPaletteActions(
     }
   }
 
+  if (input.history?.canGoBack) {
+    actions.push({
+      id: "navigate-back",
+      group: "navigation",
+      label: t("shortcuts.command.navigateBack"),
+      keywords: ["back", "history", "previous"],
+      icon: ArrowLeft,
+      run: input.history.goBack,
+    });
+  }
+  if (input.history?.canGoForward) {
+    actions.push({
+      id: "navigate-forward",
+      group: "navigation",
+      label: t("shortcuts.command.navigateForward"),
+      keywords: ["forward", "history", "next"],
+      icon: ArrowRight,
+      run: input.history.goForward,
+    });
+  }
+
   if (input.sidebar) {
     const { open, onToggle } = input.sidebar;
     actions.push({
@@ -217,6 +268,66 @@ export function buildCommandPaletteActions(
         },
       );
     }
+  }
+  if (input.terminal) {
+    actions.push({
+      id: "toggle-terminal",
+      group: "view",
+      label: t("shortcuts.command.toggleTerminal"),
+      keywords: ["terminal", "shell", "console", "panel"],
+      icon: Terminal,
+      run: input.terminal.onToggle,
+    });
+  }
+  if (input.closeContext) {
+    actions.push({
+      id: "close-active-context",
+      group: "view",
+      label: t("shortcuts.command.closeActiveContext"),
+      keywords: ["close", "pane", "split", "panel", "dock", "hub"],
+      icon: X,
+      run: input.closeContext.onClose,
+    });
+  }
+  if (input.thinking) {
+    actions.push({
+      id: "cycle-thinking-level",
+      group: "view",
+      label: t("shortcuts.command.cycleThinkingLevel"),
+      keywords: ["thinking", "reasoning", "effort", "level"],
+      icon: Lightbulb,
+      run: input.thinking.onCycle,
+    });
+  }
+  if (input.zoom) {
+    const { level, onZoomIn, onZoomOut, onReset } = input.zoom;
+    const percent = `${Math.round(level * 100)}%`;
+    actions.push(
+      {
+        id: "zoom-in",
+        group: "view",
+        label: t("shortcuts.command.zoomIn"),
+        keywords: ["zoom", "bigger", "larger", "scale", percent],
+        icon: Plus,
+        run: onZoomIn,
+      },
+      {
+        id: "zoom-out",
+        group: "view",
+        label: t("shortcuts.command.zoomOut"),
+        keywords: ["zoom", "smaller", "scale", percent],
+        icon: Minus,
+        run: onZoomOut,
+      },
+      {
+        id: "zoom-reset",
+        group: "view",
+        label: format(t("chat.commandPalette.zoomResetWithLevel"), { level: percent }),
+        keywords: ["zoom", "reset", "actual size", "100%"],
+        icon: RotateCcw,
+        run: onReset,
+      },
+    );
   }
   if (input.conversationView) {
     const { active, onChange } = input.conversationView;
@@ -274,6 +385,34 @@ export function buildCommandPaletteActions(
         searchOnly: true,
         run: () => openSettings(section.id),
       });
+    }
+    if (input.settingsSearch) {
+      const { host, hiddenSections = [] } = input.settingsSearch;
+      const entryTemplate = t("chat.commandPalette.settingEntry");
+      const sectionLabelKeys = { ...SETTINGS_SEARCH_SECTION_LABEL_KEYS, ...host?.sectionLabelKeys };
+      for (const entry of settingsSearchEntriesFor(host)) {
+        const sectionLabelKey = sectionLabelKeys[entry.section];
+        if (!sectionLabelKey || hiddenSections.includes(entry.section)) continue;
+        const section = t(sectionLabelKey);
+        actions.push({
+          id: `setting:${entry.anchor}`,
+          group: "settings",
+          label: format(entryTemplate, { section, setting: t(entry.labelKey) }),
+          keywords: [
+            "settings",
+            entry.section,
+            ...(entry.descriptionKey ? [t(entry.descriptionKey)] : []),
+            ...(entry.keywords ?? []),
+          ],
+          icon: Settings,
+          searchOnly: true,
+          run: () => {
+            // Recorded first: the settings shell consumes it when it mounts.
+            requestSettingsAnchor(entry.section, entry.anchor);
+            openSettings(entry.section);
+          },
+        });
+      }
     }
   }
 

@@ -69,14 +69,6 @@
       ]
     },
     {
-      "file": "crates/agent-ui/src/components/chat/ConversationSearchDialog.tsx",
-      "reason": "Date parts of the zh-only formatChineseUpdatedAt helper.",
-      "literals": [
-        "月",
-        "日"
-      ]
-    },
-    {
       "file": "crates/agent-ui/src/components/chat/assistant-bubble/ToolTraceGroup.tsx",
       "reason": "Full-width separator used only in the zh-CN branch.",
       "literals": [

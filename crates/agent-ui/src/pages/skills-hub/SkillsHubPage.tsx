@@ -1501,6 +1501,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       <div className="hub-page flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
         <HubHeader
           embedded={props.embedded}
+          settingsAnchor={props.embedded ? "skills-hub" : undefined}
           title={t("settings.skillsHubTitle")}
           subtitle={t("settings.skillsHubSubtitle")}
           prominent
@@ -1523,6 +1524,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}
+          settingsAnchor={props.embedded ? "skills-hub" : undefined}
           title={t("settings.skillsHubTitle")}
           subtitle={t("settings.skillsHubSubtitle")}
           prominent

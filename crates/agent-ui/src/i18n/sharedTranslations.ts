@@ -10,6 +10,7 @@ import { IMAGE_SETTINGS_TRANSLATIONS } from "./translations/imageSettingsTransla
 import { TEXT_FORMAT_TRANSLATIONS } from "./translations/textFormatTranslations";
 import { ZH_CN_COMMON_TRANSLATIONS } from "./translations/zhCNCommon";
 import { ZH_CN_SETTINGS_TRANSLATIONS } from "./translations/zhCNSettings";
+import { WORKBENCH_TRANSLATIONS } from "./workbenchTranslations";
 
 export const SHARED_TRANSLATIONS = {
   "zh-CN": {
@@ -23,6 +24,7 @@ export const SHARED_TRANSLATIONS = {
     ...DIFF_VIEW_TRANSLATIONS["zh-CN"],
     ...HOSTED_SEARCH_TRANSLATIONS["zh-CN"],
     ...TEXT_FORMAT_TRANSLATIONS["zh-CN"],
+    ...WORKBENCH_TRANSLATIONS["zh-CN"],
   },
   "en-US": {
     ...TASK_TRANSLATIONS["en-US"],
@@ -35,5 +37,6 @@ export const SHARED_TRANSLATIONS = {
     ...DIFF_VIEW_TRANSLATIONS["en-US"],
     ...HOSTED_SEARCH_TRANSLATIONS["en-US"],
     ...TEXT_FORMAT_TRANSLATIONS["en-US"],
+    ...WORKBENCH_TRANSLATIONS["en-US"],
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

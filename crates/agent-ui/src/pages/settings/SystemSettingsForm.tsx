@@ -393,6 +393,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
     <div className="settings-system-section space-y-8 pb-10">
       <SettingsGroup title={t("settings.executionMode")}>
         <SettingsRow
+          data-settings-anchor="execution-mode"
           title={t("settings.defaultExecutionMode")}
           description={activeExecutionMode.description}
           control={
@@ -419,6 +420,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
 
       <SettingsGroup title={t("settings.groupGeneral")}>
         <SettingsRow
+          data-settings-anchor="appearance"
           title={t("settings.appearance")}
           description={t("settings.appearanceDesc")}
           control={
@@ -440,6 +442,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         />
 
         <SettingsRow
+          data-settings-anchor="language"
           title={t("settings.language")}
           description={t("settings.languageDesc")}
           control={
@@ -468,12 +471,14 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         />
 
         <SettingsRow
+          data-settings-anchor="time-zone"
           title={t("settings.defaultTimeZone")}
           description={t("settings.defaultTimeZoneDesc")}
           control={<PlanningTimeZoneSetting />}
         />
 
         <SettingsRow
+          data-settings-anchor="expand-process"
           title={t("settings.expandProcessByDefault")}
           description={t("settings.expandProcessByDefaultDesc")}
           control={
@@ -514,7 +519,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
 
       <SidebarShortcutsSection settings={settings} setSettings={setSettings} />
 
-      <SettingsGroup title={t("settings.systemProxy")}>
+      <SettingsGroup data-settings-anchor="system-proxy" title={t("settings.systemProxy")}>
         <div>
           <ProxySettingsRow
             title={t("settings.systemProxyEnable")}
@@ -705,7 +710,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
 
       <SystemSettingsExtensions settings={settings} setSettings={setSettings} />
 
-      <SettingsGroup title={t("settings.fontFamily")}>
+      <SettingsGroup data-settings-anchor="font-family" title={t("settings.fontFamily")}>
         {FONT_FAMILY_FIELDS.map(({ key, labelKey }) => {
           const currentValue = settings.customSettings[key];
           const selectValue = toFontFamilySelectValue(
@@ -761,7 +766,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         })}
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.fontSize")}>
+      <SettingsGroup data-settings-anchor="font-size" title={t("settings.fontSize")}>
         {fontScaleZones.map((zone) => (
           <SettingsRow
             key={zone.key}

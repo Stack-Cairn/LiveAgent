@@ -49,6 +49,7 @@ import { setInAppBrowserLinkHandler } from "@liveagent/ui/lib/browser/inAppLinkR
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
 import {
   type CommandPaletteAction,
+  type CommandPaletteFileSourceProvider,
   isMacLikePlatform,
 } from "@liveagent/ui/lib/chat/commandPalette";
 import {
@@ -61,6 +62,7 @@ import type {
 } from "@liveagent/ui/lib/chat/composerCommands";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import { nextThinkingLevel } from "@liveagent/ui/lib/chat/thinkingLevels";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -69,9 +71,21 @@ import {
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
+import {
+  activateRightDockTab,
+  isFocusInRightDock,
+  resolveCloseContextTarget,
+  resolveTerminalToggle,
+} from "@liveagent/ui/lib/chat/workbenchCommands";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import {
+  isWorkbenchNavigationLocationOpenable,
+  parseNavigationLocation,
+  useNavigationHistory,
+  workbenchNavigationLocation,
+} from "@liveagent/ui/lib/navigation/navigationHistory";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
@@ -142,6 +156,7 @@ import {
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { kbrainSettingsAdapter } from "../agent-ui-adapters/kbrainSettings";
+import { desktopSettingsSearch } from "../agent-ui-adapters/settingsSearch";
 import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
@@ -207,6 +222,7 @@ import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { loadKBrainSubagents } from "../lib/subagents/kbrainSubagentStore";
+import { useWebviewZoom } from "../lib/system/webviewZoom";
 import { toggleDesktopWindowPin } from "../lib/system/windowPin";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -3501,8 +3517,9 @@ function ChatPageContent(props: ChatPageProps) {
 
   // Keyboard equivalents for workbench pane commands, all on Meta/Ctrl+Alt:
   // Arrow focuses the adjacent pane, Shift+Arrow moves the focused pane there,
-  // W closes it, and =/+ equalizes its parent split. Every command needs at
-  // least two panes; with one pane the workbench has nothing to navigate.
+  // and =/+ equalizes its parent split. Every command needs at least two panes;
+  // with one pane the workbench has nothing to navigate. Closing the focused
+  // pane is the rebindable "close current view" shortcut command.
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3542,11 +3559,6 @@ function ChatPageContent(props: ChatPageProps) {
       }
 
       if (event.shiftKey) return;
-      if (event.key === "w" || event.key === "W") {
-        event.preventDefault();
-        requestWorkbenchClosePane(focusedPaneId);
-        return;
-      }
       if (event.key === "=" || event.key === "+") {
         const splitId = findParentSplitId(layout, focusedPaneId);
         if (!splitId) return;
@@ -3556,7 +3568,7 @@ function ChatPageContent(props: ChatPageProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleWorkbenchFocusPane, requestWorkbenchClosePane, workbench]);
+  }, [handleWorkbenchFocusPane, workbench]);
 
   // Background pane controllers (conversations visible in unfocused panes).
   const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
@@ -4367,6 +4379,57 @@ function ChatPageContent(props: ChatPageProps) {
       </div>
     ) : null;
 
+  const webviewZoom = useWebviewZoom();
+  // "Close current view" (Mod+Alt+W by default): see resolveCloseContextTarget.
+  const closeActiveContextTarget = () =>
+    resolveCloseContextTarget({
+      activeView,
+      paneCount: sessionWorkbench.enabled
+        ? Object.keys(workbench.layoutRef.current.panes).length
+        : 1,
+      rightDockOpen: activeView === "chat" && rightDockOpen,
+      focusInDock: isFocusInRightDock(),
+    });
+  const closeActiveContext = () => {
+    const target = closeActiveContextTarget();
+    if (target === "hub") {
+      setActiveView("chat");
+    } else if (target === "dock") {
+      setRightDockOpen(false);
+    } else if (target === "pane") {
+      const focusedPaneId = workbench.layoutRef.current.focusedPaneId;
+      if (focusedPaneId) requestWorkbenchClosePane(focusedPaneId);
+    }
+  };
+
+  // Back / forward through the conversations and full-page views the main
+  // area showed. Unsent drafts are not recorded: there is nothing to return to.
+  const navigationHistory = useNavigationHistory({
+    location: workbenchNavigationLocation({
+      activeView,
+      conversationId: currentConversationId,
+      isDraft: isDraftConversation,
+    }),
+    isValid: (location) =>
+      isWorkbenchNavigationLocationOpenable(location, {
+        hasConversation: (id) => sidebarConversationsById.has(id),
+        visibleHubs: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+      }),
+    navigate: (location) => {
+      const target = parseNavigationLocation(location);
+      if (target?.kind === "view") {
+        cacheActiveComposerDraft();
+        setRightDockOpen(false);
+        setActiveView(target.view);
+      } else if (target) {
+        setActiveView("chat");
+        if (target.conversationId !== currentConversationIdRef.current) {
+          handleSelectConversation(target.conversationId);
+        }
+      }
+    },
+  });
+
   // Cmd/Ctrl+K palette: the sidebar reads this snapshot only when it opens, so
   // the closure is rebuilt per render without re-rendering the sidebar.
   const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
@@ -4390,6 +4453,7 @@ function ChatPageContent(props: ChatPageProps) {
         { id: "shortcuts", labelKey: "settings.navShortcuts" },
         { id: "about", labelKey: "settings.navAbout" },
       ],
+      settingsSearch: { host: desktopSettingsSearch },
       sidebar: { open: sidebarOpen, onToggle: handleToggleSidebar },
       theme: { current: settings.theme, onToggle: onToggleTheme },
       projectTools: projectToolsAvailable
@@ -4436,12 +4500,76 @@ function ChatPageContent(props: ChatPageProps) {
         : undefined,
       onStopRun: isSending ? () => stopSendingActionRef.current() : undefined,
       windowPin: isKBrainBrowserHost() ? undefined : { onToggle: toggleDesktopWindowPin },
+      history: navigationHistory,
+      terminal: terminalDisabledMessage
+        ? undefined
+        : {
+            onToggle: () => {
+              const toggle = resolveTerminalToggle({
+                open: activeView === "chat" && rightDockOpen,
+                activeTabId: rightDockProjectState.activeTabId,
+                tabOrder: rightDockProjectState.tabOrder,
+                sessions: projectTerminalSessions,
+              });
+              if (toggle.kind === "close") {
+                setRightDockOpen(false);
+                return;
+              }
+              setActiveView("chat");
+              setRightDockOpen(true);
+              const { sessionId } = toggle;
+              if (sessionId) {
+                handleRightDockProjectStateChange((current) =>
+                  activateRightDockTab(current, sessionId),
+                );
+              }
+            },
+          },
+      thinking: nextThinkingLevel({
+        reasoningOptions: chatRuntimeReasoningOptions,
+        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        controls: chatRuntimeControlsForCurrentProvider,
+      })
+        ? {
+            onCycle: () => {
+              const next = nextThinkingLevel({
+                reasoningOptions: chatRuntimeReasoningOptions,
+                thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+                controls: chatRuntimeControlsForCurrentProvider,
+              });
+              if (next) handleChatRuntimeControlsChange(next.patch);
+            },
+          }
+        : undefined,
+      zoom: !isKBrainBrowserHost()
+        ? {
+            level: webviewZoom.level,
+            onZoomIn: webviewZoom.zoomIn,
+            onZoomOut: webviewZoom.zoomOut,
+            onReset: webviewZoom.reset,
+          }
+        : undefined,
+      closeContext: closeActiveContextTarget() ? { onClose: closeActiveContext } : undefined,
     });
   };
   const getCommandPaletteActions = useCallback(
     () => buildCommandPaletteActionsLatestRef.current(),
     [],
   );
+  // Palette `@` scope: files of the project the terminal / file tree use,
+  // opened through the same preview / editor flow as the file tree.
+  const commandPaletteFilesLatestRef = useRef<CommandPaletteFileSourceProvider>(() => null);
+  commandPaletteFilesLatestRef.current = () =>
+    terminalProjectPath
+      ? {
+          workdir: terminalProjectPath,
+          open: (path) => {
+            setActiveView("chat");
+            handleOpenWorkspaceFile(path);
+          },
+        }
+      : null;
+  const getCommandPaletteFiles = useCallback(() => commandPaletteFilesLatestRef.current(), []);
 
   return (
     <div
@@ -4494,6 +4622,7 @@ function ChatPageContent(props: ChatPageProps) {
           onOpenSettings={onOpenSettings}
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleToggleSidebar}
+          history={navigationHistory}
           leadingActions={
             activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
               <ConversationViewTabs
@@ -4524,6 +4653,7 @@ function ChatPageContent(props: ChatPageProps) {
           unreadStore={unreadConversationStore}
           visibleConversationId={activeView === "chat" ? currentConversationId : ""}
           enabled={settings.customSettings.runNotifications}
+          completionSound={settings.customSettings.runCompletionSound}
         />
         {/* ---- Left column: navigation/sidebar ---- */}
         <ChatSidebarContainer
@@ -4550,6 +4680,7 @@ function ChatPageContent(props: ChatPageProps) {
           fontScale={settings.customSettings.fontScale.sidebar}
           conversationSearchRequestKey={conversationSearchRequestKey}
           getCommandPaletteActions={getCommandPaletteActions}
+          getCommandPaletteFiles={getCommandPaletteFiles}
           activeView={activeView}
           showProjects={isAgentMode}
           projects={workspaceProjects}

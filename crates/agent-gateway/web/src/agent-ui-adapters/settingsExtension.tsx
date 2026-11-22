@@ -10,8 +10,8 @@ import {
   configureResourceHostCapabilities,
   kbrainResourceHostCapabilities,
 } from "@liveagent/ui/lib/resourceHost";
+import type { SettingsSearchExtension } from "@liveagent/ui/lib/settings/settingsSearchIndex";
 import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/settings/sync";
-import type { ShortcutCommandId } from "@liveagent/ui/lib/shortcuts/shortcutCommands";
 import type {
   KBrainMemoryConfig,
   KBrainMemoryOrganizerConfig,
@@ -25,19 +25,19 @@ import { loadToken } from "../lib/storage";
 import { DevicesSection } from "../pages/settings/DevicesSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 import { gatewaySkillsAdapter } from "./kbrainSkills";
-
-// The WebUI transcript has no find bar; the browser keeps its own Cmd/Ctrl+F.
-const WEB_UNSUPPORTED_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = ["findInConversation"];
+import { WEB_UNSUPPORTED_SHORTCUT_COMMANDS, webSettingsSearch } from "./settingsSearch";
 
 export function createSettingsExtension(props: SettingsPageProps): {
   surface: "web";
   iconClassName: string;
   slots: UiExtensionSlots;
   sections: SettingsSectionDefinition<void>[];
+  search: SettingsSearchExtension;
 } {
   return {
     surface: "web",
     iconClassName: "size-4",
+    search: webSettingsSearch,
     slots: {},
     sections: [
       {

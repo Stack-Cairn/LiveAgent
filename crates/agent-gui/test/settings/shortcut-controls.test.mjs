@@ -121,8 +121,8 @@ test("recording a replacement shortcut retains the chosen app scope", async () =
   await env.act(async () =>
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
-        code: "KeyJ",
-        key: "j",
+        code: "KeyG",
+        key: "g",
         ctrlKey: true,
         bubbles: true,
         cancelable: true,
@@ -140,7 +140,7 @@ test("recording a replacement shortcut retains the chosen app scope", async () =
     ),
   );
   assert.deepEqual(shortcuts.readGlobalShortcutBindings().toggle, {
-    accelerator: "Ctrl+KeyJ",
+    accelerator: "Ctrl+KeyG",
     enabled: true,
     scope: "app",
   });

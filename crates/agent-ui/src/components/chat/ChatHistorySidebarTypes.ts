@@ -5,7 +5,10 @@ import type {
   SidebarBatchDeleteResult,
 } from "@liveagent/ui/lib/sidebar/batchDelete";
 import type { ReactNode } from "react";
-import type { CommandPaletteActionsProvider } from "../../lib/chat/commandPalette";
+import type {
+  CommandPaletteActionsProvider,
+  CommandPaletteFileSourceProvider,
+} from "../../lib/chat/commandPalette";
 import type { SidebarShortcutId, SidebarShortcuts } from "../../lib/settings/sidebarShortcuts";
 import type { ConversationOpenOptions } from "../../lib/sidebar/openController";
 import type { SidebarStoreArchive, WorkspaceHistoryState } from "../../lib/sidebar/store";
@@ -74,6 +77,8 @@ export type ChatHistorySidebarProps = {
    * sidebar installs the shortcut and opens the search dialog in palette mode.
    */
   getCommandPaletteActions?: CommandPaletteActionsProvider;
+  /** Workspace the palette's `@` file scope searches; null without an open project. */
+  getCommandPaletteFiles?: CommandPaletteFileSourceProvider;
   activeView?: ApplicationViewId;
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -237,6 +242,7 @@ export type ChatHistorySidebarContainerSource = Required<
     | "fontScale"
     | "conversationSearchRequestKey"
     | "getCommandPaletteActions"
+    | "getCommandPaletteFiles"
     | "onNewConversation"
     | "onSelectConversation"
     | "canShareConversations"
@@ -308,6 +314,7 @@ export function buildChatHistorySidebarBaseProps(
     | "fontScale"
     | "conversationSearchRequestKey"
     | "getCommandPaletteActions"
+    | "getCommandPaletteFiles"
     | "activeView"
   >,
   state: ChatHistorySidebarBaseState,
@@ -332,6 +339,7 @@ export function buildChatHistorySidebarBaseProps(
     fontScale: source.fontScale,
     conversationSearchRequestKey: source.conversationSearchRequestKey,
     getCommandPaletteActions: source.getCommandPaletteActions,
+    getCommandPaletteFiles: source.getCommandPaletteFiles,
     activeView: source.activeView,
   };
 }

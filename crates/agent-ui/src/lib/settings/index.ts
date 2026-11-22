@@ -1892,6 +1892,8 @@ export function normalizeCustomSettings(
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
     // 缺省开启：老配置无此字段时启用后台对话通知。
     runNotifications: obj.runNotifications !== false,
+    // Off by default: only an explicit opt-in plays the chime.
+    runCompletionSound: obj.runCompletionSound === true,
     rightDock: normalizeRightDockSettings(obj.rightDock),
     // 三档枚举：历史配置无此字段或值不合法（含曾设想过的 "auto"）一律落回默认的统计状态栏。
     composerContextDisplay:
@@ -2488,6 +2490,11 @@ export function updateShowDetailedProgress(prev: AppSettings, enabled: boolean):
 export function updateRunNotifications(prev: AppSettings, enabled: boolean): AppSettings {
   if (prev.customSettings.runNotifications === enabled) return prev;
   return updateCustomSettings(prev, { runNotifications: enabled });
+}
+
+export function updateRunCompletionSound(prev: AppSettings, enabled: boolean): AppSettings {
+  if (prev.customSettings.runCompletionSound === enabled) return prev;
+  return updateCustomSettings(prev, { runCompletionSound: enabled });
 }
 
 export function updateRightDockWidth(prev: AppSettings, width: number): AppSettings {

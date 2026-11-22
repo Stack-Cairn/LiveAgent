@@ -91,6 +91,7 @@ export function McpHubPage(props: McpHubPageProps) {
       <div className="relative z-10 flex h-full min-h-0 flex-col overflow-hidden">
         <HubHeader
           embedded={props.embedded}
+          settingsAnchor={props.embedded ? "mcp-servers" : undefined}
           title="MCP Hub"
           subtitle={t("mcpHub.subtitle")}
           prominent

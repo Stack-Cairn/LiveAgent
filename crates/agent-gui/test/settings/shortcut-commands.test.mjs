@@ -42,16 +42,26 @@ test("one table drives defaults: Mod resolves to Cmd on mac and Ctrl elsewhere",
   );
   assert.deepEqual(table, {
     commandPalette: "Mod+KeyK",
+    quickOpenFile: "Mod+KeyP",
     newConversation: "Mod+Shift+KeyO",
     openSettings: "Mod+Comma",
     searchConversations: null,
     previousConversation: "Mod+Alt+BracketLeft",
     nextConversation: "Mod+Alt+BracketRight",
+    navigateBack: "Mod+BracketLeft",
+    navigateForward: "Mod+BracketRight",
     findInConversation: "Mod+KeyF",
     focusComposer: "Slash",
     openModelPicker: "Mod+Slash",
     toggleSidebar: "Mod+KeyB",
     toggleRightPanel: "Mod+Alt+KeyB",
+    toggleTerminal: "Mod+KeyJ",
+    closeActiveContext: "Mod+Alt+KeyW",
+    cycleTheme: "Mod+Shift+KeyL",
+    cycleThinkingLevel: "Mod+Alt+KeyT",
+    zoomIn: "Mod+Equal",
+    zoomOut: "Mod+Minus",
+    zoomReset: "Mod+Digit0",
   });
   assert.equal(commands.formatShortcutCommand("newConversation", true), "⇧⌘O");
   assert.equal(commands.formatShortcutCommand("newConversation", false), "Ctrl+Shift+O");
@@ -142,9 +152,9 @@ test("palette rows show the bound shortcut and follow overrides", () => {
       ],
       isMac,
     ).map((action) => action.shortcut);
-  assert.deepEqual(rows(true), ["⇧⌘O", "⌘B", undefined]);
-  assert.deepEqual(rows(false), ["Ctrl+Shift+O", "Ctrl+B", undefined]);
-  commands.writeShortcutOverrides({ toggleSidebar: "" });
+  assert.deepEqual(rows(true), ["⇧⌘O", "⌘B", "⇧⌘L"]);
+  assert.deepEqual(rows(false), ["Ctrl+Shift+O", "Ctrl+B", "Ctrl+Shift+L"]);
+  commands.writeShortcutOverrides({ toggleSidebar: "", cycleTheme: "" });
   assert.deepEqual(rows(false), ["Ctrl+Shift+O", undefined, undefined]);
 });
 
@@ -157,7 +167,7 @@ test("settings section records, flags conflicts, rejects taken chords and resets
       root.render(
         env.React.createElement(ShortcutCommandsSection, {
           isMac: false,
-          externalBindings: [{ id: "global:toggle", label: "Show window", accelerator: "Ctrl+Shift+KeyL" }],
+          externalBindings: [{ id: "global:toggle", label: "Show window", accelerator: "Ctrl+Shift+KeyY" }],
           onRecordingChange: (value) => recording.push(value),
         }),
       ),
@@ -181,7 +191,7 @@ test("settings section records, flags conflicts, rejects taken chords and resets
 
     await click(row("openSettings").querySelector('[data-shortcut-record="openSettings"]'));
     assert.equal(keys.areInAppShortcutsSuspended(), true);
-    await press({ key: "L", code: "KeyL", ctrlKey: true, shiftKey: true });
+    await press({ key: "Y", code: "KeyY", ctrlKey: true, shiftKey: true });
     assert.deepEqual(commands.readShortcutOverrides(), {}, "a chord owned by a system-wide hotkey is rejected");
     assert.match(host.querySelector('[role="status"]').textContent, /shortcuts\.rejectedConflict/);
 

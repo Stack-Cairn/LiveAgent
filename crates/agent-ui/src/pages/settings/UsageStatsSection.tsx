@@ -100,6 +100,7 @@ export function UsageStatsSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
 
   return (
     <SettingsSection
+      data-settings-anchor="usage-stats"
       data-testid="usage-stats-settings"
       title={t("settings.usage.title")}
       description={

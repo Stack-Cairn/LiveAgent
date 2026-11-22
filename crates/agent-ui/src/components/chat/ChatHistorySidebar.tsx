@@ -12,6 +12,7 @@ import {
   ChevronUp,
   CirclePlus,
   Clock3,
+  FileText,
   Folder,
   FolderClosed,
   FolderOpen,
@@ -39,6 +40,7 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
+  COMMAND_PALETTE_FILES_PREFIX,
   type CommandPaletteAction,
   isCommandPaletteShortcut,
   isCommandPaletteSuppressed,
@@ -167,14 +169,33 @@ function isMobileSidebarLayout() {
   return window.matchMedia(MOBILE_SIDEBAR_MEDIA_QUERY).matches;
 }
 
+// Held-down chords that keep stepping (lists, history, zoom).
+const REPEATABLE_SHORTCUT_COMMANDS: ReadonlySet<ShortcutCommandId> = new Set([
+  "previousConversation",
+  "nextConversation",
+  "navigateBack",
+  "navigateForward",
+  "zoomIn",
+  "zoomOut",
+]);
 const SIDEBAR_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
   "newConversation",
   "openSettings",
   "searchConversations",
   "previousConversation",
   "nextConversation",
+  "navigateBack",
+  "navigateForward",
   "toggleRightPanel",
+  "toggleTerminal",
+  "cycleTheme",
+  "cycleThinkingLevel",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+  "closeActiveContext",
 ];
+const QUICK_OPEN_FILE_PALETTE_ACTION_ID = "quick-open-file";
 const SHORTCUT_DIALOG_SELECTOR = "[role=dialog], [role=alertdialog], [aria-modal=true]";
 
 function useStableEvent<Args extends unknown[], Return>(
@@ -246,6 +267,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     fontScale = 1,
     conversationSearchRequestKey,
     getCommandPaletteActions,
+    getCommandPaletteFiles,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -312,6 +334,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const [conversationSearchMode, setConversationSearchMode] = useState<"search" | "palette">(
     "search",
   );
+  // Query the palette opens with (`@` for quick open) and a counter that
+  // re-applies it while the palette is already open.
+  const [paletteOpenRequest, setPaletteOpenRequest] = useState({ query: "", key: 0 });
   const conversationSearchOpenRef = useRef(conversationSearchOpen);
   conversationSearchOpenRef.current = conversationSearchOpen;
   const [revealedSearchConversationId, setRevealedSearchConversationId] = useState<string | null>(
@@ -416,6 +441,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   }, [conversationSearchRequestKey, sectionsDisabled]);
 
   const commandPaletteEnabled = Boolean(getCommandPaletteActions) && !sectionsDisabled;
+  const openQuickOpen = useStableEvent(() => {
+    setPaletteOpenRequest((request) => ({
+      query: COMMAND_PALETTE_FILES_PREFIX,
+      key: request.key + 1,
+    }));
+    setConversationSearchMode("palette");
+    setConversationSearchOpen(true);
+  });
   // Shortcut commands the sidebar runs itself: the palette, plain search,
   // stepping through the visible conversation list, and palette actions that
   // already exist for the host (new conversation, settings, right panel).
@@ -432,7 +465,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     const action = paletteActionId
       ? getCommandPaletteActions?.().find((entry) => entry.id === paletteActionId)
       : undefined;
-    if (!action) return false;
+    if (!action) {
+      // At either end of the history the chord is still ours: letting it
+      // through would make a browser leave the app.
+      return command === "navigateBack" || command === "navigateForward";
+    }
     action.run();
     return true;
   });
@@ -450,8 +487,23 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           setConversationSearchOpen(false);
           return;
         }
+        setPaletteOpenRequest((request) => ({ query: "", key: request.key + 1 }));
         setConversationSearchMode("palette");
         setConversationSearchOpen(true);
+        return;
+      }
+      // Quick open: the palette straight in its `@` file scope. The desktop
+      // webview guard cancels ⌘P's print default, so only a handler other
+      // than the host guard counts as "handled elsewhere" here.
+      if (
+        commandPaletteEnabled &&
+        !isKeyEventHandledElsewhere(event) &&
+        matchesShortcutCommand(event, "quickOpenFile", isMac)
+      ) {
+        if (isCommandPaletteSuppressed()) return;
+        event.preventDefault();
+        if (event.repeat) return;
+        openQuickOpen();
         return;
       }
       if (isKeyEventHandledElsewhere(event) || isCommandPaletteSuppressed()) return;
@@ -462,7 +514,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       // An open dialog (the palette itself, confirmations) owns the keyboard.
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(SHORTCUT_DIALOG_SELECTOR)) return;
-      const repeatable = command === "previousConversation" || command === "nextConversation";
+      const repeatable = REPEATABLE_SHORTCUT_COMMANDS.has(command);
       if (event.repeat && !repeatable) {
         event.preventDefault();
         return;
@@ -471,7 +523,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [commandPaletteEnabled, runSidebarShortcut, sectionsDisabled]);
+  }, [commandPaletteEnabled, openQuickOpen, runSidebarShortcut, sectionsDisabled]);
   const selectionAnchorRef = useRef<string | null>(null);
   const bulkConfirmOpenRef = useRef(false);
   // Bumped to invalidate an in-flight bulk delete: its shouldStop callback
@@ -617,6 +669,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   });
   const getPaletteActions = useStableEvent((): CommandPaletteAction[] => {
     const actions = [...(getCommandPaletteActions?.() ?? [])];
+    if (getCommandPaletteFiles) {
+      actions.push({
+        id: QUICK_OPEN_FILE_PALETTE_ACTION_ID,
+        group: "navigation",
+        label: t("shortcuts.command.quickOpenFile"),
+        keywords: ["file", "open", "go to", "@"],
+        icon: FileText,
+        run: openQuickOpen,
+      });
+    }
     if (orderedConversationIds.length > 1) {
       actions.push(
         {
@@ -2432,6 +2494,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         onSelectConversation={handleSelectConversation}
         mode={conversationSearchMode}
         getActions={getCommandPaletteActions ? getPaletteActions : undefined}
+        getFileSource={getCommandPaletteFiles}
+        initialQuery={conversationSearchMode === "palette" ? paletteOpenRequest.query : ""}
+        openRequestKey={paletteOpenRequest.key}
       />
       {archivedConversations && archivedListOpen ? (
         <ArchivedConversationsModal

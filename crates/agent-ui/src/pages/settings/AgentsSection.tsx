@@ -113,6 +113,7 @@ export function AgentsSection(props: SettingsSectionProps) {
     <>
       <div className="settings-agents-section space-y-7">
         <SettingsSection
+          data-settings-anchor="agents-global"
           title={t("settings.agentsGlobalTab")}
           description={t("settings.agentsGlobalConfigHint")}
           actions={
@@ -229,6 +230,7 @@ export function AgentsSection(props: SettingsSectionProps) {
         </SettingsSection>
 
         <SettingsSection
+          data-settings-anchor="agents-projects"
           title={t("settings.agentsProjectsTab")}
           description={t("chat.projectPromptStrategyHint")}
           actions={

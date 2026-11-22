@@ -8,7 +8,10 @@ export function SidebarShortcutsSection({ settings, setSettings }: SettingsSecti
   const { t } = useLocale();
   return (
     <div className="mx-auto w-full max-w-920px">
-      <SettingsGroup title={t("settings.sidebarShortcuts")}>
+      <SettingsGroup
+        data-settings-anchor="sidebar-shortcuts"
+        title={t("settings.sidebarShortcuts")}
+      >
         {SIDEBAR_SHORTCUTS.map(({ id, labelKey }) => (
           <SettingsRow
             key={id}

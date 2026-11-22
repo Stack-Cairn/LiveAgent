@@ -64,6 +64,18 @@ export function resolveRunAttention(
   };
 }
 
+/**
+ * The completion chime follows the notification rule: only a finished run the
+ * user is not looking at, while the app window is in the background. Blocked
+ * runs keep their banner and sidebar pill without a sound.
+ */
+export function playsCompletionSound(
+  event: RunAttentionEvent,
+  context: RunAttentionContext,
+): boolean {
+  return event.kind === "completed" && resolveRunAttention(event, context).notify;
+}
+
 export function runAttentionBadgeCount(
   unread: ReadonlySet<string>,
   approvals: ReadonlySet<string>,

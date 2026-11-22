@@ -557,6 +557,7 @@ function syncableCustomSettings(
       showDetailedProgress: false,
     },
     runNotifications: true,
+    runCompletionSound: false,
     fontScale: { sidebar: 1, chat: 1, rightDock: 1, settings: 1 },
   };
 }
@@ -1413,6 +1414,7 @@ export function applyGatewaySettingsSyncPayload(
       codeFontFamily: current.customSettings.codeFontFamily,
       chatTranscript: current.customSettings.chatTranscript,
       runNotifications: current.customSettings.runNotifications,
+      runCompletionSound: current.customSettings.runCompletionSound,
       fontScale: current.customSettings.fontScale,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,

@@ -14,6 +14,7 @@ import ArrowDownAZSource from "~icons/lucide/arrow-down-a-z";
 import ArrowLeftSource from "~icons/lucide/arrow-left";
 import ArrowRightSource from "~icons/lucide/arrow-right";
 import ArrowUpSource from "~icons/lucide/arrow-up";
+import AtSignSource from "~icons/lucide/at-sign";
 import AudioLinesSource from "~icons/lucide/audio-lines";
 import BanSource from "~icons/lucide/ban";
 import BlendSource from "~icons/lucide/blend";
@@ -493,6 +494,7 @@ function GeminiIconSource({ title, ...props }: SVGProps<SVGSVGElement> & { title
 
 export const AlertTriangle = createIcon(AlertTriangleSource);
 export const AlertCircle = createIcon(AlertCircleSource);
+export const AtSign = createIcon(AtSignSource);
 export const ClaudeIcon = createIcon(ClaudeSource);
 export const DeepseekIcon = createIcon(DeepseekSource);
 export const GeminiIcon = createIcon(GeminiIconSource);

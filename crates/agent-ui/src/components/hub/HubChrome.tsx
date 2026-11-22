@@ -40,10 +40,13 @@ export function HubHeader(props: {
   actions?: ReactNode;
   prominent?: boolean;
   embedded?: boolean;
+  /** Settings search target when the hub is embedded in settings. */
+  settingsAnchor?: string;
 }) {
   const { icon, title, subtitle, actions, prominent = false, embedded = false } = props;
   return (
     <div
+      data-settings-anchor={props.settingsAnchor}
       className={cn(
         "hub-header relative z-10",
         embedded ? "pb-5" : "px-5 sm:px-6 lg:px-8 xl:px-10",

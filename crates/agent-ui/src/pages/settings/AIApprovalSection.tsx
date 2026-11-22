@@ -160,6 +160,7 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
     >
       <SettingsCard>
         <SettingsRow
+          data-settings-anchor="ai-approval-mode"
           title={t("settings.aiApproval.mode")}
           description={t(`settings.aiApproval.${draft.mode}.description`)}
           control={
@@ -182,6 +183,7 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
           }
         />
         <SettingsRow
+          data-settings-anchor="ai-approval-model"
           title={t("settings.aiApproval.model")}
           description={t("settings.aiApproval.modelHint")}
           control={

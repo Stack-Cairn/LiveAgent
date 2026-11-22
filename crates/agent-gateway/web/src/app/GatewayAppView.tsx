@@ -45,6 +45,7 @@ import {
 } from "@liveagent/ui/lib/chat/checkpointRewind";
 import {
   type CommandPaletteAction,
+  type CommandPaletteFileSourceProvider,
   isMacLikePlatform,
 } from "@liveagent/ui/lib/chat/commandPalette";
 import {
@@ -53,11 +54,27 @@ import {
 } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import { nextThinkingLevel } from "@liveagent/ui/lib/chat/thinkingLevels";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import {
+  activateRightDockTab,
+  isFocusInRightDock,
+  resolveCloseContextTarget,
+  resolveTerminalToggle,
+} from "@liveagent/ui/lib/chat/workbenchCommands";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
+import {
+  isWorkbenchNavigationLocationOpenable,
+  parseNavigationLocation,
+  useNavigationHistory,
+  workbenchNavigationLocation,
+} from "@liveagent/ui/lib/navigation/navigationHistory";
 import { kbrainResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
-import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
+import {
+  normalizeSidebarShortcuts,
+  type SidebarShortcutId,
+} from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -135,6 +152,7 @@ import {
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
 import { settingsHostAdapter } from "../agent-ui-adapters/settingsExtension";
+import { webSettingsSearch } from "../agent-ui-adapters/settingsSearch";
 import { AgentSelector } from "./AgentSelector";
 import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
@@ -1368,6 +1386,55 @@ export function GatewayAppView({
     [workbenchController.leasedDockSessionIds],
   );
 
+  // "Close current view" (Mod+Alt+W by default): see resolveCloseContextTarget.
+  const closeActiveContextTarget = () =>
+    resolveCloseContextTarget({
+      activeView,
+      paneCount: sessionWorkbench.enabled
+        ? Object.keys(workbenchController.workbench.layoutRef.current.panes).length
+        : 1,
+      rightDockOpen: activeView === "chat" && rightDockOpen,
+      focusInDock: isFocusInRightDock(),
+    });
+  const closeActiveContext = () => {
+    const target = closeActiveContextTarget();
+    if (target === "hub") {
+      setActiveView("chat");
+    } else if (target === "dock") {
+      setRightDockOpen(false);
+    } else if (target === "pane") {
+      const focusedPaneId = workbenchController.workbench.layoutRef.current.focusedPaneId;
+      if (focusedPaneId) workbenchController.requestClosePane(focusedPaneId);
+    }
+  };
+
+  // Back / forward through the conversations and hubs the main area showed.
+  const displayedConversationIdRef = useRef(displayedConversationId);
+  displayedConversationIdRef.current = displayedConversationId;
+  const navigationHistory = useNavigationHistory({
+    location: workbenchNavigationLocation({
+      activeView,
+      conversationId: displayedConversationId,
+      isDraft:
+        isLocalDraftConversationId(displayedConversationId) ||
+        !sidebarConversationsById.has(displayedConversationId),
+    }),
+    isValid: (location) =>
+      isWorkbenchNavigationLocationOpenable(location, {
+        hasConversation: (id) => sidebarConversationsById.has(id),
+        visibleHubs: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+      }),
+    navigate: (location) => {
+      const target = parseNavigationLocation(location);
+      if (target?.kind === "view") {
+        handleSidebarOpenResourceHub(target.view.replace(/-hub$/, "") as SidebarShortcutId);
+      } else if (target) {
+        if (target.conversationId === displayedConversationIdRef.current) setActiveView("chat");
+        else handleSidebarSelectConversation(target.conversationId);
+      }
+    },
+  });
+
   // Cmd/Ctrl+K palette: rebuilt per render, read by the sidebar only when it opens.
   const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
   buildCommandPaletteActionsLatestRef.current = () =>
@@ -1382,6 +1449,7 @@ export function GatewayAppView({
         ...SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter((section) => section.id !== "remote"),
         { id: "shortcuts", labelKey: "settings.navShortcuts" },
       ],
+      settingsSearch: { host: webSettingsSearch, hiddenSections: ["remote"] },
       sidebar: { open: sidebarOpen, onToggle: () => setSidebarOpen((open) => !open) },
       theme: {
         current: settings.theme,
@@ -1427,11 +1495,67 @@ export function GatewayAppView({
             }
           : undefined,
       onStopRun: composerIsSending ? handlePrimaryComposerStop : undefined,
+      history: navigationHistory,
+      terminal:
+        terminalClient && !terminalDisabledMessage
+          ? {
+              onToggle: () => {
+                const toggle = resolveTerminalToggle({
+                  open: activeView === "chat" && rightDockOpen,
+                  activeTabId: rightDockProjectState.activeTabId,
+                  tabOrder: rightDockProjectState.tabOrder,
+                  sessions: projectTerminalSessions,
+                });
+                if (toggle.kind === "close") {
+                  setRightDockOpen(false);
+                  return;
+                }
+                setActiveView("chat");
+                setRightDockOpen(true);
+                const { sessionId } = toggle;
+                if (sessionId) {
+                  handleRightDockProjectStateChange((current) =>
+                    activateRightDockTab(current, sessionId),
+                  );
+                }
+              },
+            }
+          : undefined,
+      thinking: nextThinkingLevel({
+        reasoningOptions: chatRuntimeReasoningOptions,
+        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        controls: chatRuntimeControlsForCurrentProvider,
+      })
+        ? {
+            onCycle: () => {
+              const next = nextThinkingLevel({
+                reasoningOptions: chatRuntimeReasoningOptions,
+                thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+                controls: chatRuntimeControlsForCurrentProvider,
+              });
+              if (next) handleChatRuntimeControlsChange(next.patch);
+            },
+          }
+        : undefined,
+      closeContext: closeActiveContextTarget() ? { onClose: closeActiveContext } : undefined,
     });
   const getCommandPaletteActions = useCallback(
     () => buildCommandPaletteActionsLatestRef.current(),
     [],
   );
+  // Palette `@` scope: files of the project the terminal / file tree use.
+  const commandPaletteFilesLatestRef = useRef<CommandPaletteFileSourceProvider>(() => null);
+  commandPaletteFilesLatestRef.current = () =>
+    terminalProjectPath
+      ? {
+          workdir: terminalProjectPath,
+          open: (path) => {
+            setActiveView("chat");
+            handleOpenWorkspaceFile(path);
+          },
+        }
+      : null;
+  const getCommandPaletteFiles = useCallback(() => commandPaletteFilesLatestRef.current(), []);
 
   // 拖拽幽灵:跟随指针的载荷标题,提交/取消后随 dragState 清空。
   const workbenchDragGhost =
@@ -1500,6 +1624,7 @@ export function GatewayAppView({
                 }))
               }
               onOpenSidebar={() => setSidebarOpen((open) => !open)}
+              history={navigationHistory}
               leadingActions={
                 activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
                   <ConversationViewTabs
@@ -1612,6 +1737,7 @@ export function GatewayAppView({
                 onOpenSettings={openSettings}
                 onOpenResourceHub={handleSidebarOpenResourceHub}
                 getCommandPaletteActions={getCommandPaletteActions}
+                getCommandPaletteFiles={getCommandPaletteFiles}
               />
 
               {shareConversation ? (

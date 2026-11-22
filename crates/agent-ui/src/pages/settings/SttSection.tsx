@@ -440,6 +440,7 @@ export function SttSection({
       <SettingsSection title={t("settings.groupGeneral")}>
         <SettingsCard>
           <SettingsRow
+            data-settings-anchor="stt-enable"
             title={t("settings.stt.enable")}
             description={
               <>
@@ -467,7 +468,7 @@ export function SttSection({
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title={t("settings.stt.sectionService")}>
+      <SettingsSection data-settings-anchor="stt-service" title={t("settings.stt.sectionService")}>
         <SettingsCard>
           <SettingsRow
             title={t(definition.labelKey)}
