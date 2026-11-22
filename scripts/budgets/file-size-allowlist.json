@@ -41,7 +41,7 @@
     "crates/agent-ui/src/components/chat/MentionComposer.tsx": 2434,
     "crates/agent-ui/src/components/chat/MentionComposerInternals.tsx": 2359,
     "crates/agent-ui/src/components/git/GitBranchSelector.tsx": 1599,
-    "crates/agent-ui/src/components/project-tools/SshTunnelPanel.tsx": 1810,
+    "crates/agent-ui/src/components/project-tools/SshTunnelPanel.tsx": 1800,
     "crates/agent-ui/src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx": 1537,
     "crates/agent-ui/src/components/workspace-editor/WorkspaceFilePreviewOverlay.tsx": 1656,
     "crates/agent-ui/src/components/workspace-editor/WorkspaceSftpPanel.tsx": 1531,
@@ -52,8 +52,7 @@
     "crates/agent-ui/src/lib/chat/uiMessages.ts": 1654,
     "crates/agent-ui/src/lib/settings/index.ts": 2757,
     "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": 2097,
-    "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2105,
-    "crates/agent-ui/src/pages/settings/SshSection.tsx": 1507,
+    "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2099,
     "crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx": 1955,
     "crates/virtual-core/src/index.ts": 2505
   }
