@@ -87,6 +87,9 @@ async function launchChrome() {
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
       "--enable-experimental-web-platform-features",
+      // CI runners (Ubuntu 24.04) restrict the unprivileged user namespaces
+      // Chromium's sandbox needs; the page is a local synthetic harness.
+      ...(process.env.CI === "true" ? ["--no-sandbox"] : []),
       "about:blank",
     ],
     { stdio: ["ignore", "ignore", "pipe"] },

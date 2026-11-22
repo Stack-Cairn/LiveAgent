@@ -105,6 +105,33 @@ test("Cmd+K on macOS / Ctrl+K elsewhere, never inside editors, terminals or IME"
   }
 });
 
+test("the sidebar shortcut listener marks the palette ready only while it is registered", async () => {
+  const env = await createEnv();
+  try {
+    const { COMMAND_PALETTE_READY_ATTRIBUTE, listenForSidebarShortcuts } = env.loadModule(
+      "@liveagent/ui/lib/chat/commandPalette.ts",
+    );
+    const root = document.documentElement;
+    const seen = [];
+    const press = () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k" }));
+
+    const stop = listenForSidebarShortcuts((event) => seen.push(event.key), true);
+    assert.equal(root.hasAttribute(COMMAND_PALETTE_READY_ATTRIBUTE), true, "ready once the handler is attached");
+    press();
+    assert.deepEqual(seen, ["k"]);
+    stop();
+    assert.equal(root.hasAttribute(COMMAND_PALETTE_READY_ATTRIBUTE), false, "cleared with the handler");
+    press();
+    assert.deepEqual(seen, ["k"], "cleanup detaches the handler");
+
+    const stopWithoutPalette = listenForSidebarShortcuts(() => seen.push("other"), false);
+    assert.equal(root.hasAttribute(COMMAND_PALETTE_READY_ATTRIBUTE), false, "no marker when the palette is off");
+    stopWithoutPalette();
+  } finally {
+    env.cleanup();
+  }
+});
+
 test("action builder only lists actions the host wires", async () => {
   const env = await createEnv();
   try {
@@ -278,6 +305,7 @@ test("desktop and WebUI hosts wire the palette and suppress it under settings", 
   const sidebar = read("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx");
   assert.match(sidebar, /isCommandPaletteShortcut\(event, isMac\)/);
   assert.match(sidebar, /isCommandPaletteSuppressed\(\)/);
+  assert.match(sidebar, /listenForSidebarShortcuts\(handleKeyDown, commandPaletteEnabled\)/);
   assert.match(sidebar, /mode=\{conversationSearchMode\}/);
   for (const host of [
     "../../src/pages/ChatPage.tsx",

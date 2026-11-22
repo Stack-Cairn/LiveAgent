@@ -2,7 +2,7 @@
 // JSON) arriving in 16 KB network chunks, parsed by the previous
 // whole-buffer split and by the incremental splitter.
 //
-//   node perf/sse-bench.mjs [--mb=8] [--chunk=16384] [--runs=5]
+//   node perf/sse-bench.mjs [--mb=8] [--chunk=16384] [--runs=5] [--parsers=previous,incremental]
 import { performance } from "node:perf_hooks";
 import { createTsModuleLoader } from "../test/helpers/load-ts-module.mjs";
 
@@ -12,6 +12,7 @@ const args = Object.fromEntries(
 const megabytes = Number(args.mb ?? 8);
 const chunkBytes = Number(args.chunk ?? 16384);
 const runs = Number(args.runs ?? 5);
+const parsers = (args.parsers ?? "previous,incremental").split(",");
 
 const { createSseRecordSplitter } = createTsModuleLoader().loadModule("src/lib/kbrain/sseRecords.ts");
 
@@ -43,7 +44,11 @@ function incremental() {
   return count;
 }
 
-for (const [name, run] of [["previous split", previous], ["incremental", incremental]]) {
+const selected = [
+  ["previous split", previous, "previous"],
+  ["incremental", incremental, "incremental"],
+].filter(([, , id]) => parsers.includes(id));
+for (const [name, run] of selected) {
   const times = [];
   for (let index = 0; index < runs; index += 1) {
     const started = performance.now();
@@ -53,6 +58,14 @@ for (const [name, run] of [["previous split", previous], ["incremental", increme
   }
   times.sort((a, b) => a - b);
   console.log(
-    JSON.stringify({ parser: name, mb: megabytes, chunkBytes, medianMs: Number(times[Math.floor(runs / 2)].toFixed(1)) }),
+    JSON.stringify({
+      parser: name,
+      mb: megabytes,
+      chunkBytes,
+      medianMs: Number(times[Math.floor(runs / 2)].toFixed(1)),
+      // Interference (other processes, GC of earlier runs) only adds time,
+      // so the fastest run is the most stable estimate of the work itself.
+      minMs: Number(times[0].toFixed(2)),
+    }),
   );
 }

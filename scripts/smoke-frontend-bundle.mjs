@@ -18,21 +18,21 @@
 //   5. fails on uncaught page errors, error boundaries or console errors.
 //
 // Usage:
-//   node scripts/smoke-frontend-bundle.mjs [--dist crates/agent-gui/dist]
+//   node scripts/smoke-frontend-bundle.mjs [--app gui|webui] [--dist DIR]
 //     [--browser chromium|webkit|all] [--runs N] [--kbrain-url URL]
 //     [--json out.json] [--screenshot out.png] [--cpu-throttle 4 (chromium)]
 // Playwright is not a workspace dependency: install it next to the script
 // runner (`npm i --no-save playwright-core`) or point PLAYWRIGHT_CORE at its
 // entry module. Browsers come from `npx playwright install chromium webkit`.
 //
-// Suggested CI step (GUI job, after `pnpm build` in crates/agent-gui):
-//   - name: Smoke-test the release frontend bundle
-//     run: |
-//       npm i --no-save --prefix "$RUNNER_TEMP/pw" playwright-core
-//       PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
-//         npx --prefix "$RUNNER_TEMP/pw" playwright-core install --with-deps chromium webkit
-//       PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
-//         node scripts/smoke-frontend-bundle.mjs --dist crates/agent-gui/dist --browser all
+// `--app gui` (default) boots the desktop frontend against the fake K-brain
+// and waits for the main UI. `--app webui` boots the Gateway WebUI: its
+// same-origin API answers 401, so the run waits for the login screen (the
+// lazy chat/workbench chunks are still evaluated by the import pass).
+//
+// CI runs this for both apps in the Frontend Bundles job
+// (.github/workflows/ci.yml, Playwright set up by
+// .github/actions/setup-playwright); see docs/testing/ci-checks.md.
 
 import { createReadStream, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -42,9 +42,22 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Per-app defaults: where the build lands, what "booted" means, and which
+// same-origin paths are a backend API (answered instead of the SPA fallback).
+export const APPS = {
+  gui: { dist: "crates/agent-gui/dist", readySelector: "", apiPrefixes: [] },
+  webui: {
+    dist: "crates/agent-gateway/web/dist",
+    // The login screen's token field: no gateway session in a smoke run.
+    readySelector: "#access-token",
+    apiPrefixes: ["/api/", "/ws", "/image-proxy"],
+  },
+};
+
 export function parseArguments(argv) {
   const options = {
-    dist: path.join(repoRoot, "crates/agent-gui/dist"),
+    app: "gui",
+    dist: "",
     browsers: ["chromium"],
     runs: 1,
     kbrainUrl: "",
@@ -61,7 +74,8 @@ export function parseArguments(argv) {
       index += 1;
       return value;
     };
-    if (flag === "--dist") options.dist = path.resolve(take());
+    if (flag === "--app") options.app = take();
+    else if (flag === "--dist") options.dist = path.resolve(take());
     else if (flag === "--browser") {
       const browser = take();
       options.browsers = browser === "all" ? ["chromium", "webkit"] : [browser];
@@ -78,6 +92,11 @@ export function parseArguments(argv) {
       throw new Error(`unsupported browser: ${browser}`);
     }
   }
+  const app = APPS[options.app];
+  if (!app) throw new Error(`unsupported app: ${options.app} (expected gui or webui)`);
+  if (!options.dist) options.dist = path.join(repoRoot, app.dist);
+  options.readySelector = app.readySelector;
+  options.apiPrefixes = app.apiPrefixes;
   return options;
 }
 
@@ -112,9 +131,14 @@ const MIME = {
   ".wasm": "application/wasm",
 };
 
-function serveDist(dist) {
+function serveDist(dist, apiPrefixes = []) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
+    if (apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end('{"error":"unauthorized"}');
+      return;
+    }
     let file = path.join(dist, decodeURIComponent(url.pathname));
     if (!file.startsWith(dist)) {
       response.writeHead(403).end();
@@ -271,15 +295,13 @@ async function runOnce(playwright, browserName, options, origin, chunks) {
   let mainUi = true;
   try {
     const uiReady = page.waitForFunction(
-      () => {
+      (readySelector) => {
         const root = document.getElementById("root");
-        return (
-          root &&
-          !root.querySelector("[data-static-boot-shell]") &&
-          root.querySelectorAll("button").length >= 3
-        );
+        if (!root || root.querySelector("[data-static-boot-shell]")) return false;
+        if (readySelector) return Boolean(root.querySelector(readySelector));
+        return root.querySelectorAll("button").length >= 3;
       },
-      undefined,
+      options.readySelector,
       { timeout: options.timeoutMs },
     );
     uiReady.catch(() => {});
@@ -379,7 +401,7 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error(`no index.html in ${options.dist}; build the frontend first`);
   }
   const playwright = await loadPlaywright();
-  const server = await serveDist(options.dist);
+  const server = await serveDist(options.dist, options.apiPrefixes);
   const origin = `http://127.0.0.1:${server.address().port}`;
   const chunks = listJsChunks(options.dist);
   const results = [];
@@ -390,7 +412,7 @@ export async function main(argv = process.argv.slice(2)) {
         results.push(result);
         const status = result.problems.length === 0 ? "ok" : "FAIL";
         console.log(
-          `[${browserName} #${run + 1}] ${status} ui=${result.uiReadyMs}ms dcl=${result.domContentLoadedMs}ms entryEval=${result.entryEvalMs}ms js@ui=${result.jsRequestsBeforeUi} files/${(result.jsBytesBeforeUi / 1048576).toFixed(2)}MB js@settled=${result.jsRequestsSettled}/${(result.jsBytesSettled / 1048576).toFixed(2)}MB longTasks=[${result.longTasks.join(",")}] chunks=${chunks.length}`,
+          `[${options.app} ${browserName} #${run + 1}] ${status} ui=${result.uiReadyMs}ms dcl=${result.domContentLoadedMs}ms entryEval=${result.entryEvalMs}ms js@ui=${result.jsRequestsBeforeUi} files/${(result.jsBytesBeforeUi / 1048576).toFixed(2)}MB js@settled=${result.jsRequestsSettled}/${(result.jsBytesSettled / 1048576).toFixed(2)}MB longTasks=[${result.longTasks.join(",")}] chunks=${chunks.length}`,
         );
         for (const problem of result.problems) console.log(`  - ${problem}`);
       }

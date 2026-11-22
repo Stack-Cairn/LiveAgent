@@ -90,8 +90,10 @@ nightly, and on demand. Screenshots and logs are uploaded as the
   `TOOL_MARKER` with a `Bash` tool call that writes `toolMarkerFile`. Add a new
   marker there for new model behaviour instead of matching on request details.
 - Use the helpers in `support/app.mjs` (`sendPrompt`, `waitForAssistantText`,
-  `waitForIdle`, `openSettings`, `restartApp`) and wait on conditions, not
-  sleeps.
+  `waitForIdle`, `openSettings`, `openCommandPalette`, `restartApp`) and wait
+  on conditions, not sleeps. App shortcuts are registered in effects after the
+  first render; wait for a readiness marker (like `data-command-palette-ready`
+  on `<html>`) before pressing them instead of racing the listener.
 - `restartApp()` relaunches the desktop process with the same home on the
   Tauri target (a page reload on the web target).
 - Type with `insertText()` / `typePrompt()`, not `browser.keys()` with a
@@ -101,3 +103,6 @@ nightly, and on demand. Screenshots and logs are uploaded as the
   shown in the log and should be fixed. The first launch of a session is also
   relaunched once if WebKitGTK comes up blank (logged as
   `[e2e] launch attempt 1 failed`).
+
+The bundle, size, knip and performance checks that run next to this suite are
+described in [ci-checks.md](ci-checks.md).

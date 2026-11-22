@@ -1,0 +1,18 @@
+{
+  "_comment": "Baseline for scripts/check-perf-micro.mjs (node micro-benchmarks in crates/agent-gui/perf). Timings are normalized by calibrationMs; ratio and exact gates are listed in the script. Refresh only on purpose: `pnpm check:perf-micro --update` (docs/testing/ci-checks.md).",
+  "calibrationMs": 7.63,
+  "metrics": {
+    "sse.incremental2mbMs": 0.16,
+    "sse.incremental16mbMs": 1.98,
+    "sse.scaling16vs2": 12.933,
+    "projection.freshMs": 6.1,
+    "projection.reprojectMs": 0.2,
+    "projection.reuseRatio": 0.033,
+    "store.usPerEvent200": 0.7,
+    "store.usPerEvent2000": 1,
+    "store.historyScaling": 1.429,
+    "lru.persistedBytes": 439175
+  },
+  "updated": "2026-11-22",
+  "node": "v26.10.0"
+}

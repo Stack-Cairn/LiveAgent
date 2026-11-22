@@ -1,0 +1,75 @@
+name: Set up Playwright browsers
+description: >
+  Installs playwright-core outside the workspace (it is deliberately not a
+  workspace dependency), installs the requested browser engines with their
+  system packages, and exports PLAYWRIGHT_CORE for scripts that import it
+  (scripts/smoke-frontend-bundle.mjs). Browser downloads are cached per
+  Playwright version; like the other caches in this repo, only pushes save
+  the cache and pull requests restore it.
+
+inputs:
+  version:
+    description: playwright-core version (pins the browser builds as well)
+    default: "1.64.1"
+  browsers:
+    description: Space-separated engines to install (chromium, webkit, firefox)
+    default: "chromium webkit"
+
+outputs:
+  chromium-path:
+    description: Chromium executable from this install (empty when chromium is not requested)
+    value: ${{ steps.paths.outputs.chromium }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install playwright-core
+      shell: bash
+      env:
+        PW_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/playwright"
+        mkdir -p "$dir"
+        echo '{"private":true}' > "$dir/package.json"
+        npm install --no-save --no-audit --no-fund --prefix "$dir" "playwright-core@${PW_VERSION}"
+        echo "PLAYWRIGHT_DIR=$dir" >> "$GITHUB_ENV"
+        echo "PLAYWRIGHT_CORE=$dir/node_modules/playwright-core/index.mjs" >> "$GITHUB_ENV"
+        echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
+        echo "PW_CACHE_KEY=playwright-${RUNNER_OS}-${PW_VERSION}-$(echo '${{ inputs.browsers }}' | tr ' ' '-')" >> "$GITHUB_ENV"
+
+    - name: Restore browser cache
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ env.PW_CACHE_KEY }}
+
+    - name: Install browsers and system dependencies
+      shell: bash
+      env:
+        PW_BROWSERS: ${{ inputs.browsers }}
+      run: |
+        set -euo pipefail
+        # Downloads only what the cache did not provide; the apt packages the
+        # engines need are installed either way.
+        # shellcheck disable=SC2086
+        node "$PLAYWRIGHT_DIR/node_modules/playwright-core/cli.js" install --with-deps $PW_BROWSERS
+
+    - name: Save browser cache
+      if: github.event_name == 'push' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ env.PW_CACHE_KEY }}
+
+    - name: Resolve browser paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        chromium=""
+        if [[ " ${{ inputs.browsers }} " == *" chromium "* ]]; then
+          chromium="$(node --input-type=module -e 'const { chromium } = await import(process.env.PLAYWRIGHT_CORE); console.log(chromium.executablePath());')"
+        fi
+        echo "chromium=$chromium" >> "$GITHUB_OUTPUT"

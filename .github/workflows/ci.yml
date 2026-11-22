@@ -219,6 +219,7 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: dorny/paths-filter@v4
         id: filter
@@ -266,6 +267,106 @@ jobs:
               - 'scripts/release/prepare-kbrain.mjs'
               - 'scripts/release/kbrain.lock.json'
               - '.github/workflows/ci.yml'
+            # Production bundles of the desktop frontend and the Gateway WebUI:
+            # their sources, build configs and dependencies, plus the smoke
+            # and bundle budget scripts.
+            frontend:
+              - 'crates/agent-gui/src/**'
+              - 'crates/agent-gui/public/**'
+              - 'crates/agent-gui/index.html'
+              - 'crates/agent-gui/vite.config.ts'
+              - 'crates/agent-gui/postcss.config.js'
+              - 'crates/agent-gui/tsconfig*.json'
+              - 'crates/agent-gui/package.json'
+              - 'crates/agent-ui/**'
+              - 'crates/virtual-core/**'
+              - 'crates/agent-gateway/web/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - 'scripts/smoke-frontend-bundle.mjs'
+              - 'scripts/check-bundle-size.mjs'
+              - 'scripts/budgets/bundle-size.json'
+              - '.github/actions/setup-playwright/**'
+              - '.github/workflows/ci.yml'
+
+  frontend-bundles:
+    # Boots both production bundles in Chromium and WebKit (chunking / ESM
+    # cycle / CJS interop regressions only show up after `vite build`) and
+    # checks them against the size budget in scripts/budgets/bundle-size.json.
+    # Typecheck already runs in the GUI and Gateway WebUI jobs, so this job
+    # calls `vite build` directly. ~4-5 min warm (see docs/testing/ci-checks.md).
+    name: Frontend Bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true') }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent... --filter @liveagent/gateway-webui...
+
+      - name: Build desktop frontend
+        working-directory: crates/agent-gui
+        run: pnpm exec vite build
+
+      - name: Build Gateway WebUI
+        working-directory: crates/agent-gateway/web
+        run: pnpm exec vite build
+
+      - name: Check bundle size budget
+        # Before the smoke run so a size regression is reported even when the
+        # bundle also fails to boot.
+        run: node scripts/check-bundle-size.mjs --app all
+
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium webkit
+
+      - name: Smoke desktop bundle (Chromium, WebKit)
+        run: node scripts/smoke-frontend-bundle.mjs --app gui --browser all
+
+      - name: Smoke Gateway WebUI bundle (Chromium, WebKit)
+        run: node scripts/smoke-frontend-bundle.mjs --app webui --browser all
+
+  code-rules:
+    # Cheap repository-wide rules, run on every PR (~2 min, mostly the install):
+    # source file size limit, knip (unused files/exports/dependencies, new
+    # findings only) and the node micro-benchmark regression gate.
+    name: Code Rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Check source file size limit
+        run: node scripts/check-file-size.mjs
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        # knip resolves imports in every workspace package.
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for new unused code (knip)
+        run: node scripts/check-knip.mjs
+
+      - name: Micro-benchmark regression gate
+        run: node scripts/check-perf-micro.mjs
 
   tauri-rust:
     name: Tauri Rust Check
