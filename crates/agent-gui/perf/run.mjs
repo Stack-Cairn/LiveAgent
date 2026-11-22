@@ -541,18 +541,20 @@ const SCENARIOS = {
     await delay(500);
     await client.evaluate(`document.querySelector("[data-diff-expand]").scrollIntoView({ block: "end" })`);
     await delay(300);
-    await capture("edit-diff-collapsed.png", "[data-scroll-viewport]");
+    await capture("perf-edit-diff-collapsed.png", "[data-scroll-viewport]");
     await client.evaluate(`document.querySelector("[data-diff-expand]").click()`);
     await delay(300);
     await client.evaluate(`document.querySelector("[data-diff-expand]").scrollIntoView({ block: "end" })`);
     await delay(600);
-    await capture("edit-diff-expanded.png", "[data-scroll-viewport]");
+    await capture("perf-edit-diff-expanded.png", "[data-scroll-viewport]");
     await open(client, baseUrl, "transcript");
     await client.evaluate("window.__perf.load(4, 400)");
     await delay(800);
     await client.evaluate("window.__perf.startStream({ chars: 4000, chunk: 4, intervalMs: 40 })");
     await delay(2500);
-    await capture("live-sparkle-streaming.png", "[data-scroll-viewport]");
+    // Mid-stream: the live row's typewriter reveal and markdown (unchanged
+    // look, now driven by the shared frame clock).
+    await capture("perf-transcript-streaming.png", "[data-scroll-viewport]");
     await client.request("Emulation.clearDeviceMetricsOverride");
     return { dir };
   },
@@ -608,7 +610,7 @@ async function main() {
         for (let run = 0; run < repeat; run += 1) {
           const result = await SCENARIOS[scenario](client, baseUrl, throttle);
           const row = { scenario, throttle, run, ...result };
-          if (args.shots) await client.screenshot(path.join(args.shots, `${scenario}-${throttle}x.png`));
+          if (args.shots && scenario !== "screens") await client.screenshot(path.join(args.shots, `${scenario}-${throttle}x.png`));
           results.push(row);
           console.log(JSON.stringify(row));
         }
