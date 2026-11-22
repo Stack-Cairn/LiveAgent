@@ -10,6 +10,10 @@ import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/Editabl
 import { ProcessDisclosureProvider } from "@liveagent/ui/components/chat/processDisclosure";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import {
+  type TranscriptCommentHandler,
+  TranscriptCommentProvider,
+} from "@liveagent/ui/components/chat/TranscriptCommentContext";
+import {
   TranscriptAssistantMessageActions,
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
@@ -129,6 +133,8 @@ type GatewayTranscriptProps = {
   showDetailedProgress?: boolean;
   /** Selected message text → composer blockquote. Omit to disable the quote button. */
   onQuoteSelection?: (text: string) => void;
+  /** Selected message text or an edit-diff line → pending composer comment. */
+  onCommentSelection?: TranscriptCommentHandler;
 };
 
 // Stream-born rows keep Streamdown's streaming render mode forever — even
@@ -1072,6 +1078,7 @@ export function GatewayTranscript({
   expandProcessByDefault = false,
   showDetailedProgress = false,
   onQuoteSelection,
+  onCommentSelection,
 }: GatewayTranscriptProps) {
   const transcriptListRef = useRef<HTMLDivElement | null>(null);
   const [transcriptScrollViewport, setTranscriptScrollViewport] = useState<HTMLDivElement | null>(
@@ -1120,7 +1127,7 @@ export function GatewayTranscript({
     );
   }
 
-  return (
+  const transcriptView = (
     <div className={GATEWAY_TRANSCRIPT_SHELL_CLASS}>
       <div
         ref={transcriptListRef}
@@ -1183,9 +1190,16 @@ export function GatewayTranscript({
           rootRef={transcriptListRef}
           scopeKey={conversationId}
           onQuote={onQuoteSelection}
+          onComment={onCommentSelection}
         />
       ) : null}
       <ChatFileLinkContextMenuHost />
     </div>
+  );
+
+  return (
+    <TranscriptCommentProvider onComment={readOnly ? null : onCommentSelection}>
+      {transcriptView}
+    </TranscriptCommentProvider>
   );
 }

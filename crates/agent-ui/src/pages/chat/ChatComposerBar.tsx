@@ -20,6 +20,7 @@ import type {
 } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClarifySession";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { useComposerImageAnnotation } from "@liveagent/ui/components/chat/image-annotation/useComposerImageAnnotation";
 import {
   MentionComposer,
   type MentionComposerApp,
@@ -106,6 +107,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useEscapeToStopRun } from "../../lib/chat/escapeStopRun";
+import type { ReplacePendingUpload } from "../../lib/chat/uploadedFiles";
 import {
   getUploadedImagePreviewCacheKey,
   loadUploadedImagePreview,
@@ -170,6 +172,9 @@ function PendingComposerAttachment(props: {
   closePreviewLabel: string;
   imagePreviewLoader?: UploadedImagePreviewLoader;
   onRemove: (relativePath: string) => void;
+  annotated?: boolean;
+  onAnnotate?: (file: PendingUploadedFile, imageSrc: string) => void;
+  onRevertAnnotation?: (file: PendingUploadedFile) => void;
 }) {
   const {
     file,
@@ -180,6 +185,9 @@ function PendingComposerAttachment(props: {
     closePreviewLabel,
     imagePreviewLoader,
     onRemove,
+    annotated,
+    onAnnotate,
+    onRevertAnnotation,
   } = props;
   const { imageSrc, isLoading } = useComposerUploadedImagePreview(
     file,
@@ -202,6 +210,13 @@ function PendingComposerAttachment(props: {
       previewLabel={previewLabel}
       closePreviewLabel={closePreviewLabel}
       onRemove={() => onRemove(file.relativePath)}
+      onAnnotate={
+        onAnnotate && imageSrc && file.kind === "image"
+          ? () => onAnnotate(file, imageSrc)
+          : undefined
+      }
+      annotated={annotated}
+      onRevertAnnotation={onRevertAnnotation ? () => onRevertAnnotation(file) : undefined}
     />
   );
 }
@@ -366,6 +381,11 @@ export type ChatComposerBarProps = {
   loadHistoryPrompts?: () => readonly string[];
   pendingUploadedFiles: PendingUploadedFile[];
   onRemovePendingUpload: (relativePath: string) => void;
+  /**
+   * Replaces a pending attachment (annotated image in, original back on
+   * revert). When absent, image chips offer no "Annotate" action.
+   */
+  onReplacePendingUpload?: ReplacePendingUpload;
   /** 输入框上方的目标栏（/goal）；与指令队列上下排列。 */
   goalBar?: ReactNode;
   queuedTurns: ChatQueueTurnPreview[];
@@ -467,6 +487,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     loadHistoryPrompts,
     pendingUploadedFiles,
     onRemovePendingUpload,
+    onReplacePendingUpload,
     goalBar,
     queuedTurns,
     queuePaused,
@@ -487,6 +508,20 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     contextDisplayMode,
   } = props;
   const { t } = useLocale();
+  const imageAnnotation = useComposerImageAnnotation({
+    workdir,
+    composerRef,
+    imagePreviewLoader: onLoadUploadedImagePreview,
+    onReplacePendingUpload,
+  });
+  const { forgetAnnotation } = imageAnnotation;
+  const handleRemovePendingUpload = useCallback(
+    (relativePath: string) => {
+      forgetAnnotation(relativePath);
+      onRemovePendingUpload(relativePath);
+    },
+    [forgetAnnotation, onRemovePendingUpload],
+  );
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
   // 可澄清文本存在性：与 composerIsEmpty 分开跟踪——空态只看编辑器整体
   // （chip 文本也算非空），而澄清需要纯文本段。仅在事件里读草稿：
@@ -1643,7 +1678,18 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     previewLabel={t("chat.upload.previewImage")}
                     closePreviewLabel={t("chat.upload.closePreview")}
                     imagePreviewLoader={onLoadUploadedImagePreview}
-                    onRemove={onRemovePendingUpload}
+                    onRemove={handleRemovePendingUpload}
+                    annotated={imageAnnotation.isAnnotated(file.relativePath)}
+                    onAnnotate={
+                      imageAnnotation.enabled
+                        ? (target, src) => void imageAnnotation.startAnnotation(target, src)
+                        : undefined
+                    }
+                    onRevertAnnotation={
+                      imageAnnotation.isAnnotated(file.relativePath)
+                        ? (target) => void imageAnnotation.revertAnnotation(target)
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -2045,6 +2091,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             只在 "ring" 展示模式下不挂载——"statsBar" 与 "both" 都渲染（§4.7）。 */}
         {statsBar && approvalBar == null && contextDisplayMode !== "ring" ? statsBar : null}
       </div>
+      {imageAnnotation.dialog}
     </div>
   );
 });

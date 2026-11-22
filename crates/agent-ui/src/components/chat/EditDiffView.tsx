@@ -1,11 +1,21 @@
 import { type DiffLine, DiffLineType, generateDiffFile } from "@git-diff-view/file";
-import { ChevronDown, ChevronUp } from "@liveagent/ui/components/IconSet";
+import { ComposerCommentEditor } from "@liveagent/ui/components/chat/ComposerCommentEditor";
+import { useTranscriptComment } from "@liveagent/ui/components/chat/TranscriptCommentContext";
+import { ChevronDown, ChevronUp, Plus } from "@liveagent/ui/components/IconSet";
+import { Popover, PopoverContent } from "@liveagent/ui/components/ui/popover";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  type ComposerCommentInput,
+  composerCommentLocation,
+} from "@liveagent/ui/lib/chat/composerComments";
 import {
   type CSSProperties,
   memo,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  useCallback,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -345,7 +355,97 @@ const ROW_GROUP_SIZE = 200;
 /** text-xs at leading-1p65: the height of one unwrapped row. */
 const ESTIMATED_ROW_PX = 20;
 
-const DiffRowView = memo(function DiffRowView({ row }: { row: DiffRow }) {
+/** Gutter "+" handler for diffs rendered inside a transcript that accepts comments. */
+type DiffRowCommenting = {
+  onComment: (row: DiffRow, anchor: HTMLElement) => void;
+  /** The row whose comment form is open (highlighted). */
+  activeKey: string | null;
+  /** The only gutter button in the tab order; arrows move between the rest. */
+  focusKey: string | null;
+};
+
+export const DIFF_COMMENT_LINE_ATTR = "data-diff-comment-line";
+
+/** Text of a diff row with its +/-/space marker, as quoted in a comment. */
+export function diffRowCommentQuote(row: Pick<DiffRow, "type" | "pieces">) {
+  const marker = row.type === "add" ? "+" : row.type === "del" ? "-" : " ";
+  return `${marker}${row.pieces.map((piece) => piece.text).join("")}`;
+}
+
+/** Composer comment for one line of an edit diff. */
+export function buildEditDiffLineComment(
+  path: string,
+  row: Pick<DiffRow, "type" | "pieces" | "lineNumber">,
+  comment: string,
+): ComposerCommentInput | null {
+  if (row.lineNumber === null || row.type === "note") return null;
+  return {
+    quote: diffRowCommentQuote(row),
+    code: true,
+    comment,
+    source: {
+      kind: "diff",
+      path,
+      startLine: row.lineNumber,
+      endLine: row.lineNumber,
+      side: row.type === "del" ? "old" : "new",
+      language: "diff",
+    },
+  };
+}
+
+function DiffGutterCommentButton(props: {
+  row: DiffRow;
+  commenting: DiffRowCommenting;
+  className: string;
+}) {
+  const { row, commenting, className } = props;
+  const { t } = useLocale();
+  const line = String(row.lineNumber ?? "");
+  const label = t(
+    row.type === "del" ? "chat.comment.diffLineRemoved" : "chat.comment.diffLine",
+  ).replace("{line}", line);
+  return (
+    <button
+      type="button"
+      {...{ [DIFF_COMMENT_LINE_ATTR]: line }}
+      aria-label={label}
+      title={label}
+      aria-haspopup="dialog"
+      aria-expanded={commenting.activeKey === row.key}
+      tabIndex={commenting.focusKey === row.key ? 0 : -1}
+      className={cn(
+        className,
+        "group/gutter relative cursor-pointer outline-none",
+        "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary",
+      )}
+      onClick={(event) => commenting.onComment(row, event.currentTarget)}
+    >
+      <span className="group-hover/diffrow:invisible group-focus-visible/gutter:invisible">
+        {line}
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "invisible absolute inset-0 flex items-center justify-center",
+          "group-hover/diffrow:visible group-focus-visible/gutter:visible",
+        )}
+      >
+        <span className="flex size-4 items-center justify-center rounded-sm bg-primary text-primary-foreground">
+          <Plus className="size-3" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+const DiffRowView = memo(function DiffRowView({
+  row,
+  commenting,
+}: {
+  row: DiffRow;
+  commenting?: DiffRowCommenting;
+}) {
   if (row.type === "note") {
     return (
       <div
@@ -359,12 +459,22 @@ const DiffRowView = memo(function DiffRowView({ row }: { row: DiffRow }) {
   }
   const added = row.type === "add";
   const deleted = row.type === "del";
+  const gutterClassName = cn(
+    "select-none text-center text-xs tabular-nums",
+    added
+      ? "text-emerald-700 dark:text-emerald-300"
+      : deleted
+        ? "text-red-700 dark:text-red-300"
+        : "text-muted-foreground",
+  );
+  const commentable = commenting && row.lineNumber !== null;
   return (
     <div
       className={cn(
-        "relative grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start",
+        "group/diffrow relative grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start",
         added && "bg-emerald-500/[0.09]",
         deleted && "bg-red-500/[0.09]",
+        commentable && commenting.activeKey === row.key && "ring-1 ring-inset ring-primary/50",
       )}
     >
       {added || deleted ? (
@@ -377,19 +487,13 @@ const DiffRowView = memo(function DiffRowView({ row }: { row: DiffRow }) {
           )}
         />
       ) : null}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "select-none text-center text-xs tabular-nums",
-          added
-            ? "text-emerald-700 dark:text-emerald-300"
-            : deleted
-              ? "text-red-700 dark:text-red-300"
-              : "text-muted-foreground",
-        )}
-      >
-        {row.lineNumber ?? ""}
-      </span>
+      {commentable ? (
+        <DiffGutterCommentButton row={row} commenting={commenting} className={gutterClassName} />
+      ) : (
+        <span aria-hidden="true" className={gutterClassName}>
+          {row.lineNumber ?? ""}
+        </span>
+      )}
       <code className="break-words whitespace-pre-wrap pl-1 pr-3">
         <DiffPieces pieces={row.pieces} />
       </code>
@@ -401,7 +505,7 @@ const DiffRowView = memo(function DiffRowView({ row }: { row: DiffRow }) {
  * A run of rows that is only in the DOM near the viewport; elsewhere it is a
  * spacer of its last measured height (estimated before it first rendered).
  */
-function DiffRowGroup({ rows }: { rows: DiffRow[] }) {
+function DiffRowGroup({ rows, commenting }: { rows: DiffRow[]; commenting?: DiffRowCommenting }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [height, setHeight] = useState<number | null>(null);
   const near = useNearViewport(ref, {
@@ -416,7 +520,7 @@ function DiffRowGroup({ rows }: { rows: DiffRow[] }) {
   return (
     <div ref={ref} data-diff-row-group={near ? "mounted" : "placeholder"}>
       {near ? (
-        rows.map((row) => <DiffRowView key={row.key} row={row} />)
+        rows.map((row) => <DiffRowView key={row.key} row={row} commenting={commenting} />)
       ) : (
         <div aria-hidden="true" style={{ height: height ?? rows.length * ESTIMATED_ROW_PX }} />
       )}
@@ -424,9 +528,17 @@ function DiffRowGroup({ rows }: { rows: DiffRow[] }) {
   );
 }
 
-function DiffRows({ rows, expanded }: { rows: DiffRow[]; expanded: boolean }) {
+function DiffRows({
+  rows,
+  expanded,
+  commenting,
+}: {
+  rows: DiffRow[];
+  expanded: boolean;
+  commenting?: DiffRowCommenting;
+}) {
   if (rows.length <= COLLAPSE_AFTER_ROWS) {
-    return rows.map((row) => <DiffRowView key={row.key} row={row} />);
+    return rows.map((row) => <DiffRowView key={row.key} row={row} commenting={commenting} />);
   }
   const preview = rows.slice(0, COLLAPSED_ROWS);
   const groups: DiffRow[][] = [];
@@ -438,10 +550,10 @@ function DiffRows({ rows, expanded }: { rows: DiffRow[]; expanded: boolean }) {
   return (
     <>
       {preview.map((row) => (
-        <DiffRowView key={row.key} row={row} />
+        <DiffRowView key={row.key} row={row} commenting={commenting} />
       ))}
       {groups.map((group) => (
-        <DiffRowGroup key={group[0]?.key} rows={group} />
+        <DiffRowGroup key={group[0]?.key} rows={group} commenting={commenting} />
       ))}
     </>
   );
@@ -458,6 +570,38 @@ export function EditDiffView(props: {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const diff = useThrottledDiff({ beforeText, afterText, filePath, diffText });
+  const onTranscriptComment = useTranscriptComment();
+  const commentPath = filePath?.trim() ?? "";
+  const [commentTarget, setCommentTarget] = useState<{
+    row: DiffRow;
+    anchor: HTMLElement;
+  } | null>(null);
+  const openComment = useCallback(
+    (row: DiffRow, anchor: HTMLElement) => setCommentTarget({ row, anchor }),
+    [],
+  );
+  const handleGutterKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const current = event.target;
+    if (!(current instanceof HTMLElement) || !current.hasAttribute(DIFF_COMMENT_LINE_ATTR)) return;
+    const buttons = [
+      ...event.currentTarget.querySelectorAll<HTMLElement>(`[${DIFF_COMMENT_LINE_ATTR}]`),
+    ];
+    const next = buttons[buttons.indexOf(current) + (event.key === "ArrowDown" ? 1 : -1)];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  }, []);
+  const commentable = Boolean(onTranscriptComment && commentPath);
+  const focusKey = commentable
+    ? (diff?.rows.find((row) => row.lineNumber !== null && row.type !== "note")?.key ?? null)
+    : null;
+  const activeKey = commentTarget?.row.key ?? null;
+  // One object per state change so the memoized rows re-render only then.
+  const commenting = useMemo<DiffRowCommenting | undefined>(
+    () => (commentable ? { onComment: openComment, activeKey, focusKey } : undefined),
+    [commentable, openComment, activeKey, focusKey],
+  );
 
   if (!diff) return null;
 
@@ -484,11 +628,13 @@ export function EditDiffView(props: {
         </span>
       </figcaption>
 
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: arrow keys move between the gutter comment buttons; the rows themselves are not interactive. */}
       <div
         className={cn(
           "font-mono text-xs leading-1p65 text-foreground/78",
           collapsible ? "pt-3" : "py-3",
         )}
+        onKeyDown={commenting ? handleGutterKeyDown : undefined}
         style={
           { "--diff-gutter": `calc(${diff.gutterDigits}ch + var(--spacing-4px))` } as CSSProperties
         }
@@ -498,9 +644,48 @@ export function EditDiffView(props: {
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 left-[var(--diff-gutter)] w-px bg-border/70"
           />
-          <DiffRows rows={diff.rows} expanded={expanded} />
+          <DiffRows rows={diff.rows} expanded={expanded} commenting={commenting} />
         </div>
       </div>
+      {commenting && commentTarget && onTranscriptComment ? (
+        <Popover
+          open
+          onOpenChange={(open) => {
+            if (!open) setCommentTarget(null);
+          }}
+        >
+          <PopoverContent
+            anchor={commentTarget.anchor}
+            side="bottom"
+            align="start"
+            data-diff-comment-popover=""
+            className="w-80 max-w-[calc(100vw-2rem)] p-3"
+          >
+            <ComposerCommentEditor
+              quote={diffRowCommentQuote(commentTarget.row)}
+              code
+              sourceLabel={composerCommentLocation({
+                kind: "diff",
+                path: commentPath,
+                startLine: commentTarget.row.lineNumber ?? undefined,
+              })}
+              submitLabel={t("chat.comment.add")}
+              onSubmit={(text) => {
+                const input = buildEditDiffLineComment(commentPath, commentTarget.row, text);
+                const accepted = input ? onTranscriptComment(input) : false;
+                if (accepted !== false) {
+                  setCommentTarget(null);
+                  commentTarget.anchor.focus({ preventScroll: true });
+                }
+              }}
+              onCancel={() => {
+                setCommentTarget(null);
+                commentTarget.anchor.focus({ preventScroll: true });
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      ) : null}
       {collapsible ? (
         <div className="flex justify-center border-t border-border/60 py-1.5">
           <button

@@ -2,6 +2,7 @@ import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/Chang
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ComposerCommentInput } from "@liveagent/ui/lib/chat/composerComments";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ChatComposerBar } from "@liveagent/ui/pages/chat/ChatComposerBar";
@@ -205,6 +206,10 @@ const RegisteredConversationPaneHostContent = forwardRef<
   const handleQuoteSelection = useCallback((text: string) => {
     composerRef.current?.insertQuote(text);
   }, []);
+  const handleCommentSelection = useCallback(
+    (comment: ComposerCommentInput) => composerRef.current?.upsertComment(comment) != null,
+    [],
+  );
 
   useImperativeHandle(
     forwardedRef,
@@ -281,6 +286,7 @@ const RegisteredConversationPaneHostContent = forwardRef<
                   bottomReservePx={composerOverlayHeight}
                   composerCenterOffsetPx={composerCenterOffset}
                   onQuoteSelection={handleQuoteSelection}
+                  onCommentSelection={handleCommentSelection}
                 />
               </CheckpointRewindProvider>
             </ChangedFilesActionsProvider>

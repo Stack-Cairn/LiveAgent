@@ -3,7 +3,11 @@ import type { MentionComposerHandle } from "@liveagent/ui/components/chat/Mentio
 import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
-import { mergePendingUploadedFilesWithStats } from "@liveagent/ui/lib/chat/uploadedFiles";
+import {
+  isPendingUploadedFile,
+  mergePendingUploadedFilesWithStats,
+  replacePendingUploadedFile,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
 import { registerLocalUploadedImagePreviews } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { type DragEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -353,6 +357,74 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     ],
   );
 
+  // Swap one pending attachment for another in place: a File (an annotated
+  // image) is uploaded into the workspace first; an already staged entry (the
+  // original, on revert) goes back directly. It never adds files, so the
+  // batch limit/merge rules and the import busy guard do not apply.
+  const replacePendingUpload = useCallback(
+    async (
+      relativePath: string,
+      replacement: File | PendingUploadedFile,
+      target?: { conversationId: string; workdir: string },
+    ): Promise<PendingUploadedFile | null> => {
+      const targetConversationId =
+        target?.conversationId.trim() || displayedConversationIdRef.current;
+      if (!targetConversationId) return null;
+      let next: PendingUploadedFile;
+      if (isPendingUploadedFile(replacement)) {
+        next = replacement;
+      } else {
+        const workdir = target
+          ? target.workdir.trim()
+          : displayedConversationWorkdirRef.current.trim();
+        const modeAtStart: AppSettings["system"]["executionMode"] = executionModeRef.current;
+        if (!workdir || modeAtStart === "text") return null;
+        try {
+          const agentID = await resolveAgentID();
+          const result = await importReadableFiles(token, agentID, workdir, [replacement]);
+          const staged = result.files[0];
+          if (!staged) {
+            if (result.skipped.length > 0) addNotify("warning", result.skipped.join("\n"));
+            return null;
+          }
+          if (
+            (await resolveAgentID()) !== agentID ||
+            executionModeRef.current === "text" ||
+            (isDisplayedConversation(targetConversationId) &&
+              displayedConversationWorkdirRef.current.trim() !== workdir)
+          ) {
+            return null;
+          }
+          registerLocalUploadedImagePreviews({
+            workspaceRoot: workdir,
+            uploadedFiles: [staged],
+            sourceFiles: [replacement],
+          });
+          next = staged;
+        } catch (error) {
+          addNotify("error", asErrorMessage(error, "导入文件失败"));
+          return null;
+        }
+      }
+      const current = getPendingUploadsForConversation(targetConversationId);
+      if (!current.some((file) => file.relativePath === relativePath)) return null;
+      setPendingUploadsForConversation(
+        targetConversationId,
+        replacePendingUploadedFile(current, relativePath, next),
+      );
+      return next;
+    },
+    [
+      addNotify,
+      displayedConversationWorkdirRef,
+      getPendingUploadsForConversation,
+      isDisplayedConversation,
+      resolveAgentID,
+      setPendingUploadsForConversation,
+      token,
+    ],
+  );
+
   const resolveEventUploadTarget = useCallback(
     (eventTarget: EventTarget | null) => {
       const targetConversationId = resolveFileUploadConversationId(eventTarget);
@@ -536,5 +608,6 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     handleFileDragOver,
     handleFileDragLeave,
     handleFileDrop,
+    replacePendingUpload,
   };
 }
