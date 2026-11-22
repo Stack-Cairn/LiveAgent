@@ -1,6 +1,17 @@
 import { type DiffLine, DiffLineType, generateDiffFile } from "@git-diff-view/file";
-import { type CSSProperties, type ReactNode, useMemo } from "react";
+import { ChevronDown, ChevronUp } from "@liveagent/ui/components/IconSet";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  type CSSProperties,
+  memo,
+  type ReactNode,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { parseDiffRowsText } from "../../lib/chat/diffRows";
+import { isElementInUse, useNearViewport } from "../../lib/shared/useNearViewport";
 import { cn } from "../../lib/shared/utils";
 
 type DiffPiece = {
@@ -260,6 +271,182 @@ function buildTextDiffRows(diffText: string) {
   return { added, removed, gutterDigits: Math.max(2, String(widestLineNumber).length), rows };
 }
 
+type DiffModel = NonNullable<ReturnType<typeof buildTextDiffRows>>;
+
+type DiffInput = {
+  beforeText: string;
+  afterText: string;
+  filePath?: string;
+  diffText?: string;
+};
+
+function computeDiff(input: DiffInput): DiffModel | null {
+  const { beforeText, afterText, filePath, diffText } = input;
+  if (diffText !== undefined) return buildTextDiffRows(diffText);
+  return beforeText || afterText ? buildDiffRows(beforeText, afterText, filePath) : null;
+}
+
+function sameDiffInput(a: DiffInput, b: DiffInput) {
+  return (
+    a.beforeText === b.beforeText &&
+    a.afterText === b.afterText &&
+    a.filePath === b.filePath &&
+    a.diffText === b.diffText
+  );
+}
+
+/** Diffs that cost less than this are recomputed on every change. */
+const CHEAP_DIFF_MS = 4;
+
+/** Minimum time between two recomputations of an expensive diff. */
+function diffThrottleMs(costMs: number) {
+  return Math.min(1000, Math.max(100, costMs * 10));
+}
+
+type ComputedDiff = { input: DiffInput; diff: DiffModel | null; at: number; cost: number };
+
+/**
+ * The diff for the latest input, recomputed at most every few frames when it
+ * is expensive: an Edit whose arguments are still streaming changes its text
+ * on every delta, and re-diffing a large file each time kept the main thread
+ * busy. The last input is always diffed once the changes pause.
+ */
+function useThrottledDiff(input: DiffInput) {
+  const cache = useRef<ComputedDiff | null>(null);
+  const [, wake] = useReducer((count: number) => count + 1, 0);
+  let shown = cache.current;
+  if (!shown || !sameDiffInput(shown.input, input)) {
+    const started = performance.now();
+    if (!shown || shown.cost < CHEAP_DIFF_MS || started - shown.at >= diffThrottleMs(shown.cost)) {
+      const diff = computeDiff(input);
+      const at = performance.now();
+      shown = { input, diff, at, cost: at - started };
+      // A cache keyed by its input: a render React discards leaves it valid.
+      cache.current = shown;
+    }
+  }
+  const stale = !sameDiffInput(shown.input, input);
+  useEffect(() => {
+    if (!stale) return undefined;
+    // Depends on the shown result, not the input: later deltas must not push
+    // the recomputation back while a stream keeps changing the text.
+    const wait = Math.max(0, shown.at + diffThrottleMs(shown.cost) - performance.now());
+    const timer = setTimeout(wake, wait);
+    return () => clearTimeout(timer);
+  }, [shown, stale]);
+  return shown.diff;
+}
+
+/** Longer diffs show their first COLLAPSED_ROWS lines until expanded. */
+const COLLAPSE_AFTER_ROWS = 360;
+const COLLAPSED_ROWS = 300;
+/** Expanded rows past the preview mount in groups, only near the viewport. */
+const ROW_GROUP_SIZE = 200;
+/** text-xs at leading-1p65: the height of one unwrapped row. */
+const ESTIMATED_ROW_PX = 20;
+
+const DiffRowView = memo(function DiffRowView({ row }: { row: DiffRow }) {
+  if (row.type === "note") {
+    return (
+      <div
+        className="grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start"
+        data-diff-note=""
+      >
+        <span aria-hidden="true" />
+        <span className="pl-1 pr-3 text-muted-foreground">{row.pieces[0]?.text}</span>
+      </div>
+    );
+  }
+  const added = row.type === "add";
+  const deleted = row.type === "del";
+  return (
+    <div
+      className={cn(
+        "relative grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start",
+        added && "bg-emerald-500/[0.09]",
+        deleted && "bg-red-500/[0.09]",
+      )}
+    >
+      {added || deleted ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-y-0 left-0 w-3px",
+            added && "bg-emerald-600",
+            deleted && "bg-diff-deleted",
+          )}
+        />
+      ) : null}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "select-none text-center text-xs tabular-nums",
+          added
+            ? "text-emerald-700 dark:text-emerald-300"
+            : deleted
+              ? "text-red-700 dark:text-red-300"
+              : "text-muted-foreground",
+        )}
+      >
+        {row.lineNumber ?? ""}
+      </span>
+      <code className="break-words whitespace-pre-wrap pl-1 pr-3">
+        <DiffPieces pieces={row.pieces} />
+      </code>
+    </div>
+  );
+});
+
+/**
+ * A run of rows that is only in the DOM near the viewport; elsewhere it is a
+ * spacer of its last measured height (estimated before it first rendered).
+ */
+function DiffRowGroup({ rows }: { rows: DiffRow[] }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  const near = useNearViewport(ref, {
+    beforeLeave: () => {
+      const element = ref.current;
+      if (!element) return true;
+      if (isElementInUse(element)) return false;
+      setHeight(element.getBoundingClientRect().height);
+      return true;
+    },
+  });
+  return (
+    <div ref={ref} data-diff-row-group={near ? "mounted" : "placeholder"}>
+      {near ? (
+        rows.map((row) => <DiffRowView key={row.key} row={row} />)
+      ) : (
+        <div aria-hidden="true" style={{ height: height ?? rows.length * ESTIMATED_ROW_PX }} />
+      )}
+    </div>
+  );
+}
+
+function DiffRows({ rows, expanded }: { rows: DiffRow[]; expanded: boolean }) {
+  if (rows.length <= COLLAPSE_AFTER_ROWS) {
+    return rows.map((row) => <DiffRowView key={row.key} row={row} />);
+  }
+  const preview = rows.slice(0, COLLAPSED_ROWS);
+  const groups: DiffRow[][] = [];
+  if (expanded) {
+    for (let start = COLLAPSED_ROWS; start < rows.length; start += ROW_GROUP_SIZE) {
+      groups.push(rows.slice(start, start + ROW_GROUP_SIZE));
+    }
+  }
+  return (
+    <>
+      {preview.map((row) => (
+        <DiffRowView key={row.key} row={row} />
+      ))}
+      {groups.map((group) => (
+        <DiffRowGroup key={group[0]?.key} rows={group} />
+      ))}
+    </>
+  );
+}
+
 export function EditDiffView(props: {
   beforeText: string;
   afterText: string;
@@ -268,14 +455,15 @@ export function EditDiffView(props: {
   diffText?: string;
 }) {
   const { beforeText, afterText, filePath, diffText } = props;
-  const diff = useMemo(() => {
-    if (diffText !== undefined) return buildTextDiffRows(diffText);
-    return beforeText || afterText ? buildDiffRows(beforeText, afterText, filePath) : null;
-  }, [afterText, beforeText, diffText, filePath]);
+  const { t } = useLocale();
+  const [expanded, setExpanded] = useState(false);
+  const diff = useThrottledDiff({ beforeText, afterText, filePath, diffText });
 
   if (!diff) return null;
 
   const displayPath = filePath?.trim() || "changed file";
+  const collapsible = diff.rows.length > COLLAPSE_AFTER_ROWS;
+  const hiddenRows = diff.rows.length - COLLAPSED_ROWS;
   return (
     <figure
       className={cn(
@@ -297,7 +485,10 @@ export function EditDiffView(props: {
       </figcaption>
 
       <div
-        className="py-3 font-mono text-xs leading-1p65 text-foreground/78"
+        className={cn(
+          "font-mono text-xs leading-1p65 text-foreground/78",
+          collapsible ? "pt-3" : "py-3",
+        )}
         style={
           { "--diff-gutter": `calc(${diff.gutterDigits}ch + var(--spacing-4px))` } as CSSProperties
         }
@@ -307,61 +498,30 @@ export function EditDiffView(props: {
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 left-[var(--diff-gutter)] w-px bg-border/70"
           />
-          {diff.rows.map((row) => {
-            if (row.type === "note") {
-              return (
-                <div
-                  key={row.key}
-                  className="grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start"
-                  data-diff-note=""
-                >
-                  <span aria-hidden="true" />
-                  <span className="pl-1 pr-3 text-muted-foreground">{row.pieces[0]?.text}</span>
-                </div>
-              );
-            }
-            const added = row.type === "add";
-            const deleted = row.type === "del";
-            return (
-              <div
-                key={row.key}
-                className={cn(
-                  "relative grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start",
-                  added && "bg-emerald-500/[0.09]",
-                  deleted && "bg-red-500/[0.09]",
-                )}
-              >
-                {added || deleted ? (
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "absolute inset-y-0 left-0 w-3px",
-                      added && "bg-emerald-600",
-                      deleted && "bg-diff-deleted",
-                    )}
-                  />
-                ) : null}
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "select-none text-center text-xs tabular-nums",
-                    added
-                      ? "text-emerald-700 dark:text-emerald-300"
-                      : deleted
-                        ? "text-red-700 dark:text-red-300"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {row.lineNumber ?? ""}
-                </span>
-                <code className="break-words whitespace-pre-wrap pl-1 pr-3">
-                  <DiffPieces pieces={row.pieces} />
-                </code>
-              </div>
-            );
-          })}
+          <DiffRows rows={diff.rows} expanded={expanded} />
         </div>
       </div>
+      {collapsible ? (
+        <div className="flex justify-center border-t border-border/60 py-1.5">
+          <button
+            type="button"
+            data-diff-expand={expanded ? "expanded" : "collapsed"}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
+              "text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground",
+            )}
+          >
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            <span>
+              {expanded
+                ? t("chat.editDiff.collapse")
+                : t("chat.editDiff.expand").replace("{count}", hiddenRows.toLocaleString())}
+            </span>
+          </button>
+        </div>
+      ) : null}
     </figure>
   );
 }

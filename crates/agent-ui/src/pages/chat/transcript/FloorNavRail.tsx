@@ -2,6 +2,7 @@ import { Pin } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -16,6 +17,7 @@ import {
   PreviewCardContent,
   PreviewCardTrigger,
 } from "../../../components/ui/preview-card";
+import type { ActiveFloorStore } from "../../../lib/chat-floor-nav/activeFloorStore";
 import {
   getFloorBookmarks,
   subscribeFloorBookmarks,
@@ -51,10 +53,134 @@ function resolveMarkerWidth(markerIndex: number, hoveredMarkerIndex: number): nu
   return WAVE_MARKER_WIDTHS_PX[Math.abs(markerIndex - hoveredMarkerIndex)] ?? BASE_MARKER_WIDTH_PX;
 }
 
+const noopSubscribe = () => () => {};
+const getNoActiveRowKey = () => null;
+
+type FloorMarkerProps = {
+  floor: FloorEntry;
+  start: number;
+  size: number;
+  width: number;
+  isActive: boolean;
+  isBookmarked: boolean;
+  isHovered: boolean;
+  previewOpen: boolean;
+  isCoarsePointer: boolean;
+  conversationId: string;
+  pinLabel: string;
+  unpinLabel: string;
+  onHoverChange: (rowKey: string, open: boolean) => void;
+  onJump: (rowKey: string) => void;
+};
+
+/**
+ * One collapsed-rail marker with its hover preview. Memoized: a scroll that
+ * moves the active floor re-renders the two markers whose state changed, not
+ * every marker in the rail.
+ */
+const FloorMarker = memo(function FloorMarker(props: FloorMarkerProps) {
+  const {
+    floor,
+    start,
+    size,
+    width,
+    isActive,
+    isBookmarked,
+    isHovered,
+    previewOpen,
+    isCoarsePointer,
+    conversationId,
+    pinLabel,
+    unpinLabel,
+    onHoverChange,
+    onJump,
+  } = props;
+  return (
+    <div
+      className="absolute inset-x-0 flex items-center justify-end pr-2"
+      style={{ top: start, height: size }}
+    >
+      <PreviewCard open={previewOpen} onOpenChange={(open) => onHoverChange(floor.rowKey, open)}>
+        <PreviewCardTrigger
+          delay={0}
+          closeDelay={160}
+          render={
+            <button
+              type="button"
+              aria-label={floor.preview}
+              aria-current={isActive ? "location" : undefined}
+              onClick={() => onJump(floor.rowKey)}
+              className={cn(
+                // The ::after pseudo-element stretches the hit area to the full slot
+                // height, covering the 7.5px gap between markers.
+                "relative h-0.5 rounded-full outline-none",
+                "transition-[width,background-color,opacity] duration-150 ease-out",
+                "after:absolute after:-inset-x-2 after:-inset-y-1 after:content-[''] motion-reduce:transition-none",
+                isBookmarked
+                  ? "bg-amber-500/90"
+                  : isHovered
+                    ? "bg-foreground/90"
+                    : isActive
+                      ? "bg-foreground/60"
+                      : "bg-foreground/[0.18]",
+              )}
+              style={{ width }}
+            />
+          }
+        />
+        {!isCoarsePointer ? (
+          <PreviewCardContent side="left" className="pointer-events-auto p-2">
+            <div className="group/preview flex min-w-0 items-start gap-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => onJump(floor.rowKey)}
+                className={cn(
+                  "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors",
+                  "hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]",
+                )}
+              >
+                <span className="block truncate text-sm font-medium leading-5 text-foreground">
+                  {floor.preview}
+                </span>
+                {floor.responsePreview ? (
+                  <span className="mt-1 block line-clamp-3 text-xs leading-1p55 text-muted-foreground">
+                    {floor.responsePreview}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                aria-label={isBookmarked ? unpinLabel : pinLabel}
+                title={isBookmarked ? unpinLabel : pinLabel}
+                onClick={() => toggleFloorBookmark(conversationId, floor.messageId)}
+                className={cn(
+                  "mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg outline-none",
+                  "transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+                  isBookmarked
+                    ? "text-amber-500 hover:bg-amber-500/10"
+                    : "text-muted-foreground/50 hover:bg-foreground/[0.05] hover:text-foreground",
+                )}
+              >
+                <Pin className={cn("size-3.5", isBookmarked && "fill-current")} />
+              </button>
+            </div>
+          </PreviewCardContent>
+        ) : null}
+      </PreviewCard>
+    </div>
+  );
+});
+
 export function FloorNavRail(props: {
   conversationId: string;
   floors: FloorEntry[];
-  activeRowKey: string | null;
+  /** The floor being read, when the host keeps it in state. */
+  activeRowKey?: string | null;
+  /**
+   * The floor being read, from a store the rail subscribes to: the host does
+   * not re-render when it changes (takes precedence over activeRowKey).
+   */
+  activeRowKeyStore?: ActiveFloorStore;
   /**
    * 导航栏底缘的 CSS 偏移（避开底部输入框悬浮区）。桌面端传计算好的像素值
    * （如 "196px"），WebUI 传 CSS 变量表达式（如 "calc(var(--x) + 12px)"）。
@@ -70,11 +196,17 @@ export function FloorNavRail(props: {
   const {
     conversationId,
     floors,
-    activeRowKey,
+    activeRowKeyStore,
     bottomOffset = "var(--spacing-8px)",
     scrollViewport = null,
     onJump,
   } = props;
+  const storedActiveRowKey = useSyncExternalStore(
+    activeRowKeyStore?.subscribe ?? noopSubscribe,
+    activeRowKeyStore?.get ?? getNoActiveRowKey,
+    activeRowKeyStore?.get ?? getNoActiveRowKey,
+  );
+  const activeRowKey = activeRowKeyStore ? storedActiveRowKey : (props.activeRowKey ?? null);
   const { locale } = useLocale();
   const isEn = locale === "en-US";
   const bookmarks = useFloorBookmarks(conversationId);
@@ -208,6 +340,9 @@ export function FloorNavRail(props: {
     if (railEl && activeIndex >= 0) virtualizer.scrollToIndex(activeIndex, { align: "auto" });
   }, [activeIndex, conversationId, virtualizer, railEl]);
   const hoveredMarkerIndex = floors.findIndex((floor) => floor.rowKey === hoveredMarkerKey);
+  const handleMarkerHover = useCallback((rowKey: string, open: boolean) => {
+    setHoveredMarkerKey((current) => (open ? rowKey : current === rowKey ? null : current));
+  }, []);
   const handleJump = useCallback(
     (rowKey: string) => {
       onJump(rowKey);
@@ -334,96 +469,25 @@ export function FloorNavRail(props: {
           >
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((item) => {
-                const markerIndex = item.index;
-                const floor = floors[markerIndex];
-                const isActive = floor.rowKey === activeRowKey;
-                const isBookmarked = bookmarks.has(floor.messageId);
-                const isHovered = markerIndex === hoveredMarkerIndex;
+                const floor = floors[item.index];
                 return (
-                  <div
+                  <FloorMarker
                     key={floor.rowKey}
-                    className="absolute inset-x-0 flex items-center justify-end pr-2"
-                    style={{ top: item.start, height: item.size }}
-                  >
-                    <PreviewCard
-                      open={!isCoarsePointer && hoveredMarkerKey === floor.rowKey}
-                      onOpenChange={(open) =>
-                        setHoveredMarkerKey((current) =>
-                          open ? floor.rowKey : current === floor.rowKey ? null : current,
-                        )
-                      }
-                    >
-                      <PreviewCardTrigger
-                        delay={0}
-                        closeDelay={160}
-                        render={
-                          <button
-                            type="button"
-                            aria-label={floor.preview}
-                            aria-current={isActive ? "location" : undefined}
-                            onClick={() => handleJump(floor.rowKey)}
-                            className={cn(
-                              // after 伪元素把命中区扩到整条槽位高度，覆盖标记间 7.5px 间隙。
-                              "relative h-0.5 rounded-full outline-none",
-                              "transition-[width,background-color,opacity] duration-150 ease-out",
-                              "after:absolute after:-inset-x-2 after:-inset-y-1 after:content-[''] motion-reduce:transition-none",
-                              isBookmarked
-                                ? "bg-amber-500/90"
-                                : isHovered
-                                  ? "bg-foreground/90"
-                                  : isActive
-                                    ? "bg-foreground/60"
-                                    : "bg-foreground/[0.18]",
-                            )}
-                            style={{ width: resolveMarkerWidth(markerIndex, hoveredMarkerIndex) }}
-                          />
-                        }
-                      />
-                      {!isCoarsePointer ? (
-                        <PreviewCardContent side="left" className="pointer-events-auto p-2">
-                          <div className="group/preview flex min-w-0 items-start gap-1 rounded-lg">
-                            <button
-                              type="button"
-                              onClick={() => handleJump(floor.rowKey)}
-                              className={cn(
-                                "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors",
-                                "hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.06]",
-                              )}
-                            >
-                              <span className="block truncate text-sm font-medium leading-5 text-foreground">
-                                {floor.preview}
-                              </span>
-                              {floor.responsePreview ? (
-                                <span className="mt-1 block line-clamp-3 text-xs leading-1p55 text-muted-foreground">
-                                  {floor.responsePreview}
-                                </span>
-                              ) : null}
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={bookmarks.has(floor.messageId) ? unpinLabel : pinLabel}
-                              title={bookmarks.has(floor.messageId) ? unpinLabel : pinLabel}
-                              onClick={() => toggleFloorBookmark(conversationId, floor.messageId)}
-                              className={cn(
-                                "mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg outline-none",
-                                "transition-colors focus-visible:ring-1 focus-visible:ring-ring",
-                                bookmarks.has(floor.messageId)
-                                  ? "text-amber-500 hover:bg-amber-500/10"
-                                  : "text-muted-foreground/50 hover:bg-foreground/[0.05] hover:text-foreground",
-                              )}
-                            >
-                              <Pin
-                                className={cn(
-                                  "size-3.5",
-                                  bookmarks.has(floor.messageId) && "fill-current",
-                                )}
-                              />
-                            </button>
-                          </div>
-                        </PreviewCardContent>
-                      ) : null}
-                    </PreviewCard>
-                  </div>
+                    floor={floor}
+                    start={item.start}
+                    size={item.size}
+                    width={resolveMarkerWidth(item.index, hoveredMarkerIndex)}
+                    isActive={floor.rowKey === activeRowKey}
+                    isBookmarked={bookmarks.has(floor.messageId)}
+                    isHovered={item.index === hoveredMarkerIndex}
+                    previewOpen={!isCoarsePointer && hoveredMarkerKey === floor.rowKey}
+                    isCoarsePointer={isCoarsePointer}
+                    conversationId={conversationId}
+                    pinLabel={pinLabel}
+                    unpinLabel={unpinLabel}
+                    onHoverChange={handleMarkerHover}
+                    onJump={handleJump}
+                  />
                 );
               })}
             </div>

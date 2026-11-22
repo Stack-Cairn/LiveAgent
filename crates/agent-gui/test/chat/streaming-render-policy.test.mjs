@@ -74,3 +74,58 @@ test("long-stream flush waits for its budget and then aligns the commit to a fra
     globalThis.clearTimeout = originalClearTimeout;
   }
 });
+
+test("a flush whose frame is late runs from the fallback timer and cancels the frame on the window", () => {
+  // WebKitGTK under a virtual display can deliver frames later than the
+  // fallback timer. The fallback then cancels the queued frame, and WebKit
+  // rejects cancelAnimationFrame unless it is called on the window.
+  const originalDocument = globalThis.document;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+  const cancelledFrames = [];
+  let calls = 0;
+  const assertWindowReceiver = (receiver, name) => {
+    if (receiver !== undefined && receiver !== globalThis) {
+      throw new TypeError(`Can only call Window.${name} on instances of Window`);
+    }
+  };
+
+  try {
+    globalThis.document = { visibilityState: "visible" };
+    globalThis.requestAnimationFrame = function requestAnimationFrame() {
+      assertWindowReceiver(this, "requestAnimationFrame");
+      return 77;
+    };
+    globalThis.cancelAnimationFrame = function cancelAnimationFrame(id) {
+      assertWindowReceiver(this, "cancelAnimationFrame");
+      cancelledFrames.push(id);
+    };
+    globalThis.setTimeout = (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    };
+    globalThis.clearTimeout = () => {};
+
+    scheduleLiveTranscriptFlush(() => {
+      calls += 1;
+    });
+    const fallback = timers.find((timer) => timer.delay === 96);
+    assert.ok(fallback, "a fallback timer backs up the frame");
+
+    fallback.callback();
+    assert.equal(calls, 1);
+    assert.deepEqual(cancelledFrames, [77], "the late frame is cancelled");
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    if (originalCancelAnimationFrame === undefined) delete globalThis.cancelAnimationFrame;
+    else globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});

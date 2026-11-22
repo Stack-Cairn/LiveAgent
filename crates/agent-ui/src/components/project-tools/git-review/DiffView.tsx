@@ -45,6 +45,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { isElementInUse, useNearViewport } from "../../../lib/shared/useNearViewport";
 import { cn } from "../../../lib/shared/utils";
 import { formatShortcutLabel } from "../../../lib/shortcuts/shortcutKeys";
 import type { MentionComposerDraftSegment } from "../../chat/MentionComposerModel";
@@ -425,33 +426,33 @@ const DiffChunkView = memo(function DiffChunkView(props: {
   const { item, isDark, commenting } = props;
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
   // Lazy parse/highlight: a chunk only builds its DiffFile once it scrolls
   // near the viewport, so a multi-file commit diff no longer freezes the main
-  // thread synchronously on selection.
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (visible) return undefined;
-    const element = containerRef.current;
-    if (!element) return undefined;
-    if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-        }
-      },
-      { rootMargin: "320px 0px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [visible]);
+  // thread synchronously on selection. Once it is far away again its rows
+  // leave the DOM (the parsed DiffFile stays) and a spacer of the measured
+  // height holds its place, so scrolling through a long review no longer
+  // accumulates every diff ever shown. A chunk the user is working in (focus,
+  // a selection, an open comment editor) stays mounted.
+  const visible = useNearViewport(containerRef, {
+    enterMarginPx: 320,
+    leaveMarginPx: 1600,
+    beforeLeave: () => {
+      const element = containerRef.current;
+      if (!element) return true;
+      if (isElementInUse(element)) return false;
+      if (element.querySelector(`[${DIFF_LINE_COMMENT_ATTR}="editor"]`)) return false;
+      const body = bodyRef.current;
+      if (body) setMeasuredHeight(body.getBoundingClientRect().height);
+      return true;
+    },
+  });
+  const [parsed, setParsed] = useState(false);
+  if (visible && !parsed) setParsed(true);
 
   const diffFile = useMemo(() => {
-    if (!visible || item.large) return null;
+    if (!parsed || item.large) return null;
     try {
       const names = getPatchFileNames(item.chunk, item.label);
       const instance = new DiffFile(
@@ -470,7 +471,7 @@ const DiffChunkView = memo(function DiffChunkView(props: {
     } catch {
       return null;
     }
-  }, [isDark, item, visible]);
+  }, [isDark, item, parsed]);
 
   const rawPreview = useMemo(() => {
     if (!item.large) return item.chunk;
@@ -570,26 +571,41 @@ const DiffChunkView = memo(function DiffChunkView(props: {
         ) : null}
       </div>
       {!visible ? (
-        <div aria-hidden="true" style={{ height: placeholderHeight }} />
-      ) : diffFile ? (
-        <DiffView
-          diffFile={diffFile}
-          diffViewMode={DiffModeEnum.Unified}
-          diffViewTheme={isDark ? "dark" : "light"}
-          diffViewHighlight
-          diffViewWrap={false}
-          diffViewFontSize={12}
-          {...(commentingEnabled
-            ? {
-                diffViewAddWidget: true,
-                extendData,
-                renderWidgetLine,
-                renderExtendLine,
-              }
-            : {})}
+        <div
+          aria-hidden="true"
+          data-diff-chunk-placeholder=""
+          style={{ height: measuredHeight ?? placeholderHeight }}
         />
+      ) : diffFile ? (
+        <div
+          ref={(node) => {
+            bodyRef.current = node;
+          }}
+        >
+          <DiffView
+            diffFile={diffFile}
+            diffViewMode={DiffModeEnum.Unified}
+            diffViewTheme={isDark ? "dark" : "light"}
+            diffViewHighlight
+            diffViewWrap={false}
+            diffViewFontSize={12}
+            {...(commentingEnabled
+              ? {
+                  diffViewAddWidget: true,
+                  extendData,
+                  renderWidgetLine,
+                  renderExtendLine,
+                }
+              : {})}
+          />
+        </div>
       ) : (
-        <pre className="git-review-diff-selectable-content max-h-104 select-text overflow-auto p-3 text-xs leading-relaxed text-muted-foreground">
+        <pre
+          ref={(node) => {
+            bodyRef.current = node;
+          }}
+          className="git-review-diff-selectable-content max-h-104 select-text overflow-auto p-3 text-xs leading-relaxed text-muted-foreground"
+        >
           {rawPreview}
         </pre>
       )}

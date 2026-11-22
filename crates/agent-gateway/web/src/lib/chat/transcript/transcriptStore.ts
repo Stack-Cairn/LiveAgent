@@ -338,9 +338,21 @@ export function createTranscriptStore(options?: {
     return null;
   };
 
+  // replaceTurn runs for every streamed event. It writes into a private copy
+  // of `turns` instead of mapping the whole list each time: the first replace
+  // after `turns` was reassigned copies it once, later ones are O(1) for the
+  // usual target (the newest turn; the lookup scans from the end). Every
+  // other assignment yields a new array, so it is never this private copy.
+  let ownedTurns: Turn[] | null = null;
   const replaceTurn = (previous: Turn, next: Turn) => {
     if (previous === next) return;
-    turns = turns.map((turn) => (turn === previous ? next : turn));
+    const index = turns.lastIndexOf(previous);
+    if (index < 0) return;
+    if (turns !== ownedTurns) {
+      turns = turns.slice();
+      ownedTurns = turns;
+    }
+    turns[index] = next;
   };
 
   // Binds a turn to its run. If a separate turn already exists for that run
@@ -1343,6 +1355,8 @@ export function createTranscriptStore(options?: {
     }) => {
       const preRebaseHistoryEntries = historyEntries;
       const preRebaseTurns = turns;
+      // The stash may keep this array: replaceTurn must copy before writing.
+      if (ownedTurns === preRebaseTurns) ownedTurns = null;
       const rebased = baseMessageRef ? rebaseFromMessageRef(baseMessageRef) : false;
       if (rebased) {
         // Both arrays are replaced (never mutated) by the truncation, so the

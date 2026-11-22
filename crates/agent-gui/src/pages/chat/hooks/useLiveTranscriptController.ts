@@ -1,3 +1,4 @@
+import { requestStreamingFrame } from "@liveagent/ui/lib/chat/streamingFrameClock";
 import { resolveStreamingRenderDelay } from "@liveagent/ui/lib/chat/streamingRenderPolicy";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createCompactionControllerRegistry } from "../../../lib/chat/compaction/controller";
@@ -24,8 +25,10 @@ function shouldUseLiveTranscriptAnimationFrame() {
   );
 }
 
+// The frame step runs on the shared streaming frame clock, so the typewriter
+// reveal's tick in the same frame commits together with this flush.
 export function scheduleLiveTranscriptFlush(callback: () => void, minimumDelayMs = 0) {
-  let frameId: number | null = null;
+  let cancelFrame: (() => void) | null = null;
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let fallbackId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let finished = false;
@@ -33,10 +36,8 @@ export function scheduleLiveTranscriptFlush(callback: () => void, minimumDelayMs
   const run = () => {
     if (finished) return;
     finished = true;
-    if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
-      globalThis.cancelAnimationFrame(frameId);
-      frameId = null;
-    }
+    cancelFrame?.();
+    cancelFrame = null;
     if (timeoutId !== null && typeof globalThis.clearTimeout === "function") {
       globalThis.clearTimeout(timeoutId);
       timeoutId = null;
@@ -51,7 +52,7 @@ export function scheduleLiveTranscriptFlush(callback: () => void, minimumDelayMs
   const useFrame = shouldUseLiveTranscriptAnimationFrame();
   const scheduleFrame = () => {
     timeoutId = null;
-    frameId = globalThis.requestAnimationFrame(run);
+    cancelFrame = requestStreamingFrame(run);
     if (typeof globalThis.setTimeout === "function") {
       fallbackId = globalThis.setTimeout(run, LIVE_TRANSCRIPT_RAF_FALLBACK_MS);
     }
@@ -73,10 +74,8 @@ export function scheduleLiveTranscriptFlush(callback: () => void, minimumDelayMs
   return () => {
     if (finished) return;
     finished = true;
-    if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
-      globalThis.cancelAnimationFrame(frameId);
-      frameId = null;
-    }
+    cancelFrame?.();
+    cancelFrame = null;
     if (timeoutId !== null && typeof globalThis.clearTimeout === "function") {
       globalThis.clearTimeout(timeoutId);
       timeoutId = null;

@@ -186,6 +186,7 @@ test("persisted snapshots round-trip across LRU instances (app restarts)", () =>
   withFakeLocalStorage(() => {
     const first = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     first.save("conv-1", layoutKey(800, 768), [item("a", 120), item("b", 300)]);
+    first.flush();
 
     const second = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     const restored = second.restore("conv-1", layoutKey(800, 768));
@@ -201,6 +202,7 @@ test("persisted payload stores compact [key, size] rows, not full items", () => 
   withFakeLocalStorage((store) => {
     const lru = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     lru.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
+    lru.flush();
     const [raw] = [...store.values()];
     const parsed = JSON.parse(raw);
     assert.deepEqual(parsed.entries[0][1].rows, [["a", 120]]);
@@ -211,6 +213,7 @@ test("malformed persisted payloads degrade to an empty cache", () => {
   withFakeLocalStorage((store) => {
     const probe = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     probe.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
+    probe.flush();
     const [persistKey] = [...store.keys()];
     store.set(persistKey, "{not json");
 
@@ -230,6 +233,7 @@ test("storage write failures degrade to memory-only", () => {
     const lru = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     const measurements = [item("a", 120)];
     lru.save("conv-1", layoutKey(800, 768), measurements);
+    lru.flush();
     assert.equal(lru.restore("conv-1", layoutKey(800, 768)), measurements);
   });
 });
@@ -239,12 +243,14 @@ test("oversized snapshots skip persistence and prune their stale persisted copy"
     const first = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     first.save("conv-1", layoutKey(800, 768), [item("a", 120)]);
     first.save("conv-2", layoutKey(800, 768), [item("b", 60)]);
+    first.flush();
 
     // conv-1 grows past the per-entry cap: memory keeps serving it, but the
     // persisted copy must not stay frozen at the old (now stale) snapshot.
     const oversized = Array.from({ length: 5001 }, (_, i) => item(`row-${i}`, 40));
     first.save("conv-1", layoutKey(800, 768), oversized);
     assert.equal(first.restore("conv-1", layoutKey(800, 768)), oversized);
+    first.flush();
 
     const second = createTranscriptMeasurementsLru({ persistNamespace: "test" });
     assert.equal(
@@ -256,3 +262,53 @@ test("oversized snapshots skip persistence and prune their stale persisted copy"
     assert.equal(second.restore("conv-2", layoutKey(800, 768)).length, 1);
   });
 });
+
+test("saves reach localStorage once per burst, after the delay or when the page hides", async () => {
+  const listeners = new Map();
+  const previousAdd = globalThis.addEventListener;
+  globalThis.addEventListener = (type, listener) => listeners.set(type, listener);
+  try {
+    await withFakeLocalStorageAsync(async (store, writes) => {
+      const lru = createTranscriptMeasurementsLru({ persistNamespace: "test", persistDelayMs: 20 });
+      for (let index = 0; index < 5; index += 1) {
+        lru.save(`conv-${index}`, layoutKey(800, 768), [item("a", 100 + index)]);
+      }
+      assert.equal(writes.count, 0, "no synchronous write on save");
+      assert.ok(lru.restore("conv-4", layoutKey(800, 768)), "memory is updated at once");
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      assert.equal(writes.count, 1, "one write for the burst");
+      assert.equal(JSON.parse([...store.values()][0]).entries.length, 5);
+
+      // A later save is written early when the page is hidden.
+      lru.save("conv-5", layoutKey(800, 768), [item("b", 1)]);
+      listeners.get("pagehide")();
+      assert.equal(writes.count, 2);
+      assert.equal(JSON.parse([...store.values()][0]).entries.length, 6);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      assert.equal(writes.count, 2, "the flushed write is not repeated");
+    });
+  } finally {
+    if (previousAdd === undefined) delete globalThis.addEventListener;
+    else globalThis.addEventListener = previousAdd;
+  }
+});
+
+async function withFakeLocalStorageAsync(run) {
+  const store = new Map();
+  const writes = { count: 0 };
+  const previous = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => {
+      writes.count += 1;
+      store.set(key, String(value));
+    },
+    removeItem: (key) => store.delete(key),
+  };
+  try {
+    await run(store, writes);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous;
+  }
+}

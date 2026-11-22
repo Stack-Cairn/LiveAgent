@@ -801,6 +801,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.markdown.expandCode": "Expand {count} lines",
   "chat.markdown.expandAllCode": "Show all",
   "chat.markdown.collapseCode": "Collapse code",
+  "chat.editDiff.expand": "Show {count} more lines",
+  "chat.editDiff.collapse": "Show fewer lines",
   "chat.userMessage.expand": "Show more",
   "chat.userMessage.collapse": "Show less",
   "chat.fileLink.open": "Open file",
