@@ -21,6 +21,12 @@ export type OnboardingHostProps = {
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   /** Decide at startup whether a fresh profile gets the guide. */
   autoStart: boolean;
+  /**
+   * `settings` reflects the backend (providers, default model). Hosts that load
+   * providers asynchronously pass false until then; deciding on the boot
+   * placeholder would show the guide to people who are already set up.
+   */
+  ready?: boolean;
   /** Existing sessions; a rejection leaves the decision for the next launch. */
   loadSessionCount: () => Promise<number>;
   workspace?: OnboardingWorkspaceHost;
@@ -36,17 +42,30 @@ type HostState = { open: boolean; step: OnboardingStep; manual: boolean };
  * and default model is marked auto-skipped and never sees it on their own.
  */
 export function OnboardingHost(props: OnboardingHostProps) {
-  const { settings, setSettings, autoStart, loadSessionCount, workspace, onInsertPrompt } = props;
+  const {
+    settings,
+    setSettings,
+    autoStart,
+    ready = true,
+    loadSessionCount,
+    workspace,
+    onInsertPrompt,
+  } = props;
   const [state, setState] = useState<HostState>({ open: false, step: "welcome", manual: false });
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const loadSessionCountRef = useRef(loadSessionCount);
   loadSessionCountRef.current = loadSessionCount;
 
+  // One automatic decision per launch, taken once settings are ready.
+  const decidedRef = useRef(false);
   useEffect(() => {
-    if (!autoStart) return;
-    const record = readOnboardingRecord();
-    if (record && record.status !== "in-progress") return;
+    if (!autoStart || !ready || decidedRef.current) return;
+    const initial = readOnboardingRecord();
+    if (initial && initial.status !== "in-progress") {
+      decidedRef.current = true;
+      return;
+    }
     let cancelled = false;
     void loadSessionCountRef
       .current()
@@ -56,6 +75,9 @@ export function OnboardingHost(props: OnboardingHostProps) {
       )
       .then((sessionCount) => {
         if (cancelled) return;
+        decidedRef.current = true;
+        // Re-read: the outcome may have been recorded while sessions loaded.
+        const record = readOnboardingRecord();
         const env = onboardingEnvironmentFromSettings(settingsRef.current, {
           sessionCount,
           notificationsSupported: notificationSettingsAvailable(),
@@ -71,7 +93,7 @@ export function OnboardingHost(props: OnboardingHostProps) {
     return () => {
       cancelled = true;
     };
-  }, [autoStart]);
+  }, [autoStart, ready]);
 
   useEffect(
     () =>

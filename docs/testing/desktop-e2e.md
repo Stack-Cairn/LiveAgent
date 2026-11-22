@@ -94,6 +94,10 @@ nightly, and on demand. Screenshots and logs are uploaded as the
   on conditions, not sleeps. App shortcuts are registered in effects after the
   first render; wait for a readiness marker (like `data-command-palette-ready`
   on `<html>`) before pressing them instead of racing the listener.
+- The first-run guide is turned off for every spec (`LIVEAGENT_SKIP_ONBOARDING=1`
+  for the debug desktop build, `VITE_LIVEAGENT_SKIP_ONBOARDING=1` for the web
+  target) so it never covers the app. A spec whose file name contains
+  `onboarding` keeps it on; that only works on the Tauri target.
 - `restartApp()` relaunches the desktop process with the same home on the
   Tauri target (a page reload on the web target).
 - Type with `insertText()` / `typePrompt()`, not `browser.keys()` with a

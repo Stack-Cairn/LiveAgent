@@ -20,6 +20,7 @@ function memoryStorage(initial = {}) {
 
 const env = (overrides = {}) => ({
   providerCount: 0,
+  activeModelCount: 0,
   hasValidDefaultModel: false,
   userWorkspaceCount: 0,
   sessionCount: 0,
@@ -45,6 +46,12 @@ test("existing sessions or a working provider plus default model count as config
     { show: false, reason: "configured" },
   );
   assert.equal(state.isAlreadyConfigured(env({ providerCount: 2 })), false, "provider without model");
+  // Set up outside the app (config file, import) before the first launch: a
+  // provider with enabled models counts even without a default model.
+  assert.deepEqual(
+    state.decideAutoOnboarding(null, env({ providerCount: 1, activeModelCount: 2 })),
+    { show: false, reason: "configured" },
+  );
 });
 
 test("a partially configured profile starts at the first missing step", () => {
@@ -147,6 +154,7 @@ test("environment is derived from settings; the built-in project does not count"
     notificationsSupported: false,
   });
   assert.equal(empty.providerCount, settings.customProviders.length);
+  assert.equal(empty.activeModelCount, 0);
   assert.equal(empty.userWorkspaceCount, 0);
   assert.equal(empty.hasValidDefaultModel, false);
 
@@ -166,6 +174,7 @@ test("environment is derived from settings; the built-in project does not count"
   const facts = { sessionCount: 0, notificationsSupported: true };
   const configuredEnv = state.onboardingEnvironmentFromSettings(configured, facts);
   assert.equal(configuredEnv.hasValidDefaultModel, true);
+  assert.equal(configuredEnv.activeModelCount, 1);
   assert.equal(configuredEnv.userWorkspaceCount, 1);
   // A default model that is no longer active is not valid.
   assert.equal(

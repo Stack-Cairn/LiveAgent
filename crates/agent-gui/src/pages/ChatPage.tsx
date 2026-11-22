@@ -200,6 +200,7 @@ import {
 } from "../lib/kbrain/sandboxedUiPreferences";
 import { watchKBrainHistory } from "../lib/kbrain/watchHistory";
 import { createUnreadConversationStore } from "../lib/notifications/runAttention";
+import { resolveOnboardingAutoStart } from "../lib/onboardingAutoStart";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
 import {
   applyConversationThinking,
@@ -377,7 +378,11 @@ function ChatPageContent(props: ChatPageProps) {
     appUpdate,
     onRunningConversationCountChange,
   } = props;
-  const { settings, error: modelCatalogError } = useKBrainCatalogSettings(directSettings);
+  const {
+    settings,
+    error: modelCatalogError,
+    ready: modelCatalogReady,
+  } = useKBrainCatalogSettings(directSettings);
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   // SSHManager rows name hosts by their configured name rather than the opaque id.
@@ -1956,6 +1961,19 @@ function ChatPageContent(props: ChatPageProps) {
     () => (kBrainBackendEnabled ? createKBrainFolderTrustClient() : undefined),
     [kBrainBackendEnabled],
   );
+  // null until known; the guide's startup decision waits for it.
+  const [onboardingAutoStart, setOnboardingAutoStart] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void resolveOnboardingAutoStart(import.meta.env.VITE_LIVEAGENT_SKIP_ONBOARDING).then(
+      (enabled) => {
+        if (!cancelled) setOnboardingAutoStart(enabled);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const onboardingWorkspace = useMemo(
     () => ({
       onAddWorkspace: handleOpenClonedWorkspace,
@@ -5038,7 +5056,8 @@ function ChatPageContent(props: ChatPageProps) {
       <OnboardingHost
         settings={settings}
         setSettings={setSettings}
-        autoStart
+        autoStart={onboardingAutoStart === true}
+        ready={modelCatalogReady}
         loadSessionCount={countKBrainSessions}
         workspace={onboardingWorkspace}
         onInsertPrompt={handleEmptyStateSuggestion}

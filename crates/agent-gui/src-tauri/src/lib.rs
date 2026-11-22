@@ -220,6 +220,7 @@ macro_rules! app_invoke_handler {
             commands::data_dir::data_dir_status,
             commands::data_dir::data_dir_migrate,
             commands::app::app_runtime_platform,
+            commands::app::app_onboarding_auto_start,
             commands::app::app_frontend_ready,
             commands::app::app_set_close_window_behavior,
             commands::app::app_set_global_shortcuts,

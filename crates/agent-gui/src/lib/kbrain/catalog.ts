@@ -175,5 +175,11 @@ export function useKBrainCatalogSettings(settings: AppSettings, options: Catalog
     () => (enabled ? projectKBrainSettings(settings, currentCatalog?.providers ?? []) : settings),
     [enabled, settings, currentCatalog],
   );
-  return { settings: runtimeSettings, error: enabled ? (currentCatalog?.error ?? null) : null };
+  return {
+    settings: runtimeSettings,
+    error: enabled ? (currentCatalog?.error ?? null) : null,
+    // Until the first catalog answer arrives the projection has no providers and
+    // no default model; callers that judge "is this profile configured" wait.
+    ready: !enabled || (currentCatalog !== null && currentCatalog.error === null),
+  };
 }

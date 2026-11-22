@@ -27,7 +27,7 @@ function memoryStorage(initial = {}) {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-async function setup({ stored, sessionCount = 0, settingsPatch } = {}) {
+async function setup({ stored, sessionCount = 0, settingsPatch, ready } = {}) {
   const dialogProps = [];
   let env;
   const StubDialog = (props) => {
@@ -60,25 +60,36 @@ async function setup({ stored, sessionCount = 0, settingsPatch } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = env.createRoot(container);
-  await env.act(async () => {
-    root.render(
-      env.React.createElement(OnboardingHost, {
-        settings,
-        setSettings: () => {},
-        autoStart: true,
-        loadSessionCount: async () => {
-          sessionCalls += 1;
-          if (sessionCount instanceof Error) throw sessionCount;
-          return sessionCount;
-        },
-        onInsertPrompt: (prompt) => inserted.push(prompt),
-      }),
-    );
-  });
+  const loadSessionCount = async () => {
+    sessionCalls += 1;
+    if (sessionCount instanceof Error) throw sessionCount;
+    return sessionCount;
+  };
+  const onInsertPrompt = (prompt) => inserted.push(prompt);
+  const render = (props = {}) =>
+    env.act(async () => {
+      root.render(
+        env.React.createElement(OnboardingHost, {
+          settings,
+          setSettings: () => {},
+          autoStart: true,
+          ...(ready === undefined ? {} : { ready }),
+          loadSessionCount,
+          onInsertPrompt,
+          ...props,
+        }),
+      );
+    });
+  await render();
   // Lazy dialog chunk + session count promise.
   for (let i = 0; i < 4; i += 1) await env.act(flush);
   return {
     env,
+    settings,
+    async rerender(props) {
+      await render(props);
+      for (let i = 0; i < 4; i += 1) await env.act(flush);
+    },
     storage,
     dialogProps,
     inserted,
@@ -189,6 +200,73 @@ test("a provider without a default model starts at the model step", async () => 
   });
   try {
     assert.equal(t.dialog()?.dataset.step, "model");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("no decision before the host's settings are ready (providers still loading)", async () => {
+  // Boot placeholder: no providers yet, although the backend has one.
+  const t = await setup({ ready: false });
+  try {
+    assert.equal(t.dialog(), null);
+    assert.equal(t.record(), null);
+    assert.equal(t.sessionCalls(), 0);
+    const loaded = {
+      ...t.settings,
+      customProviders: [{ id: "cfg", name: "Cfg", models: [{ id: "m1" }], activeModels: ["m1"] }],
+      selectedModel: { customProviderId: "cfg", model: "m1" },
+    };
+    await t.rerender({ settings: loaded, ready: true });
+    assert.equal(t.dialog(), null);
+    assert.equal(t.record().status, "auto-skipped");
+    assert.equal(t.sessionCalls(), 1);
+    // Later settings changes do not trigger a second decision.
+    await t.rerender({ settings: { ...loaded, customProviders: [] }, ready: true });
+    assert.equal(t.dialog(), null);
+    assert.equal(t.sessionCalls(), 1);
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("a provider configured before the first launch skips the guide without a default model", async () => {
+  const t = await setup({
+    settingsPatch: {
+      customProviders: [{ id: "cfg", name: "Cfg", models: [{ id: "m1" }], activeModels: ["m1"] }],
+      selectedModel: null,
+    },
+  });
+  try {
+    assert.equal(t.dialog(), null);
+    assert.equal(t.record().status, "auto-skipped");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("an outcome recorded while sessions load wins over the decision", async () => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const t = await setup({ ready: false });
+  try {
+    await t.rerender({
+      ready: true,
+      loadSessionCount: async () => {
+        await gate;
+        return 0;
+      },
+    });
+    t.storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, status: "completed", step: "finish", updatedAt: 1 }),
+    );
+    release();
+    for (let i = 0; i < 4; i += 1) await t.env.act(flush);
+    assert.equal(t.dialog(), null);
+    assert.equal(t.record().status, "completed");
   } finally {
     await t.teardown();
   }

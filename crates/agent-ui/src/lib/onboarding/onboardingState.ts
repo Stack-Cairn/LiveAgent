@@ -34,6 +34,8 @@ export const ONBOARDING_STORAGE_KEY = "liveagent.onboarding.v1";
 
 export type OnboardingEnvironment = {
   providerCount: number;
+  /** Enabled models across all providers. */
+  activeModelCount: number;
   /** A default model is selected and still offered by an existing provider. */
   hasValidDefaultModel: boolean;
   /** Workspaces the user added (the built-in default project does not count). */
@@ -68,12 +70,13 @@ export function isStepSatisfied(step: OnboardingStep, env: OnboardingEnvironment
 }
 
 /**
- * Somebody who already chats, or already has a provider and a working default
- * model, does not need the first-run flow.
+ * Somebody who already chats, or already has a provider with a usable model
+ * (set up in the app, imported, or written to the config file before the first
+ * launch), does not need the first-run flow; it stays reachable by hand.
  */
 export function isAlreadyConfigured(env: OnboardingEnvironment): boolean {
   if ((env.sessionCount ?? 0) > 0) return true;
-  return isStepSatisfied("provider", env) && isStepSatisfied("model", env);
+  return isStepSatisfied("provider", env) && (env.hasValidDefaultModel || env.activeModelCount > 0);
 }
 
 /**
@@ -202,6 +205,10 @@ export function onboardingEnvironmentFromSettings(
   ).length;
   return {
     providerCount: settings.customProviders.length,
+    activeModelCount: settings.customProviders.reduce(
+      (sum, candidate) => sum + candidate.activeModels.length,
+      0,
+    ),
     hasValidDefaultModel,
     userWorkspaceCount,
     sessionCount: facts.sessionCount,
