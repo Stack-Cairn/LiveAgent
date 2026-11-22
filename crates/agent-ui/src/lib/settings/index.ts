@@ -41,6 +41,7 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { normalizeMcpBackendFields } from "./mcpServerFields";
 import { normalizeModelFailoverSettings } from "./modelFailover";
 import {
   normalizeChatTranscriptSettings,
@@ -147,6 +148,7 @@ import {
 
 export { normalizeFontFamily } from "@liveagent/ui/lib/shared/fontFamily";
 export type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
+export { MCP_SERVER_CONFIG_FIELDS } from "./mcpServerFields";
 export {
   hasProviderFailoverConfiguration,
   normalizeModelFailoverSettings,
@@ -1686,6 +1688,7 @@ function normalizeMcpAuthConfig(input: unknown): McpAuthConfig | undefined {
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id.trim() : "";
+  const name = typeof obj.name === "string" ? obj.name.trim() : "";
   const description = typeof obj.description === "string" ? obj.description.trim() : "";
   const docsUrl = typeof obj.docsUrl === "string" ? obj.docsUrl.trim() : "";
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
@@ -1697,6 +1700,7 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
 
   return {
     id,
+    ...(name ? { name } : {}),
     ...(description ? { description } : {}),
     ...(docsUrl ? { docsUrl } : {}),
     enabled: Boolean(obj.enabled),
@@ -1714,37 +1718,6 @@ export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
     ...(workspaceRoots.length > 0 ? { workspaceRoots } : {}),
     ...(backendFields ? { backendFields } : {}),
   };
-}
-
-/** Server fields LiveAgent edits or derives itself; anything else K-brain returns is kept as is. */
-export const MCP_SERVER_CONFIG_FIELDS: readonly string[] = [
-  "id",
-  "description",
-  "docsUrl",
-  "enabled",
-  "transport",
-  "command",
-  "args",
-  "url",
-  "env",
-  "cwd",
-  "headers",
-  "timeoutMs",
-  "messageUrl",
-  "auth",
-  "policy",
-  "workspaceRoots",
-  "backendFields",
-];
-
-function normalizeMcpBackendFields(input: unknown): Record<string, unknown> | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!key || MCP_SERVER_CONFIG_FIELDS.includes(key) || value === undefined) continue;
-    out[key] = value;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function normalizeMcpSettings(input: unknown): McpSettings {

@@ -12,7 +12,11 @@ import {
 import { useSandboxedUiTranscriptHost } from "@liveagent/ui/components/sandboxed-ui/SandboxedUiHostContext";
 import { useSandboxedConfirm } from "@liveagent/ui/components/sandboxed-ui/useSandboxedConfirm";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { type McpUiResource, mcpToolShortName } from "@liveagent/ui/lib/chat/mcpApps";
+import {
+  type McpUiResource,
+  mcpToolShortName,
+  resolveMcpAppToolResult,
+} from "@liveagent/ui/lib/chat/mcpApps";
 import { createMcpAppHost, type McpAppHost } from "@liveagent/ui/lib/sandboxed-ui/mcpAppHost";
 import { readSandboxedUiTheme } from "@liveagent/ui/lib/sandboxed-ui/theme";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -64,12 +68,33 @@ function McpAppViewBody({
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [height, setHeight] = useState(DEFAULT_VIEW_HEIGHT);
   const [reloadKey, setReloadKey] = useState(0);
+  const [approvalConflict, setApprovalConflict] = useState(false);
+  const [namedLabel, setNamedLabel] = useState<string | undefined>(undefined);
   const appHostRef = useRef<McpAppHost | null>(null);
   const latest = useRef({ confirmTool, confirmLink, host });
   latest.current = { confirmTool, confirmLink, host };
 
-  const serverLabel = host?.mcpServerLabel?.(resource.serverId) ?? resource.serverId;
-  const shortName = mcpToolShortName(toolName);
+  const serverLabel = namedLabel ?? resource.serverId;
+  const shortName = resource.toolName || mcpToolShortName(toolName);
+  const backendApproval = Boolean(host?.mcpToolCallApproval);
+  const loadMcpToolResult = host?.loadMcpToolResult;
+  // The raw result: inline in live events, stored behind result_url for history.
+  const hasRawResult = Boolean(resource.result || (resource.resultUrl && loadMcpToolResult));
+
+  useEffect(() => {
+    const read = host?.mcpServerLabel;
+    if (!read) return;
+    let cancelled = false;
+    read(resource.serverId).then(
+      (label) => {
+        if (!cancelled) setNamedLabel(label);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [host?.mcpServerLabel, resource.serverId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey forces a fresh fetch.
   useEffect(() => {
@@ -103,17 +128,30 @@ function McpAppViewBody({
         toolInput,
         toolOutput,
         toolFailed,
+        ...(hasRawResult
+          ? {
+              loadToolResult: () =>
+                resolveMcpAppToolResult({
+                  resource,
+                  output: toolOutput,
+                  failed: toolFailed,
+                  fetchResult: loadMcpToolResult,
+                }),
+            }
+          : {}),
+        backendApproval,
         locale,
         getTheme: () => readSandboxedUiTheme(),
         resolveTool: (serverId, name) => {
           const current = latest.current.host;
           return current ? current.resolveMcpTool(serverId, name) : Promise.resolve(null);
         },
-        callTool: (fullName, args) => {
+        callTool: (fullName, args, approvalId) => {
           const current = latest.current.host;
           if (!current) return Promise.reject(new Error("Host unavailable"));
-          return current.callMcpTool(fullName, args);
+          return current.callMcpTool(fullName, args, approvalId);
         },
+        onApprovalConflict: () => setApprovalConflict(true),
         confirmToolCall: (request) =>
           latest.current.confirmTool({
             source: request.serverLabel,
@@ -134,9 +172,12 @@ function McpAppViewBody({
       return appHost;
     },
     [
+      backendApproval,
+      hasRawResult,
       host?.openExternal,
+      loadMcpToolResult,
       locale,
-      resource.serverId,
+      resource,
       serverLabel,
       shortName,
       toolFailed,
@@ -177,7 +218,10 @@ function McpAppViewBody({
             className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             title={t("sandboxedUi.reload")}
             aria-label={t("sandboxedUi.reload")}
-            onClick={() => setReloadKey((key) => key + 1)}
+            onClick={() => {
+              setApprovalConflict(false);
+              setReloadKey((key) => key + 1);
+            }}
           >
             <RefreshCw className="size-3.5" />
           </button>
@@ -199,6 +243,15 @@ function McpAppViewBody({
         ) : (
           <div className="px-3 py-2 text-xs text-muted-foreground">{t("sandboxedUi.loading")}</div>
         )
+      ) : null}
+      {approvalConflict ? (
+        <div
+          className="border-t border-destructive/25 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+          data-mcp-app-notice="approval-conflict"
+          role="status"
+        >
+          {t("sandboxedUi.mcpApp.approvalConflict")}
+        </div>
       ) : null}
       {dialog}
     </div>

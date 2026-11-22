@@ -1,4 +1,6 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import { hasFrozenCapability } from "@liveagent/ui/lib/kbrain/health";
+import { KBRAIN_MCP_TOOL_SERVER_IDS_CAPABILITY } from "@liveagent/ui/lib/mcp/toolCall";
 import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import {
   buildGatewaySettingsSyncPayload,
@@ -10,6 +12,7 @@ import { isKBrainBackendEnabled, isKBrainBrowserHost } from "../host";
 import { createKBrainClient } from "../kbrain/client";
 import {
   fromKBrainMcpSettings,
+  mcpServerNamesChanged,
   mergeKBrainMcpSettings,
   notifyKBrainMcpSettingsSaved,
 } from "../kbrain/mcp";
@@ -822,7 +825,11 @@ async function loadKBrainMcpSettings(settings: AppSettings): Promise<AppSettings
 async function saveKBrainMcpSettings(previous: McpSettings, next: McpSettings): Promise<void> {
   const client = createKBrainClient();
   const current = await client.getMcpSettings();
-  await client.updateMcpSettings(mergeKBrainMcpSettings(current, next, previous));
+  // Only a display-name edit needs to know whether the backend takes `name`.
+  const serverNames =
+    mcpServerNamesChanged(previous, next) &&
+    hasFrozenCapability(await client.getHealth(), KBRAIN_MCP_TOOL_SERVER_IDS_CAPABILITY);
+  await client.updateMcpSettings(mergeKBrainMcpSettings(current, next, previous, { serverNames }));
   notifyKBrainMcpSettingsSaved();
 }
 

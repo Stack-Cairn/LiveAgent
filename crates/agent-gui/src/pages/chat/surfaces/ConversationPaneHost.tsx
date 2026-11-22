@@ -390,11 +390,14 @@ const RegisteredConversationPaneHostContent = forwardRef<
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {surface}
-      <KBrainSubagentPaneHost
-        conversationId={conversationId}
-        workdir={transcript.workspaceRoot}
-        onOpenFileLink={transcript.onOpenFileLink}
-      />
+      {/* Child tool calls render their MCP App views too, with the parent's host. */}
+      <SandboxedTranscriptHost conversationId={conversationId} workdir={transcript.workspaceRoot}>
+        <KBrainSubagentPaneHost
+          conversationId={conversationId}
+          workdir={transcript.workspaceRoot}
+          onOpenFileLink={transcript.onOpenFileLink}
+        />
+      </SandboxedTranscriptHost>
     </div>
   );
 });

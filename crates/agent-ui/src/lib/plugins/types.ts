@@ -6,6 +6,9 @@ export const KBRAIN_PLUGINS_CAPABILITY = "plugins";
 export const KBRAIN_PLUGIN_UI_CAPABILITY = "plugin_ui";
 export const KBRAIN_MCP_APPS_CAPABILITY = "mcp_apps";
 export const KBRAIN_HTML_PREVIEWS_CAPABILITY = "html_previews";
+export const KBRAIN_PLUGIN_TOOL_NAMES_CAPABILITY = "plugin_tool_names";
+export const KBRAIN_PLUGIN_UI_ERRORS_CAPABILITY = "plugin_ui_errors";
+export const KBRAIN_PLUGIN_MANIFEST_UNKNOWN_FIELDS_CAPABILITY = "plugin_manifest_unknown_fields";
 
 export type PluginUiPlacement = "sidePane" | "settings";
 
@@ -16,21 +19,40 @@ export type PluginUiPanel = {
   entry: string;
   /** Backend path of the entry page; present only while the plugin is enabled. */
   url?: string;
+  /**
+   * Why the entry page cannot load (`plugin_ui_errors`): ui_root_missing, entry_missing,
+   * entry_not_file or entry_too_large, with a human-readable `error`.
+   */
+  errorCode?: string;
+  error?: string;
+};
+
+/** One tool of a plugin (`plugin_tool_names`): manifest name and the name the model sees. */
+type PluginToolDetail = {
+  name: string;
+  modelName: string;
+  description: string;
 };
 
 export type PluginContributes = {
   tools: string[];
+  /** Present on backends with `plugin_tool_names`, in the order of `tools`. */
+  toolDetails?: PluginToolDetail[];
   hooks: string[];
   prompt: boolean;
   ui: PluginUiPanel[];
 };
 
 /**
- * The plugin's own tool names as plugin.json declares them. `contributes.tools` lists the
- * names the model sees (`plugin_<id>_<tool>`); a panel's `host.callTool` and
- * `POST /v1/plugins/{id}/tools/call` take the manifest name.
+ * The plugin's own tool names as plugin.json declares them; a panel's `host.callTool` and
+ * `POST /v1/plugins/{id}/tools/call` take them. Newer backends list them in
+ * `contributes.toolDetails`; older ones only give the model names (`plugin_<id>_<tool>`)
+ * in `contributes.tools`, so the prefix is stripped there.
  */
 export function pluginManifestToolNames(plugin: { id: string; contributes: PluginContributes }) {
+  if (plugin.contributes.toolDetails) {
+    return plugin.contributes.toolDetails.map((detail) => detail.name);
+  }
   const prefix = `plugin_${plugin.id}_`;
   return plugin.contributes.tools.map((name) =>
     name.startsWith(prefix) && name.length > prefix.length ? name.slice(prefix.length) : name,
@@ -59,7 +81,12 @@ export type PluginList = {
   errors: string[];
 };
 
-export type PluginToolCallResult = { output: string; failed: boolean };
+export type PluginToolCallResult = {
+  output: string;
+  failed: boolean;
+  /** The manifest name the backend ran (`plugin_tool_names`). */
+  toolName?: string;
+};
 
 /** HTTP failure of a plugin route; `status` drives the user-facing explanation. */
 export class PluginsHttpError extends Error {
@@ -115,6 +142,7 @@ function parsePanel(value: unknown): PluginUiPanel | null {
   const placement = value.placement;
   if (!id || (placement !== "sidePane" && placement !== "settings")) return null;
   const url = readString(value.url);
+  const errorCode = readString(value.errorCode).trim();
   return {
     id,
     title: readString(value.title, id) || id,
@@ -122,7 +150,24 @@ function parsePanel(value: unknown): PluginUiPanel | null {
     entry: readString(value.entry),
     // Only backend paths: a panel can never point the frame at another host.
     ...(url.startsWith("/v1/") ? { url } : {}),
+    ...(errorCode ? { errorCode, error: readString(value.error).trim() } : {}),
   };
+}
+
+function parseToolDetails(value: unknown): PluginToolDetail[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const details: PluginToolDetail[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const name = readString(item.name);
+    if (!name) continue;
+    details.push({
+      name,
+      modelName: readString(item.modelName) || name,
+      description: readString(item.description),
+    });
+  }
+  return details;
 }
 
 function parsePlugin(value: unknown): PluginInfo | null {
@@ -130,6 +175,7 @@ function parsePlugin(value: unknown): PluginInfo | null {
   const id = readString(value.id);
   if (!id) return null;
   const contributes = isRecord(value.contributes) ? value.contributes : {};
+  const toolDetails = parseToolDetails(contributes.toolDetails);
   return {
     id,
     name: readString(value.name, id) || id,
@@ -140,6 +186,7 @@ function parsePlugin(value: unknown): PluginInfo | null {
     path: readString(value.path),
     contributes: {
       tools: readStringArray(contributes.tools),
+      ...(toolDetails ? { toolDetails } : {}),
       hooks: readStringArray(contributes.hooks),
       prompt: contributes.prompt === true,
       ui: Array.isArray(contributes.ui)

@@ -7,7 +7,7 @@ import {
 } from "@liveagent/app/lib/settings/index";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
-import { ExternalLink, Settings, Trash2 } from "@liveagent/ui/components/IconSet";
+import { AppWindow, ExternalLink, Settings, Trash2 } from "@liveagent/ui/components/IconSet";
 import { getMcpTransportMeta } from "@liveagent/ui/components/resources/McpTransportMeta";
 import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/ResourceActivationSwitch";
 import { Badge } from "@liveagent/ui/components/ui/badge";
@@ -203,6 +203,37 @@ function RuntimeStatusBadge(props: { status: McpServerRuntimeStatus }) {
   return null;
 }
 
+/** Counts from the backend's tool list: views and app-only tools of a ready server. */
+function ToolKindBadges(props: { status: McpServerRuntimeStatus }) {
+  const { t } = useLocale();
+  const uiTools = props.status.uiTools ?? 0;
+  const appOnly = props.status.appOnlyTools ?? 0;
+  return (
+    <>
+      {uiTools > 0 ? (
+        <Badge
+          variant="outline"
+          className="h-5 gap-1 px-1.5 text-tiny"
+          title={t("mcpHub.uiToolsTitle").replace("{count}", String(uiTools))}
+          data-mcp-ui-badge=""
+        >
+          <AppWindow aria-hidden="true" className="size-3" />
+          {t("mcpHub.uiBadge")}
+        </Badge>
+      ) : null}
+      {appOnly > 0 ? (
+        <Badge
+          variant="muted"
+          className="h-5 px-1.5 text-tiny"
+          title={t("mcpHub.appOnlyToolsTitle")}
+        >
+          {t("mcpHub.appOnlyTools").replace("{count}", String(appOnly))}
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
 export const McpServerCard = memo(function McpServerCard(props: {
   server: McpServerConfig;
   idx: number;
@@ -221,7 +252,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
   const isHttp = transport === "http";
   const { label: transportLabel } = getMcpTransportMeta(transport);
   const enabled = server.enabled;
-  const displayName = server.id || `Server ${idx + 1}`;
+  // The display name (settings, else what the backend reports); the id stays visible.
+  const label = server.name?.trim() || runtimeStatus?.label?.trim() || "";
+  const displayName = label || server.id || `Server ${idx + 1}`;
 
   const patchServer = (patch: Partial<McpServerConfig>) => {
     setSettings((prev) =>
@@ -283,6 +316,14 @@ export const McpServerCard = memo(function McpServerCard(props: {
               className="text-sm font-semibold text-foreground"
             />
           </button>
+          {label && server.id && label !== server.id ? (
+            <span
+              className="min-w-0 shrink truncate font-mono text-xs text-muted-foreground"
+              title={server.id}
+            >
+              <SearchHighlight text={server.id} query={searchQuery} />
+            </span>
+          ) : null}
           {docsLink ? (
             <Button
               type="button"
@@ -301,6 +342,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
           </Badge>
           {isOauthServer(server) ? <OauthControls server={server} /> : null}
           {enabled && runtimeStatus ? <RuntimeStatusBadge status={runtimeStatus} /> : null}
+          {enabled && runtimeStatus?.status === "ready" ? (
+            <ToolKindBadges status={runtimeStatus} />
+          ) : null}
         </div>
         {detailLine ? (
           <button

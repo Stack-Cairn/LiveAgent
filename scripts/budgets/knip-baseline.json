@@ -309,8 +309,6 @@
       "crates/agent-ui/src/lib/chat/imageAnnotation/render.ts#deviceRect",
       "crates/agent-ui/src/lib/chat/liveShellOutput.ts#LIVE_SHELL_OUTPUT_MAX_CHARS",
       "crates/agent-ui/src/lib/chat/mcpApps.ts#MCP_UI_RESOURCE_DETAILS_KEY",
-      "crates/agent-ui/src/lib/chat/mcpApps.ts#kbrainMcpServerKey",
-      "crates/agent-ui/src/lib/chat/mcpApps.ts#parseMcpUiResource",
       "crates/agent-ui/src/lib/chat/modelConfigRejection.ts#MODEL_CONFIG_ERROR_CODES",
       "crates/agent-ui/src/lib/chat/modelConfigRejection.ts#isModelConfigErrorCode",
       "crates/agent-ui/src/lib/chat/replyContinuity.ts#countCompactionSeams",
@@ -900,7 +898,7 @@
   "counts": {
     "files": 1,
     "dependencies": 24,
-    "exports": 520,
+    "exports": 518,
     "types": 329,
     "duplicates": 11
   }

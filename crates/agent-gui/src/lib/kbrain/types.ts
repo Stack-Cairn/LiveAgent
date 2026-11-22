@@ -110,12 +110,29 @@ export type KBrainQuestionAnswers = {
  */
 export type KBrainToolElicitations = { elicitations?: unknown[] };
 
+/**
+ * MCP App view of a tool result (capability mcp_apps); fetching `url` needs the token.
+ * With `mcp_apps_structured_content` it also names the server's tool and carries the raw
+ * CallToolResult: inline `result` in live events (≤256 KiB), `result_url` (≤1 MiB) in live
+ * events and history.
+ */
+type KBrainUiResource = {
+  server_id: string;
+  uri: string;
+  url: string;
+  tool_name?: string;
+  result?: Record<string, unknown>;
+  result_url?: string;
+};
+
 export type KBrainToolCall = KBrainToolRunInfo &
   KBrainQuestionAnswers &
   KBrainToolElicitations & {
     id: string;
     name: string;
     arguments: unknown;
+    /** History only (`mcp_apps_structured_content`): the call's MCP App view. */
+    ui_resource?: KBrainUiResource;
   };
 
 export type KBrainToolResult = KBrainToolRunInfo &
@@ -127,8 +144,7 @@ export type KBrainToolResult = KBrainToolRunInfo &
     output: string;
     failed?: boolean;
     cancelled?: boolean;
-    /** MCP App view of this result (capability mcp_apps); fetching `url` needs the token. */
-    ui_resource?: { server_id: string; uri: string; url: string };
+    ui_resource?: KBrainUiResource;
   };
 
 export type KBrainQuestionOption = {

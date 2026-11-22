@@ -23,9 +23,13 @@ import {
   createKBrainPluginsClient,
   type KBrainSandboxedUiCapabilities,
   listKBrainSessionPreviews,
+  loadKBrainMcpToolResult,
   loadKBrainSandboxedHtml,
+  NO_KBRAIN_SANDBOXED_UI_CAPABILITIES,
+  readKBrainMcpServerLabel,
   readKBrainSandboxedUiCapabilities,
   resolveKBrainMcpAppTool,
+  sameSandboxedUiCapabilities,
 } from "../../../lib/kbrain/sandboxedUi";
 import {
   isKBrainHtmlPreviewsPreferred,
@@ -33,30 +37,18 @@ import {
   subscribeKBrainHtmlPreviewsPreferred,
 } from "../../../lib/kbrain/sandboxedUiPreferences";
 
-const NONE: KBrainSandboxedUiCapabilities = {
-  plugins: false,
-  pluginUi: false,
-  mcpApps: false,
-  htmlPreviews: false,
-};
-
 /** The connected backend's sandboxed UI capabilities; none until known or off K-brain. */
 export function useKBrainSandboxedUiCapabilities(): KBrainSandboxedUiCapabilities {
-  const [capabilities, setCapabilities] = useState<KBrainSandboxedUiCapabilities>(NONE);
+  const [capabilities, setCapabilities] = useState<KBrainSandboxedUiCapabilities>(
+    NO_KBRAIN_SANDBOXED_UI_CAPABILITIES,
+  );
   useEffect(() => {
     if (!isKBrainBackendEnabled()) return;
     let cancelled = false;
     const read = () => {
       void readKBrainSandboxedUiCapabilities().then((next) => {
         if (cancelled) return;
-        setCapabilities((current) =>
-          current.plugins === next.plugins &&
-          current.pluginUi === next.pluginUi &&
-          current.mcpApps === next.mcpApps &&
-          current.htmlPreviews === next.htmlPreviews
-            ? current
-            : next,
-        );
+        setCapabilities((current) => (sameSandboxedUiCapabilities(current, next) ? current : next));
       });
     };
     read();
@@ -124,6 +116,7 @@ export function KBrainSandboxedUiTranscriptHost(props: {
   const preferred = useKBrainHtmlPreviewsPreferred();
   const htmlPreviews = capabilities.htmlPreviews && preferred;
   const mcpApps = capabilities.mcpApps;
+  const { mcpAppsStructuredContent, mcpToolCallApproval, mcpToolVisibility } = capabilities;
   const cwd = workdir?.trim() ?? "";
 
   useEffect(() => {
@@ -153,15 +146,33 @@ export function KBrainSandboxedUiTranscriptHost(props: {
       mcpApps,
       loadPreviewHtml: loadHtml,
       loadMcpAppHtml: loadHtml,
-      resolveMcpTool: (serverId, toolName) => resolveKBrainMcpAppTool(cwd, serverId, toolName),
-      callMcpTool: (fullName, args) => callKBrainMcpTool(cwd, fullName, args),
+      mcpToolCallApproval,
+      resolveMcpTool: (serverId, toolName) =>
+        resolveKBrainMcpAppTool(cwd, serverId, toolName, { appAudience: mcpToolVisibility }),
+      callMcpTool: (fullName, args, approvalId) =>
+        callKBrainMcpTool(cwd, fullName, args, {
+          appCaller: mcpToolVisibility,
+          // Never sent to a backend that would reject the field.
+          ...(mcpToolCallApproval && approvalId ? { approvalId } : {}),
+        }),
+      ...(mcpAppsStructuredContent ? { loadMcpToolResult: loadKBrainMcpToolResult } : {}),
+      mcpServerLabel: (serverId) =>
+        readKBrainMcpServerLabel(cwd, serverId, { appAudience: mcpToolVisibility }),
       openExternal,
       openPreviewInSidePanel: (preview: HtmlPreviewRecord) => {
         requestHtmlPreviewInSidePanel(conversationId, preview.previewId);
         requestKBrainPanelsDock();
       },
     };
-  }, [conversationId, cwd, htmlPreviews, mcpApps]);
+  }, [
+    conversationId,
+    cwd,
+    htmlPreviews,
+    mcpApps,
+    mcpAppsStructuredContent,
+    mcpToolCallApproval,
+    mcpToolVisibility,
+  ]);
 
   if (!host) return <>{children}</>;
   return (

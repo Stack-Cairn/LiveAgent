@@ -419,11 +419,17 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
   }
 
   async function discoverMcpTools(
-    input: { cwd?: string; server_ids?: string[] } = {},
+    input: {
+      cwd?: string;
+      server_ids?: string[];
+      /** Only for backends with `mcp_tool_visibility`; the default is "model". */
+      audience?: "model" | "app";
+    } = {},
   ): Promise<unknown> {
     const query = new URLSearchParams();
     if (input.cwd) query.set("cwd", input.cwd);
     if (input.server_ids?.length) query.set("server_ids", input.server_ids.join(","));
+    if (input.audience) query.set("audience", input.audience);
     return request<unknown>(`/v1/mcp/tools?${query}`);
   }
 

@@ -38,6 +38,12 @@ export type McpServerRuntimeStatus = {
   status: string;
   error?: string;
   tools: number;
+  /** Display name the backend reports (`mcp_tool_server_ids`). */
+  label?: string;
+  /** Tools that declare an MCP App view (`uiResourceUri`). */
+  uiTools?: number;
+  /** Tools only views may call, hidden from the model (`mcp_tool_visibility`). */
+  appOnlyTools?: number;
 };
 
 /** Live MCP server status for the MCP Hub; absent where the host cannot read it. */
@@ -47,6 +53,8 @@ export type McpStatusAdapter = {
   reconnect: () => Promise<McpServerRuntimeStatus[]>;
   /** Called after this client saved MCP settings, so the view can refresh. */
   subscribe?: (listener: () => void) => () => void;
+  /** Whether servers can carry a display name (`mcp_tool_server_ids`). */
+  supportsServerNames?: () => Promise<boolean>;
 };
 
 export type ResourceHostCapabilities = {

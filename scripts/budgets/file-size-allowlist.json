@@ -50,7 +50,7 @@
     "crates/agent-ui/src/i18n/translations/zhCNCommon.ts": 2684,
     "crates/agent-ui/src/i18n/translations/zhCNSettings.ts": 1823,
     "crates/agent-ui/src/lib/chat/uiMessages.ts": 1654,
-    "crates/agent-ui/src/lib/settings/index.ts": 2757,
+    "crates/agent-ui/src/lib/settings/index.ts": 2730,
     "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": 2097,
     "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2099,
     "crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx": 1955,

@@ -4,11 +4,25 @@
 export const MCP_UI_RESOURCE_DETAILS_KEY = "kbrainUiResource";
 
 export type McpUiResource = {
+  /** Configured MCP server id. */
   serverId: string;
   uri: string;
   /** Backend path of GET /v1/sessions/{id}/mcp-ui; fetching it needs the token. */
   url: string;
+  /** The server's own tool name (`mcp_apps_structured_content`). */
+  toolName?: string;
+  /** Raw CallToolResult, inline in live events only (≤256 KiB). */
+  result?: Record<string, unknown>;
+  /** Backend path of the stored raw result (≤1 MiB); fetching it needs the token. */
+  resultUrl?: string;
 };
+
+const RESULT_URL = /^\/v1\/sessions\/[^/?#]+\/mcp-ui\/results\/[0-9a-f]{32}$/;
+
+/** A `ui_resource.result_url`: GET /v1/sessions/{id}/mcp-ui/results/{ref}. */
+export function isMcpUiResultUrl(value: string) {
+  return RESULT_URL.test(value);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -28,7 +42,55 @@ export function parseMcpUiResource(value: unknown): McpUiResource | null {
   if (!serverId || !uri.startsWith("ui://") || !/^\/v1\/sessions\/[^/]+\/mcp-ui\?/.test(url)) {
     return null;
   }
-  return { serverId, uri, url };
+  const toolName =
+    typeof value.tool_name === "string"
+      ? value.tool_name
+      : typeof value.toolName === "string"
+        ? value.toolName
+        : "";
+  const resultUrl =
+    typeof value.result_url === "string"
+      ? value.result_url
+      : typeof value.resultUrl === "string"
+        ? value.resultUrl
+        : "";
+  return {
+    serverId,
+    uri,
+    url,
+    ...(toolName ? { toolName } : {}),
+    ...(isRecord(value.result) ? { result: value.result } : {}),
+    ...(RESULT_URL.test(resultUrl) ? { resultUrl } : {}),
+  };
+}
+
+/** Text-only CallToolResult: what a view gets when no raw result is available. */
+export function textToolResult(output: string, isError: boolean): Record<string, unknown> {
+  return { content: [{ type: "text", text: output }], isError };
+}
+
+/**
+ * The CallToolResult a view's ui/notifications/tool-result carries: the inline raw
+ * `result`, else the stored one from `resultUrl` (history only has that), else the text
+ * output (results over 1 MiB and older backends).
+ */
+export async function resolveMcpAppToolResult(options: {
+  resource: McpUiResource;
+  output: string;
+  failed: boolean;
+  fetchResult?: (resultUrl: string) => Promise<unknown>;
+}): Promise<Record<string, unknown>> {
+  const { resource, output, failed, fetchResult } = options;
+  if (resource.result) return resource.result;
+  if (resource.resultUrl && fetchResult) {
+    try {
+      const stored = await fetchResult(resource.resultUrl);
+      if (isRecord(stored)) return stored;
+    } catch {
+      // Fall back to the text output below.
+    }
+  }
+  return textToolResult(output, failed);
 }
 
 /** Details with the view attached under `kbrainUiResource`; unchanged when there is none. */

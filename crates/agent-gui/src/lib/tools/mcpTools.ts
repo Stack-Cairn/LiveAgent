@@ -10,8 +10,10 @@ import {
   hardcodedServerPolicyDefault,
   isCuaDriverServer,
 } from "@liveagent/ui/contracts/mcpServerDefaults";
+import { parseMcpToolCallResponse } from "@liveagent/ui/lib/mcp/toolCall";
 import { isKBrainBackendEnabled } from "../host";
 import { createKBrainClient } from "../kbrain/client";
+import { kbrainModelMcpToolInfos } from "../kbrain/mcpToolList";
 
 import type { McpServerConfig, ToolPolicy } from "../settings";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
@@ -30,6 +32,9 @@ type McpToolInfo = {
   name: string;
   description: string;
   inputSchema: unknown;
+  /** K-brain only: the server's name key and the full name to call the tool by. */
+  serverKey?: string;
+  fullName?: string;
 };
 
 type McpCallToolResponse = {
@@ -118,7 +123,10 @@ export async function createMcpTools(params: {
 }): Promise<
   BuiltinToolBundle<{
     /** Maps the safe tool name (used by LLM) to the underlying MCP server/tool. */
-    toolNameMap: Map<string, { serverId: string; toolName: string; serverLabel: string }>;
+    toolNameMap: Map<
+      string,
+      { serverId: string; toolName: string; serverLabel: string; fullName?: string }
+    >;
   }>
 > {
   const servers = params.servers ?? [];
@@ -215,14 +223,12 @@ export async function createMcpTools(params: {
   let toolInfos: McpToolInfo[] = [];
   try {
     if (params.kbrain) {
-      const result = (await params.kbrain.discoverMcpTools({
-        cwd: params.cwd,
-        server_ids: enabledServers.map((server) => server.id),
-      })) as { tools?: Array<McpToolInfo & { toolName?: string }> };
-      toolInfos = (result.tools ?? []).map((info) => ({
-        ...info,
-        name: info.toolName ?? info.name,
-      }));
+      toolInfos = kbrainModelMcpToolInfos(
+        await params.kbrain.discoverMcpTools({
+          cwd: params.cwd,
+          server_ids: enabledServers.map((server) => server.id),
+        }),
+      );
     } else {
       toolInfos = await invoke<McpToolInfo[]>("mcp_list_tools", {
         servers: enabledServers,
@@ -239,7 +245,7 @@ export async function createMcpTools(params: {
 
   const toolNameMap = new Map<
     string,
-    { serverId: string; toolName: string; serverLabel: string }
+    { serverId: string; toolName: string; serverLabel: string; fullName?: string }
   >();
   const tools: Tool[] = [];
   const metadataEntries: Array<
@@ -257,7 +263,8 @@ export async function createMcpTools(params: {
   > = [];
 
   for (const info of toolInfos ?? []) {
-    const safeName = buildSafeToolName(info.serverId, info.name);
+    // Built from the name key: the same safe name whichever id the backend reports.
+    const safeName = buildSafeToolName(info.serverKey ?? info.serverId, info.name);
     const descriptionPrefix = info.serverLabel ? `[MCP:${info.serverLabel}] ` : "[MCP] ";
     tools.push({
       name: safeName,
@@ -270,6 +277,7 @@ export async function createMcpTools(params: {
       serverId: info.serverId,
       toolName: info.name,
       serverLabel: info.serverLabel,
+      ...(info.fullName ? { fullName: info.fullName } : {}),
     });
     metadataEntries.push([
       safeName,
@@ -353,13 +361,21 @@ export async function createMcpTools(params: {
           const runId = createToolRunId("mcp", toolCall.id);
           const res = params.kbrain
             ? await (async () => {
-                const result = (await params.kbrain?.callMcpTool({
-                  name: toolCall.name,
-                  arguments: toolCall.arguments ?? {},
-                })) as { output?: string; failed?: boolean };
+                const result = parseMcpToolCallResponse(
+                  await params.kbrain?.callMcpTool({
+                    name: mapped.fullName ?? toolCall.name,
+                    arguments: toolCall.arguments ?? {},
+                  }),
+                );
+                // No one to ask from here: an "ask" tool stays unrun rather than failing
+                // silently.
+                const text =
+                  result.status === "approval_required"
+                    ? `MCP tool ${mapped.toolName} needs approval before it can run.`
+                    : result.output;
                 return {
-                  content: [{ type: "text", text: result.output ?? "" }],
-                  isError: result.failed,
+                  content: [{ type: "text", text }],
+                  isError: result.failed || result.status === "approval_required",
                 } as McpCallToolResponse;
               })()
             : await invokeWithAbort<McpCallToolResponse>(
