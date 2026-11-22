@@ -2757,6 +2757,7 @@ test("chat transcript width defaults, clamps, and updates locally", () => {
     width: value,
     expandProcessByDefault: false,
     showDetailedProgress: false,
+    htmlPreviews: true,
   });
   assert.deepEqual(settings.normalizeChatTranscriptSettings(undefined), width(768));
   assert.deepEqual(settings.normalizeChatTranscriptSettings({ width: 400 }), width(560));

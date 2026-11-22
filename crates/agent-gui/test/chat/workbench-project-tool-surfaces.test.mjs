@@ -87,6 +87,7 @@ test("every project tool has a stable per-scope identity and label key", () => {
     "sshTunnel",
     "backgroundTasks",
     "browser",
+    "plugins",
   ]);
   for (const kind of PROJECT_TOOL_SURFACE_KINDS) {
     const surface = { kind, project: PROJECT };
