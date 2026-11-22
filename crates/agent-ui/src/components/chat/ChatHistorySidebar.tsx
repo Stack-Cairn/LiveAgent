@@ -45,6 +45,7 @@ import {
   isCommandPaletteShortcut,
   isCommandPaletteSuppressed,
   isMacLikePlatform,
+  listenForSidebarShortcuts,
 } from "@liveagent/ui/lib/chat/commandPalette";
 import { withCommandShortcuts } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -521,8 +522,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       }
       if (runSidebarShortcut(command)) event.preventDefault();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return listenForSidebarShortcuts(handleKeyDown, commandPaletteEnabled);
   }, [commandPaletteEnabled, openQuickOpen, runSidebarShortcut, sectionsDisabled]);
   const selectionAnchorRef = useRef<string | null>(null);
   const bulkConfirmOpenRef = useRef(false);

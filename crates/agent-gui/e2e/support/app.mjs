@@ -73,12 +73,53 @@ export async function waitForLaunch() {
 }
 
 /** The platform modifier for app shortcuts (Cmd on macOS, Ctrl elsewhere). */
-export async function primaryModifier() {
+async function primaryModifier() {
   const isMac = await browser.execute(() => /mac/i.test(navigator.platform));
   return isMac ? "Meta" : "Control";
 }
 
 /**
+ * Opens the command palette with Ctrl/Cmd+K. The sidebar registers its
+ * shortcut listener in an effect after the first render and marks <html> with
+ * data-command-palette-ready once it is attached; waiting for that marker
+ * (and for no settings surface suppressing the palette) keeps the chord from
+ * racing the registration. The chord is re-sent a bounded number of times in
+ * case the driver drops a key event while the window takes focus, but never
+ * while a palette is already on its way in, since the same chord closes it.
+ */
+export async function openCommandPalette() {
+  const palette = $("[data-command-palette]");
+  await browser.waitUntil(
+    () =>
+      browser.execute(
+        () =>
+          document.documentElement.hasAttribute("data-command-palette-ready") &&
+          !document.querySelector("[data-command-palette-suppressed]"),
+      ),
+    { timeout: TIMEOUTS.ui, timeoutMsg: "command palette shortcut was never registered" },
+  );
+  const modifier = await primaryModifier();
+  const attempts = 3;
+  for (let attempt = 1; ; attempt += 1) {
+    await browser.keys([modifier, "k"]);
+    try {
+      await palette.waitForDisplayed({ timeout: 3_000 });
+      return palette;
+    } catch (error) {
+      if (await palette.isExisting()) {
+        await palette.waitForDisplayed({ timeout: TIMEOUTS.ui, timeoutMsg: "palette did not open" });
+        return palette;
+      }
+      if (attempt >= attempts) {
+        throw new Error(`palette did not open after ${attempts} key presses (${error.message})`);
+      }
+      console.warn(`[e2e] palette shortcut attempt ${attempt} was not handled; pressing again`);
+    }
+  }
+}
+
+/**
+ * Types into an input or contenteditable./**
  * Types into an input or contenteditable. WebKitWebDriver drops repeated
  * characters and spaces when sending text key by key, so insert it the way an
  * IME commit does; the element sees the same input events as for typing.

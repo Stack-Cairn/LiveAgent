@@ -177,3 +177,25 @@ export const COMMAND_PALETTE_SUPPRESSED_ATTRIBUTE = "data-command-palette-suppre
 export function isCommandPaletteSuppressed(doc: Document | undefined = globalThis.document) {
   return Boolean(doc?.querySelector(`[${COMMAND_PALETTE_SUPPRESSED_ATTRIBUTE}]`));
 }
+
+/**
+ * Set on <html> while a mounted sidebar listens for the palette shortcut, so
+ * automation can wait for the listener instead of racing its registration
+ * after the first render.
+ */
+export const COMMAND_PALETTE_READY_ATTRIBUTE = "data-command-palette-ready";
+
+/** Adds the sidebar's window keydown handler (and the ready marker); returns the cleanup. */
+export function listenForSidebarShortcuts(
+  handler: (event: KeyboardEvent) => void,
+  paletteEnabled: boolean,
+  target: Window = window,
+): () => void {
+  const root = target.document.documentElement;
+  target.addEventListener("keydown", handler);
+  if (paletteEnabled) root.setAttribute(COMMAND_PALETTE_READY_ATTRIBUTE, "");
+  return () => {
+    target.removeEventListener("keydown", handler);
+    if (paletteEnabled) root.removeAttribute(COMMAND_PALETTE_READY_ATTRIBUTE);
+  };
+}
