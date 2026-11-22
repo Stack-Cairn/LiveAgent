@@ -1,0 +1,20 @@
+{
+  "name": "@liveagent/desktop-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "WebdriverIO end-to-end suite for the LiveAgent desktop app",
+  "scripts": {
+    "build:app": "node scripts/build-app.mjs",
+    "test": "wdio run wdio.conf.mjs",
+    "test:web": "E2E_TARGET=web wdio run wdio.conf.mjs"
+  },
+  "devDependencies": {
+    "@wdio/cli": "9.33.1",
+    "@wdio/globals": "9.33.1",
+    "@wdio/local-runner": "9.33.1",
+    "@wdio/mocha-framework": "9.33.1",
+    "@wdio/spec-reporter": "9.33.1",
+    "webdriverio": "9.33.1"
+  }
+}

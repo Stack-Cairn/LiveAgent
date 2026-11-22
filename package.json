@@ -30,6 +30,8 @@
     "typecheck:gui": "pnpm --filter liveagent typecheck",
     "typecheck:webui": "pnpm --filter @liveagent/gateway-webui typecheck",
     "test:gui": "pnpm --filter liveagent test:frontend",
+    "build:e2e:desktop": "pnpm --filter @liveagent/desktop-e2e build:app",
+    "test:e2e:desktop": "pnpm --filter @liveagent/desktop-e2e test",
     "test:webui": "pnpm --filter @liveagent/gateway-webui test"
   },
   "pnpm": {
