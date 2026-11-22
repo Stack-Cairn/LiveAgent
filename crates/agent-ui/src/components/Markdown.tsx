@@ -64,6 +64,11 @@ import {
   RELEASE_NOTES_MARKDOWN_CLASS,
   THINKING_MARKDOWN_CLASS,
 } from "./markdown/markdownStyles";
+import {
+  createStreamingBlockFrame,
+  StreamingBlock,
+  StreamingBlocksProvider,
+} from "./markdown/streamingTailBlock";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { CopyButton } from "./ui/copy-button";
@@ -903,8 +908,8 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
   // Streaming text only grows: split it incrementally and repair just the
   // last block instead of letting Streamdown remend + re-lex all of it on
   // every update (see streamingMarkdownBlocks).
-  const streamingBlockParser = useMemo(
-    () => (streaming ? createStreamingBlockParser() : null),
+  const streamingBlockFrame = useMemo(
+    () => (streaming ? createStreamingBlockFrame(createStreamingBlockParser()) : null),
     [streaming],
   );
   const normalizedContent = useMemo(
@@ -934,42 +939,57 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
     : preserveRelativeUrls
       ? relativeUrlRehypePlugins
       : undefined;
+  // Only a completed block changes what Streamdown itself renders; the
+  // growing last block reads its text from context (see streamingTailBlock).
+  const streamingFrame = useMemo(
+    () => streamingBlockFrame?.update(normalizedContent) ?? null,
+    [streamingBlockFrame, normalizedContent],
+  );
   const profileClasses = new Set(className?.split(/\s+/));
+
+  const markdown = (
+    <Streamdown
+      className={cn(
+        "chat-markdown max-w-none break-words",
+        CHAT_MARKDOWN_CLASS,
+        profileClasses.has("thinking-markdown") && THINKING_MARKDOWN_CLASS,
+        profileClasses.has("document-markdown") && DOCUMENT_MARKDOWN_CLASS,
+        profileClasses.has("plan-markdown") && PLAN_MARKDOWN_CLASS,
+        profileClasses.has("release-notes-markdown") && RELEASE_NOTES_MARKDOWN_CLASS,
+        MARKDOWN_EMBED_CLASSNAME,
+        streaming ? "chat-markdown--streaming" : "chat-markdown--static",
+        showCaret ? "chat-markdown--caret-on" : "chat-markdown--caret-off",
+        className,
+      )}
+      plugins={streamdownPlugins}
+      remarkPlugins={onOpenFileLink ? chatRemarkPlugins : remarkPlugins}
+      {...(rehypePlugins ? { rehypePlugins } : {})}
+      components={components}
+      mode={streaming ? "streaming" : "static"}
+      dir="auto"
+      parseIncompleteMarkdown={streamingBlockFrame === null}
+      parseMarkdownIntoBlocksFn={streamingBlockFrame?.parse ?? parseChatMarkdownBlocks}
+      {...(streamingBlockFrame ? { BlockComponent: StreamingBlock } : {})}
+      normalizeHtmlIndentation
+      isAnimating={showCaret}
+      caret={streaming ? "block" : undefined}
+      animated={false}
+      linkSafety={readOnly ? readOnlyLinkSafety : interactiveLinkSafety}
+      shikiTheme={streamdownShikiThemes}
+      controls={readOnly ? readOnlyStreamdownControls : interactiveStreamdownControls}
+      translations={streamdownTranslations}
+    >
+      {streamingFrame ? streamingFrame.key : normalizedContent}
+    </Streamdown>
+  );
 
   return (
     <div>
-      <Streamdown
-        className={cn(
-          "chat-markdown max-w-none break-words",
-          CHAT_MARKDOWN_CLASS,
-          profileClasses.has("thinking-markdown") && THINKING_MARKDOWN_CLASS,
-          profileClasses.has("document-markdown") && DOCUMENT_MARKDOWN_CLASS,
-          profileClasses.has("plan-markdown") && PLAN_MARKDOWN_CLASS,
-          profileClasses.has("release-notes-markdown") && RELEASE_NOTES_MARKDOWN_CLASS,
-          MARKDOWN_EMBED_CLASSNAME,
-          streaming ? "chat-markdown--streaming" : "chat-markdown--static",
-          showCaret ? "chat-markdown--caret-on" : "chat-markdown--caret-off",
-          className,
-        )}
-        plugins={streamdownPlugins}
-        remarkPlugins={onOpenFileLink ? chatRemarkPlugins : remarkPlugins}
-        {...(rehypePlugins ? { rehypePlugins } : {})}
-        components={components}
-        mode={streaming ? "streaming" : "static"}
-        dir="auto"
-        parseIncompleteMarkdown={streamingBlockParser === null}
-        parseMarkdownIntoBlocksFn={streamingBlockParser ?? parseChatMarkdownBlocks}
-        normalizeHtmlIndentation
-        isAnimating={showCaret}
-        caret={streaming ? "block" : undefined}
-        animated={false}
-        linkSafety={readOnly ? readOnlyLinkSafety : interactiveLinkSafety}
-        shikiTheme={streamdownShikiThemes}
-        controls={readOnly ? readOnlyStreamdownControls : interactiveStreamdownControls}
-        translations={streamdownTranslations}
-      >
-        {normalizedContent}
-      </Streamdown>
+      {streamingFrame ? (
+        <StreamingBlocksProvider value={streamingFrame.blocks}>{markdown}</StreamingBlocksProvider>
+      ) : (
+        markdown
+      )}
     </div>
   );
 });

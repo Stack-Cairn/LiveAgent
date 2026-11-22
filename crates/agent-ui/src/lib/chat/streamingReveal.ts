@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { hasStreamingFrameClock, requestStreamingFrame } from "./streamingFrameClock";
 import { resolveStreamingRenderDelay } from "./streamingRenderPolicy";
 
 // Model deltas arrive as multi-character tokens, so a reply drawn the moment each
@@ -58,8 +59,8 @@ function prefersReducedMotion(): boolean {
 type RevealState = {
   text: string;
   position: number;
-  /** Pending frame of the reveal loop, or null while the loop is not running. */
-  frame: number | null;
+  /** Cancels the pending tick on the shared frame clock; null while idle. */
+  frame: (() => void) | null;
   /** Timestamp of the previous tick. */
   last: number;
   /** What renders draw, moved only by the loop; and when the loop last moved it. */
@@ -68,22 +69,52 @@ type RevealState = {
 };
 
 /**
+ * Render trigger of one reveal. The loop bumps `version` and notifies through
+ * useSyncExternalStore, so a tick schedules the same synchronous render lane
+ * as the live store's emit; both run in one shared frame callback
+ * (streamingFrameClock), so React folds them into a single commit.
+ */
+type RevealHandle = {
+  state: RevealState | null;
+  version: number;
+  listener: (() => void) | null;
+  subscribe: (listener: () => void) => () => void;
+  getVersion: () => number;
+};
+
+function createRevealHandle(): RevealHandle {
+  const handle: RevealHandle = {
+    state: null,
+    version: 0,
+    listener: null,
+    subscribe: (listener) => {
+      handle.listener = listener;
+      return () => {
+        if (handle.listener === listener) handle.listener = null;
+      };
+    },
+    getVersion: () => handle.version,
+  };
+  return handle;
+}
+
+/**
  * The part of a streaming text to draw now. Text present when the reveal starts
  * (a mounted history row, a reopened running conversation) shows at once; only
  * what arrives afterwards is typed out. Disabled — the turn settled, the text was
  * rewritten, or the user asked for reduced motion — it returns the full text.
  */
 export function useStreamingReveal(text: string, enabled: boolean): string {
-  const [, rerender] = useReducer((count: number) => count + 1, 0);
-  const stateRef = useRef<RevealState | null>(null);
+  const [handle] = useState(createRevealHandle);
+  useSyncExternalStore(handle.subscribe, handle.getVersion, handle.getVersion);
   // Without a frame loop nothing would ever advance the cursor: show text as it arrives.
-  const active =
-    enabled && !prefersReducedMotion() && typeof globalThis.requestAnimationFrame === "function";
+  const active = enabled && !prefersReducedMotion() && hasStreamingFrameClock();
 
-  const previous = stateRef.current;
+  const previous = handle.state;
   if (!active || previous === null || !isStreamingAppend(previous.text, text)) {
     // A replaced state also retires its loop: the pending tick sees it is stale.
-    stateRef.current = {
+    previous?.frame?.();
+    handle.state = {
       text,
       position: text.length,
       frame: null,
@@ -94,7 +125,7 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
   } else {
     previous.text = text;
   }
-  const state = stateRef.current as RevealState;
+  const state = handle.state as RevealState;
   // A store flush re-renders with longer text but draws the same prefix as before,
   // so the memoized Markdown below skips it; only the loop advances what is drawn.
   const cut = streamingRevealCut(text, state.shownCut);
@@ -103,11 +134,11 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
   // Runs after every commit, not on a dependency change: the loop stops once the
   // cursor catches up, and new text committed in that same frame must restart it.
   useEffect(() => {
-    const current = stateRef.current;
+    const current = handle.state;
     if (!active || !current || current.frame !== null) return;
     if (streamingRevealCut(current.text, current.position) >= current.text.length) return;
     const tick = (now: number) => {
-      if (stateRef.current !== current) return;
+      if (handle.state !== current) return;
       current.frame = null;
       current.position = nextStreamingRevealPosition(
         current.position,
@@ -116,7 +147,7 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
       );
       current.last = now;
       const caughtUp = current.position >= current.text.length;
-      if (!caughtUp) current.frame = requestAnimationFrame(tick);
+      if (!caughtUp) current.frame = requestStreamingFrame(tick);
       // Re-render only when another character becomes visible, and for long texts no
       // more often than the store's own flush budget: every render re-parses the
       // Markdown tail, so the cursor keeps moving per frame but is drawn in steps.
@@ -125,20 +156,21 @@ export function useStreamingReveal(text: string, enabled: boolean): string {
       if (next !== current.shownCut && (caughtUp || due)) {
         current.shownCut = next;
         current.shownAt = now;
-        rerender();
+        handle.version += 1;
+        handle.listener?.();
       }
     };
     current.last = performance.now();
-    current.frame = requestAnimationFrame(tick);
+    current.frame = requestStreamingFrame(tick);
   });
 
   useEffect(
     () => () => {
-      const current = stateRef.current;
-      if (current?.frame != null) cancelAnimationFrame(current.frame);
+      const current = handle.state;
+      current?.frame?.();
       if (current) current.frame = null;
     },
-    [],
+    [handle],
   );
 
   return behind ? text.slice(0, cut) : text;

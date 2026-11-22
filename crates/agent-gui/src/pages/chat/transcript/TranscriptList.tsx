@@ -1,6 +1,5 @@
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
 import { ProcessViewportFollowingProvider } from "@liveagent/ui/components/chat/processDisclosure";
-import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -48,6 +47,7 @@ import {
   readTranscriptScrollPosition,
   saveTranscriptScrollPosition,
 } from "./initialTranscriptLayout";
+import { LiveAssistantActivityRow, liveTranscriptShapeKey } from "./LiveAssistantActivityRow";
 import { measureRowLive } from "./measureRowLive";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
 import { createReplyHoverStore } from "./replyHoverStore";
@@ -175,11 +175,13 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     findSource,
   } = props;
 
-  const liveState = useSyncExternalStore(
-    liveTranscriptStore.subscribe,
-    liveTranscriptStore.getSnapshot,
-    liveTranscriptStore.getSnapshot,
+  // The list re-renders only when the live store changes the row structure;
+  // streamed content reaches the live row through its own subscription.
+  const getLiveShape = useCallback(
+    () => liveTranscriptShapeKey(liveTranscriptStore.getSnapshot()),
+    [liveTranscriptStore],
   );
+  const liveShape = useSyncExternalStore(liveTranscriptStore.subscribe, getLiveShape, getLiveShape);
 
   // 审批门在工具执行「之前」挂起，转录里看不出运行中的工具；活跃回合据此把
   // 进度指示冻结成静态（同一份 pending 表也驱动输入框上方的审批栏）。
@@ -201,16 +203,25 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   // 手动压缩空闲态只置 isCompactionRunning、不置 isSending，仍要显示「正在
   // 压缩」live tail：把它并入可见性 gate（只影响 live tail 是否显示，不改动
   // 其他 isSending 语义）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveShape is the invalidation signal for the live store snapshot read inside.
   const { rows, liveStartIndex, getRowKey } = useMemo(
-    () => rowModel.build(historyItems, { ...liveState, isSending, isCompactionRunning }),
-    [rowModel, historyItems, liveState, isSending, isCompactionRunning],
+    () =>
+      rowModel.build(historyItems, {
+        ...liveTranscriptStore.getSnapshot(),
+        isSending,
+        isCompactionRunning,
+      }),
+    [rowModel, historyItems, liveTranscriptStore, liveShape, isSending, isCompactionRunning],
   );
 
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+  // While a live row exists it publishes the find entries itself, from the
+  // rows it renders (this list's copy of the live row goes stale mid-stream).
   useEffect(() => {
+    if (liveStartIndex >= 0) return;
     findSource?.publish(() => buildTranscriptFindEntries(rows));
-  }, [findSource, rows]);
+  }, [findSource, rows, liveStartIndex]);
   const liveStartIndexRef = useRef(liveStartIndex);
   liveStartIndexRef.current = liveStartIndex;
   const getScrollElement = useCallback(() => scrollViewport, [scrollViewport]);
@@ -258,8 +269,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   const handleCancelEdit = useCallback(() => {
     setEditingMessageKey(null);
   }, []);
-
-  const displayedToolStatus = normalizeLiveToolStatus(liveState.toolStatus);
 
   // Restored once per mount: at conversation-switch remounts the viewport is
   // already live, so a same-width snapshot skips straight to exact layout.
@@ -675,6 +684,26 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                 />
               </div>
             );
+          } else if (row.kind === "assistant-activity" && virtualRow.index === liveStartIndex) {
+            body = (
+              <div className="flex justify-start">
+                <LiveAssistantActivityRow
+                  rowModel={rowModel}
+                  historyItems={historyItems}
+                  liveTranscriptStore={liveTranscriptStore}
+                  isSending={isSending}
+                  findSource={findSource}
+                  showUsage={showUsage}
+                  usageContextWindow={usageContextWindow}
+                  isCompactionRunning={isCompactionRunning}
+                  hasPendingToolApproval={hasPendingToolApproval}
+                  workdir={workspaceRoot}
+                  onOpenFileLink={onOpenFileLink}
+                  onResendFromEdit={onResendFromEdit}
+                  onBranchConversation={onBranchConversation}
+                />
+              </div>
+            );
           } else if (row.kind === "assistant-activity") {
             body = (
               <div className="flex justify-start">
@@ -684,8 +713,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                   usageContextWindow={usageContextWindow}
                   isCompactionRunning={isCompactionRunning}
                   hasPendingToolApproval={hasPendingToolApproval}
-                  toolStatus={displayedToolStatus}
-                  retryAttempts={liveState.retryAttempts}
+                  toolStatus={null}
                   workdir={workspaceRoot}
                   onOpenFileLink={onOpenFileLink}
                   onResendFromEdit={onResendFromEdit}
@@ -701,8 +729,8 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                   showUsage={showUsage}
                   usageContextWindow={usageContextWindow}
                   isCompactionRunning={row.mutable ? isCompactionRunning : false}
-                  toolStatus={row.mutable ? displayedToolStatus : null}
-                  retryAttempts={row.mutable ? liveState.retryAttempts : undefined}
+                  // Mutable (live) units only exist inside the live activity row.
+                  toolStatus={null}
                   workdir={workspaceRoot}
                   onOpenFileLink={onOpenFileLink}
                   onResendFromEdit={onResendFromEdit}

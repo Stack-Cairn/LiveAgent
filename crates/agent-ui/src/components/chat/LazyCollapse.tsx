@@ -1,13 +1,6 @@
 import { AnimatePresence, domAnimation, LazyMotion, useReducedMotion } from "motion/react";
 import * as m from "motion/react-m";
-import {
-  memo,
-  type ReactNode,
-  useEffect,
-  useLayoutEffect,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { createContext, memo, type ReactNode, useContext, useEffect, useState } from "react";
 import { UI_MOTION_TRANSITION } from "../../lib/shared/motion";
 import { cn } from "../../lib/shared/utils";
 import { type CollapseBodySource, createCollapseBodySource } from "./collapseBodySource";
@@ -25,11 +18,16 @@ import { type CollapseBodySource, createCollapseBodySource } from "./collapseBod
 // context makes React walk the whole subtree below it looking for consumers —
 // for a streaming work trace that is the entire Markdown tree, on every flush.
 // Publishing through the source re-renders only the body and leaves the motion
-// shell (and its context values) untouched.
+// shell (and its context values) untouched. The body learns about a new
+// version through CollapseBodyVersion, provided above the memoized shell, so
+// it re-renders in the same pass as its owner: a store notification from a
+// layout effect would cost a second synchronous commit on every flush.
+const CollapseBodyVersion = createContext(0);
+
 const CollapseBody = memo(
   function CollapseBody(props: { frozen: boolean; source: CollapseBodySource }) {
     const { source } = props;
-    useSyncExternalStore(source.subscribe, source.getVersion, source.getVersion);
+    useContext(CollapseBodyVersion);
     return source.render();
   },
   (_previous, next) => next.frozen,
@@ -92,11 +90,10 @@ export function LazyCollapse(props: {
 
   const shouldRenderBody = open || (retainWhileClosed && hasOpened);
   const [source] = useState(createCollapseBodySource);
-  // A closed body is frozen: it neither takes new children nor re-renders.
+  // A closed body is frozen: it neither takes new children nor re-renders
+  // (the version, and with it the context value, only moves while open).
   if (open) source.publish(children);
-  useLayoutEffect(() => {
-    if (open) source.flush();
-  });
+  const version = source.getVersion();
 
   return (
     <div
@@ -113,12 +110,14 @@ export function LazyCollapse(props: {
         className,
       )}
     >
-      <CollapseMotionShell
-        open={open}
-        shouldRenderBody={shouldRenderBody}
-        prefersReducedMotion={prefersReducedMotion === true}
-        source={source}
-      />
+      <CollapseBodyVersion.Provider value={version}>
+        <CollapseMotionShell
+          open={open}
+          shouldRenderBody={shouldRenderBody}
+          prefersReducedMotion={prefersReducedMotion === true}
+          source={source}
+        />
+      </CollapseBodyVersion.Provider>
     </div>
   );
 }

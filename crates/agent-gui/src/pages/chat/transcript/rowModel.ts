@@ -634,6 +634,18 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
   return reconciled;
 }
 
+function sameLiveTailInput(previous: LiveTailInput, next: LiveTailInput) {
+  return (
+    previous.draftAssistantText === next.draftAssistantText &&
+    previous.liveRounds === next.liveRounds &&
+    previous.toolStatus === next.toolStatus &&
+    previous.retryAttempts === next.retryAttempts &&
+    previous.isSettled === next.isSettled &&
+    previous.isSending === next.isSending &&
+    (previous.isCompactionRunning ?? false) === (next.isCompactionRunning ?? false)
+  );
+}
+
 export type TranscriptRowModel = {
   build: (historyItems: RenderTimelineItem[], live: LiveTailInput) => TranscriptRowsSnapshot;
   reset: () => void;
@@ -674,6 +686,13 @@ export function createTranscriptRowModel(): TranscriptRowModel {
   let pendingSettle: { replyKey: string; keysAtStart: ReadonlySet<string> } | null = null;
   let deferredSettles: { replyKey: string; keysAtStart: ReadonlySet<string> }[] = [];
   let draftRoundCache: { text: string; round: LiveRound } | null = null;
+  // The list and its live row host both build from the same store snapshot in
+  // one render pass; the second call returns the first result.
+  let lastBuild: {
+    historyItems: RenderTimelineItem[];
+    live: LiveTailInput;
+    snapshot: TranscriptRowsSnapshot;
+  } | null = null;
 
   const reset = () => {
     rowCache = new WeakMap();
@@ -685,6 +704,7 @@ export function createTranscriptRowModel(): TranscriptRowModel {
     pendingSettle = null;
     deferredSettles = [];
     draftRoundCache = null;
+    lastBuild = null;
   };
 
   const draftRound = (text: string): LiveRound => {
@@ -834,6 +854,22 @@ export function createTranscriptRowModel(): TranscriptRowModel {
   };
 
   const build = (
+    historyItems: RenderTimelineItem[],
+    live: LiveTailInput,
+  ): TranscriptRowsSnapshot => {
+    if (
+      lastBuild &&
+      lastBuild.historyItems === historyItems &&
+      sameLiveTailInput(lastBuild.live, live)
+    ) {
+      return lastBuild.snapshot;
+    }
+    const snapshot = buildSnapshot(historyItems, live);
+    lastBuild = { historyItems, live, snapshot };
+    return snapshot;
+  };
+
+  const buildSnapshot = (
     historyItems: RenderTimelineItem[],
     live: LiveTailInput,
   ): TranscriptRowsSnapshot => {
