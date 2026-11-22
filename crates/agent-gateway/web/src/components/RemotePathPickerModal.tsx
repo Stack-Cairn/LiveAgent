@@ -753,7 +753,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
                 statusLine.kind === "error"
                   ? "border-destructive/30 bg-destructive/5 text-destructive"
                   : statusLine.kind === "warn"
-                    ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300"
+                    ? "border-warning/30 bg-warning/5 text-warning"
                     : "border-border/60 bg-background/70 text-muted-foreground",
               )}
             >

@@ -41,11 +41,11 @@ function statusDotClass(status: SubagentView["status"]) {
     case "running":
       return "animate-pulse bg-[hsl(var(--chat-running))]";
     case "error":
-      return "bg-[hsl(var(--chat-error))]";
+      return "bg-destructive";
     case "cancelled":
       return "bg-foreground/30";
     default:
-      return "bg-[hsl(var(--chat-success))]";
+      return "bg-success";
   }
 }
 
@@ -306,16 +306,14 @@ function SubagentHeader({
         ) : null}
       </div>
       {stopFailed ? (
-        <p className="mt-1.5 text-xs text-[hsl(var(--chat-error))]">
-          {t("chat.subagent.pane.stopFailed")}
-        </p>
+        <p className="mt-1.5 text-xs text-destructive">{t("chat.subagent.pane.stopFailed")}</p>
       ) : null}
       {view.error ? (
         <p
           className={cn(
             "mt-1.5 line-clamp-3 break-words text-xs",
             // A stop the user asked for is not a failure.
-            view.status === "cancelled" ? "text-foreground/45" : "text-[hsl(var(--chat-error))]",
+            view.status === "cancelled" ? "text-foreground/45" : "text-destructive",
           )}
         >
           {view.error}
@@ -367,7 +365,7 @@ function SubagentTranscriptBody({
   if (transcript.status === "error") {
     return (
       <div className="space-y-2 px-4 py-6 text-sm">
-        <p className="text-[hsl(var(--chat-error))]">{t("chat.subagent.pane.loadFailed")}</p>
+        <p className="text-destructive">{t("chat.subagent.pane.loadFailed")}</p>
         {transcript.error ? (
           <p className="break-words text-xs text-foreground/45">{transcript.error}</p>
         ) : null}

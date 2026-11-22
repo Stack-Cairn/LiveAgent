@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ChevronDown, ImageIcon, Package } from "../../com
 import { Button } from "../../components/ui/button";
 import { menuSurfaceClassName } from "../../components/ui/menu-surface";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { SectionHeader } from "../../components/ui/section-header";
 import { useLocale } from "../../i18n";
 import type { ImageTarget } from "../../lib/imaging/types";
 import { cn } from "../../lib/shared/utils";
@@ -32,10 +33,10 @@ function groupByProvider(targets: ImageTarget[], other: string) {
 
 function GroupHeader({ label, count }: { label: string; count: number }) {
   return (
-    <div className="sticky top-0 z-10 flex h-6 items-center gap-1.5 bg-popover px-2.5 text-tiny font-medium uppercase tracking-wide text-muted-foreground">
+    <SectionHeader className="sticky top-0 z-10 flex h-6 items-center gap-1.5 bg-popover px-2.5">
       <span className="min-w-0 truncate">{label}</span>
       <span className="ml-auto tabular-nums">{count}</span>
-    </div>
+    </SectionHeader>
   );
 }
 

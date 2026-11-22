@@ -53,7 +53,7 @@ export function ReleaseAnnouncementDialog({
               <DialogTitle className="mt-1 truncate text-base leading-tight">{title}</DialogTitle>
               <DialogDescription className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
                 {controller.preview ? (
-                  <span className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">
+                  <span className="rounded-md border border-warning/20 bg-warning/[0.07] px-1.5 py-0.5 font-medium text-warning">
                     {t("appUpdate.announcementPreview")}
                   </span>
                 ) : null}

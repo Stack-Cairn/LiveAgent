@@ -1023,7 +1023,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
           >
             <div
               className={cn(
-                "w-gateway-bubble-w rounded-22px border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px",
+                "w-gateway-bubble-w rounded-3xl border border-solid shadow-gateway-bubble backdrop-blur-18px px-18px py-16px",
                 "border-destructive/30 bg-destructive/5",
               )}
             >
@@ -1176,7 +1176,7 @@ export function GatewayTranscript({
         {shouldShowInlineError ? (
           <div
             className={cn(
-              "rounded-14px border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px",
+              "rounded-xl border border-solid border-destructive/16 bg-destructive/8 px-12px py-10px",
               "text-sm text-destructive",
             )}
           >

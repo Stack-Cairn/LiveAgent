@@ -214,7 +214,7 @@ function ProviderStep(
                     count: provider.activeModels.length,
                   })}
                 </span>
-                <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2 className="size-3.5 text-success" />
               </li>
             ))}
           </ul>
@@ -367,8 +367,8 @@ function ModelStep(props: Pick<OnboardingDialogProps, "settings" | "setSettings"
               aria-live="polite"
               className={cn(
                 "min-w-0 flex-1 text-xs",
-                test.phase === "ok" && test.listed && "text-emerald-700 dark:text-emerald-400",
-                test.phase === "ok" && !test.listed && "text-amber-700 dark:text-amber-400",
+                test.phase === "ok" && test.listed && "text-success",
+                test.phase === "ok" && !test.listed && "text-warning",
                 test.phase === "failed" && "text-destructive",
               )}
             >

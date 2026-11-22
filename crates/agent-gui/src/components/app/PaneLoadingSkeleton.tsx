@@ -34,7 +34,7 @@ export function PaneLoadingSkeleton(props: PaneLoadingSkeletonProps) {
       {variant === "terminal" ? (
         <div className="space-y-3 px-4 py-5 font-mono" aria-hidden>
           <div className="flex items-center gap-2">
-            <Skeleton className="animate-none size-2 rounded-sm bg-emerald-500/35" />
+            <Skeleton className="animate-none size-2 rounded-sm bg-success/35" />
             <Skeleton className="animate-none h-2 w-40 rounded-sm bg-muted-foreground/12" />
           </div>
           <Skeleton className="animate-none h-2 w-56 rounded-sm bg-muted-foreground/10" />

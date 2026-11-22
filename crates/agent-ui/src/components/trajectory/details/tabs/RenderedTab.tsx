@@ -1,3 +1,4 @@
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { Empty, MarkdownBlock, SourceBlocks } from "../shared";
 import type { DetailTabProps } from "../types";
 
@@ -21,9 +22,7 @@ export function RenderedTab(props: DetailTabProps) {
     <div className="space-y-4">
       {hasThinking && (
         <section className="space-y-1 rounded border border-border/50 bg-muted/20 p-2">
-          <p className="text-tiny font-medium uppercase tracking-wide text-muted-foreground">
-            thinking
-          </p>
+          <SectionHeader render={<p />}>thinking</SectionHeader>
           <MarkdownBlock
             value={record.thinkingDetail}
             t={t}

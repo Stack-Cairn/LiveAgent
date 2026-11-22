@@ -237,8 +237,8 @@ export function DevicesSection({
         className="settings-section-heading-row flex items-center justify-between gap-4"
       >
         <div className="settings-section-title-group flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-sky-500/10">
-            <MonitorSmartphone className="size-18px text-sky-500" />
+          <div className="flex size-9 items-center justify-center rounded-xl bg-info/10">
+            <MonitorSmartphone className="size-18px text-info" />
           </div>
           <div>
             <h3 className="text-sm font-semibold">{t("settings.devicesTitle")}</h3>
@@ -273,8 +273,8 @@ export function DevicesSection({
       {!authed ? (
         <div className="max-w-xl rounded-2xl border border-border/60 bg-card p-5">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
-              <Key className="size-4 text-amber-500" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-warning/10">
+              <Key className="size-4 text-warning" />
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="text-sm font-medium">{t("settings.devicesLoginTitle")}</h4>
@@ -438,7 +438,7 @@ function AddClientDialog({
               <div
                 className={cn(
                   "flex size-10 shrink-0 items-center justify-center",
-                  "rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                  "rounded-xl border border-info/25 bg-info/10 text-info",
                 )}
               >
                 <Plus className="size-5" />
@@ -481,7 +481,7 @@ function AddClientDialog({
             <div className="space-y-1.5">
               <Label htmlFor="admin-agent-id-dialog" className="text-xs text-muted-foreground">
                 {t("settings.devicesAgentId")}
-                <span className="ml-0.5 text-red-500">*</span>
+                <span className="ml-0.5 text-destructive">*</span>
               </Label>
               <Input
                 variant="plain"
@@ -539,7 +539,7 @@ function IssuedTokenDialog({
             <div
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center",
-                "rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                "rounded-xl border border-success/25 bg-success/10 text-success",
               )}
             >
               <Key className="size-5" />
@@ -576,7 +576,7 @@ function IssuedTokenDialog({
               title={copied ? t("chat.markdown.copied") : t("chat.copy")}
               aria-label={copied ? t("chat.markdown.copied") : t("chat.copy")}
             >
-              {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+              {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
             </button>
           </div>
         </DialogBody>
@@ -711,12 +711,12 @@ function DeviceRow(props: {
         <div
           className={
             agent.online
-              ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
+              ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-success/10"
               : "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60"
           }
         >
           {agent.online ? (
-            <Wifi className="size-4 text-emerald-500" />
+            <Wifi className="size-4 text-success" />
           ) : (
             <WifiOff className="size-4 text-muted-foreground" />
           )}
@@ -736,7 +736,7 @@ function DeviceRow(props: {
             <span
               className={
                 agent.online
-                  ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-tiny font-medium text-emerald-600 dark:text-emerald-400"
+                  ? "rounded-full bg-success/10 px-2 py-0.5 text-tiny font-medium text-success"
                   : "rounded-full bg-muted px-2 py-0.5 text-tiny font-medium text-muted-foreground"
               }
             >

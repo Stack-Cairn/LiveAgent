@@ -88,8 +88,8 @@ export function AgentSelector({
               className={cn(
                 "size-2 shrink-0 rounded-full",
                 agent.online
-                  ? "bg-emerald-500 shadow-ui-agentselector-53"
-                  : "bg-rose-500 shadow-ui-agentselector-54",
+                  ? "bg-success shadow-ui-agentselector-53"
+                  : "bg-destructive shadow-ui-agentselector-54",
               )}
               title={statusLabel}
             >
@@ -106,9 +106,7 @@ export function AgentSelector({
             <span
               className={cn(
                 "shrink-0 rounded-full px-2 py-0.5 text-tiny font-medium",
-                agent.online
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                agent.online ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
               )}
             >
               {statusLabel}
@@ -141,8 +139,8 @@ export function AgentSelector({
                 className={cn(
                   "size-2 shrink-0 rounded-full",
                   agent.online
-                    ? "bg-emerald-500 shadow-ui-agentselector-53"
-                    : "bg-rose-500 shadow-ui-agentselector-54",
+                    ? "bg-success shadow-ui-agentselector-53"
+                    : "bg-destructive shadow-ui-agentselector-54",
                 )}
                 title={statusLabel}
               >
@@ -161,7 +159,7 @@ export function AgentSelector({
                   </span>
                 ) : null}
               </span>
-              {selected ? <Check className="size-4 shrink-0 text-emerald-600" /> : null}
+              {selected ? <Check className="size-4 shrink-0 text-success" /> : null}
             </DropdownMenuItem>
           );
         })}

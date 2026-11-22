@@ -1877,7 +1877,7 @@ export function GatewayAppView({
                               <div
                                 className={cn(
                                   "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
                                   "max-640:mx-10px max-640:mt-8px max-640:mb-0",
                                 )}
                               >
@@ -1888,7 +1888,7 @@ export function GatewayAppView({
                               <div
                                 className={cn(
                                   "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
                                   "max-640:mx-10px max-640:mt-8px max-640:mb-0",
                                 )}
                               >
@@ -1899,7 +1899,7 @@ export function GatewayAppView({
                               <div
                                 className={cn(
                                   "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
                                   "max-640:mx-10px max-640:mt-8px max-640:mb-0",
                                 )}
                               >
@@ -1910,7 +1910,7 @@ export function GatewayAppView({
                               <div
                                 className={cn(
                                   "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-14px border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
+                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
                                   "max-640:mx-10px max-640:mt-8px max-640:mb-0",
                                 )}
                               >
