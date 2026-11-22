@@ -1,12 +1,14 @@
 import { retainRunningToolContent } from "@liveagent/adapters/assistantBubble";
-import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
-import { useLiveProcessDisclosure } from "@liveagent/ui/components/chat/processDisclosure";
+import {
+  useDetailedProgress,
+  useLiveProcessDisclosure,
+} from "@liveagent/ui/components/chat/processDisclosure";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { memo, useMemo } from "react";
+import { Fragment, memo, type ReactNode, useMemo } from "react";
 import {
   AppWindow,
   Bot,
@@ -40,7 +42,9 @@ import {
   type ToolActivityCategory,
 } from "./assistantBubbleUtils";
 import { getConciseToolTarget } from "./conciseToolTarget";
+import { ThinkingDisclosure } from "./ThinkingDisclosure";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
+import type { WorkTraceReasoningSlot } from "./workTraceDisplay";
 
 function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]) {
   const runningIds = new Set(runningToolCallIds);
@@ -103,7 +107,7 @@ const TOOL_BATCH_ICONS: Record<ToolActivityCategory, IconComponent> = {
   other: Wrench,
 };
 
-function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string) {
+export function getRunningToolActivity(item: ToolTraceItem, t: (key: string) => string) {
   const fileOperation = getFileOperationDisplay(item);
   const category = getToolActivityCategory(item.toolCall.name);
   const action = t(
@@ -155,7 +159,20 @@ function ToolTraceGroupInner(props: {
   readOnly?: boolean;
   redactToolContent?: boolean;
   onOpenFileLink?: (link: ChatFileLink) => void;
+  /**
+   * The batch is the latest one of a running turn. The turn's single status row
+   * already says a tool is running, so the header drops its own running status.
+   */
   showTurnStatus?: boolean;
+  /**
+   * Reasoning that happened between (and around) these calls, folded into the
+   * batch in chronological order instead of splitting it into separate rows.
+   */
+  reasoning?: WorkTraceReasoningSlot[];
+  /** Key of the reasoning segment that is still streaming, if any. */
+  activeReasoningKey?: string | null;
+  renderMode?: "streaming" | "static";
+  workdir?: string;
 }) {
   const {
     items,
@@ -165,8 +182,13 @@ function ToolTraceGroupInner(props: {
     redactToolContent = false,
     onOpenFileLink,
     showTurnStatus = false,
+    reasoning = EMPTY_REASONING,
+    activeReasoningKey = null,
+    renderMode,
+    workdir,
   } = props;
   const { locale, t } = useLocale();
+  const detailedProgress = useDetailedProgress();
   const counts = useMemo(
     () => getToolGroupCounts(items, runningToolCallIds),
     [items, runningToolCallIds],
@@ -189,16 +211,16 @@ function ToolTraceGroupInner(props: {
     attentionRequired,
   });
 
-  // The latest live batch drops the count prefix ("运行中" instead of
-  // "1 运行中"), nothing more. Idle phases render no filler status here:
-  // an active reasoning segment shows its own 思考中 row and the turn-level
-  // sparkle covers the gaps in between.
+  // The latest live batch shows no running status at all: the turn's single
+  // status row already says what is running, and a second spinner here would
+  // stack two live indicators. Older batches still running (background
+  // processes) keep a plain "1 运行中" count.
   const statusLabel =
     counts.failed > 0
       ? `${counts.failed} ${t("chat.tool.failed")}`
       : counts.running > 0
         ? showTurnStatus
-          ? t("chat.tool.running")
+          ? null
           : `${counts.running} ${t("chat.tool.running")}`
         : counts.waiting > 0
           ? `${counts.waiting} ${t("chat.tool.waiting")}`
@@ -221,15 +243,33 @@ function ToolTraceGroupInner(props: {
   // running or failed status, so the header only labels the batch; repeating the
   // running call there would show one command as two running rows. Rows carry no
   // waiting status, so the header keeps that one.
+  // The quiet view names the running call in the turn's status row instead.
   const runningActivity = useMemo(() => {
-    if (open) return null;
+    if (open || !detailedProgress) return null;
     const item = findLatestRunningTool(items, runningToolCallIds);
     return item ? getRunningToolActivity(item, t) : null;
-  }, [items, open, runningToolCallIds, t]);
+  }, [detailedProgress, items, open, runningToolCallIds, t]);
   const headerLabel = runningActivity?.label ?? countLabel;
-  const showStatus = open
-    ? counts.failed === 0 && counts.running === 0 && counts.waiting > 0
-    : counts.failed > 0 || counts.running > 0 || counts.waiting > 0;
+  const showStatus =
+    statusLabel !== null &&
+    (open
+      ? counts.failed === 0 && counts.running === 0 && counts.waiting > 0
+      : counts.failed > 0 || counts.running > 0 || counts.waiting > 0);
+  const visibleReasoning = redactToolContent ? EMPTY_REASONING : reasoning;
+  const renderReasoningBefore = (index: number): ReactNode =>
+    visibleReasoning
+      .filter((slot) => slot.beforeIndex === index)
+      .map((slot) => (
+        <ThinkingDisclosure
+          key={slot.key}
+          segments={slot.segments}
+          activeKey={activeReasoningKey}
+          renderMode={renderMode}
+          readOnly={readOnly}
+          workdir={workdir}
+          onOpenFileLink={onOpenFileLink}
+        />
+      ));
   const BatchIcon =
     TOOL_BATCH_ICONS[runningActivity?.category ?? batchCounts[0]?.category ?? "other"];
 
@@ -258,18 +298,7 @@ function ToolTraceGroupInner(props: {
           )}
         />
         {showStatus ? (
-          <span className="shrink-0 text-xs text-foreground/45">
-            {showTurnStatus && counts.running > 0 ? (
-              <AssistantStatus
-                className="min-h-0 text-xs text-foreground/45"
-                iconClassName="size-3"
-              >
-                {statusLabel}
-              </AssistantStatus>
-            ) : (
-              statusLabel
-            )}
-          </span>
+          <span className="shrink-0 text-xs text-foreground/45">{statusLabel}</span>
         ) : null}
       </button>
 
@@ -287,24 +316,51 @@ function ToolTraceGroupInner(props: {
               )}
             >
               {items.map((item, index) => (
-                <MemoToolCallItem
-                  key={getToolTraceKey(item, index)}
-                  item={item}
-                  readOnly={readOnly}
-                  redactToolContent={redactToolContent}
-                  onOpenFileLink={onOpenFileLink}
-                  compactChip
-                  isRunning={Boolean(
-                    item.toolCall.id && runningToolCallIds.includes(item.toolCall.id),
-                  )}
-                />
+                <Fragment key={getToolTraceKey(item, index)}>
+                  {renderReasoningBefore(index)}
+                  <MemoToolCallItem
+                    item={item}
+                    readOnly={readOnly}
+                    redactToolContent={redactToolContent}
+                    onOpenFileLink={onOpenFileLink}
+                    compactChip
+                    isRunning={Boolean(
+                      item.toolCall.id && runningToolCallIds.includes(item.toolCall.id),
+                    )}
+                  />
+                </Fragment>
               ))}
+              {renderReasoningBefore(items.length)}
             </div>
           </div>
         )}
       </LazyCollapse>
     </div>
   );
+}
+
+const EMPTY_REASONING: WorkTraceReasoningSlot[] = [];
+
+function areReasoningSlotsEqual(
+  previous: WorkTraceReasoningSlot[] = EMPTY_REASONING,
+  next: WorkTraceReasoningSlot[] = EMPTY_REASONING,
+) {
+  if (previous === next) return true;
+  if (previous.length !== next.length) return false;
+  return previous.every((slot, index) => {
+    const other = next[index];
+    return (
+      other !== undefined &&
+      slot.key === other.key &&
+      slot.beforeIndex === other.beforeIndex &&
+      slot.segments.length === other.segments.length &&
+      slot.segments.every(
+        (segment, segmentIndex) =>
+          segment.key === other.segments[segmentIndex]?.key &&
+          segment.text === other.segments[segmentIndex]?.text,
+      )
+    );
+  });
 }
 
 function areRunningIdsEqual(previous?: string[], next?: string[]) {
@@ -324,6 +380,10 @@ export const ToolTraceGroup = memo(
     previous.showTurnStatus === next.showTurnStatus &&
     previous.live === next.live &&
     previous.onOpenFileLink === next.onOpenFileLink &&
+    previous.activeReasoningKey === next.activeReasoningKey &&
+    previous.renderMode === next.renderMode &&
+    previous.workdir === next.workdir &&
+    areReasoningSlotsEqual(previous.reasoning, next.reasoning) &&
     previous.items.length === next.items.length &&
     previous.items.every(
       (item, index) =>

@@ -1,62 +1,43 @@
-import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import type { AssistantTurnLayoutEntry } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
 import {
-  resolveActiveThinkingEntryKey,
-  resolveActiveWorkEntry,
-} from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
-import { RoundBlockContent } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
+  RoundBlockContent,
+  useWorkTraceModel,
+  useWorkTraceRows,
+} from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { memo } from "react";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { AssistantUnitRow } from "../transcript/rowModel";
 
+const EMPTY_WORK_ENTRIES: AssistantTurnLayoutEntry[] = [];
+
 export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;
-  isCompactionRunning: boolean;
+  /**
+   * Turn-level status inputs. The trace no longer renders any status of its own
+   * (the activity row's single status row does), so these are ignored here.
+   */
+  isCompactionRunning?: boolean;
   awaitingDecision?: boolean;
-  toolStatus: string | null;
+  toolStatus?: string | null;
   retryAttempts?: RetryAttemptRecord[];
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
 }) {
-  const {
-    row,
-    isCompactionRunning,
-    awaitingDecision = false,
-    toolStatus,
-    retryAttempts,
+  const { row, retryAttempts, workdir, onOpenFileLink } = props;
+  const { unit } = row;
+  const workEntries = unit.kind === "work-trace" ? unit.entries : EMPTY_WORK_ENTRIES;
+  const running = unit.kind === "work-trace" && row.live;
+  const model = useWorkTraceModel(workEntries, running);
+  const { rows, collapsedTail } = useWorkTraceRows(model, {
+    running,
+    renderMode: row.renderMode,
     workdir,
     onOpenFileLink,
-  } = props;
-  const { unit } = row;
+  });
   if (unit.kind === "footer") return null;
-
-  const workEntries = unit.kind === "work-trace" ? unit.entries : [];
-  const activeThinkingKey =
-    unit.kind === "work-trace" && row.live ? resolveActiveThinkingEntryKey(workEntries) : null;
-  const collapsedTailEntry =
-    unit.kind === "work-trace" && row.live ? resolveActiveWorkEntry(workEntries) : null;
-
-  const renderWorkEntry = (entry: AssistantTurnLayoutEntry) => (
-    <RoundBlockContent
-      key={entry.key}
-      block={entry.block}
-      isLive={row.live}
-      revealText={row.live}
-      renderMode={row.renderMode}
-      runningToolCallIds={entry.runningToolCallIds}
-      thinkingOpen={row.live ? entry.thinkingOpen : false}
-      isLatestThinking={entry.key === activeThinkingKey}
-      traceKey={entry.key}
-      showTurnStatus={
-        row.live && unit.kind === "work-trace" && entry.key === unit.latestToolGroupKey
-      }
-      workdir={workdir}
-      onOpenFileLink={onOpenFileLink}
-    />
-  );
 
   return (
     <div className="w-full max-w-full">
@@ -83,18 +64,15 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
         {unit.kind === "work-trace" ? (
           <AssistantWorkTrace
             className="mt-0"
-            awaitingDecision={awaitingDecision}
             collapseAfterAnswer={unit.hasAnswer}
-            collapsedTail={collapsedTailEntry ? renderWorkEntry(collapsedTailEntry) : null}
+            collapsedTail={collapsedTail}
             durationMs={unit.durationMs}
-            hasDetails={workEntries.length > 0 || isCompactionRunning}
+            hasDetails={workEntries.length > 0}
             running={row.live}
             startedAtMs={unit.startedAtMs}
+            stats={model.stats}
           >
-            {workEntries.map((entry) => renderWorkEntry(entry))}
-            {isCompactionRunning ? (
-              <LiveAssistantStatus status={toolStatus} isCompaction className="w-full py-1.5" />
-            ) : null}
+            {rows}
           </AssistantWorkTrace>
         ) : null}
       </div>

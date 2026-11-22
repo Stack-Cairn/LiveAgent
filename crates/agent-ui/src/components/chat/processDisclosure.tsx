@@ -17,8 +17,18 @@ import {
  */
 const ExpandProcessByDefaultContext = createContext(false);
 
+/**
+ * "Show detailed progress" (off by default). Off is the quiet view: live
+ * reasoning and tool batches stay folded while they run, the turn's status
+ * row debounces short-lived phases and keeps diagnostic timings in its
+ * tooltip. On restores the verbose view: live blocks open while they stream,
+ * every backend stage shows at once and timings are listed inline.
+ */
+const DetailedProgressContext = createContext(false);
+
 export function ProcessDisclosureProvider(props: {
   expandByDefault: boolean;
+  detailedProgress?: boolean;
   /** The transcript's scroll-follow state; see ProcessViewportFollowingProvider. */
   isViewportFollowing?: () => boolean;
   children: ReactNode;
@@ -32,13 +42,19 @@ export function ProcessDisclosureProvider(props: {
   );
   return (
     <ExpandProcessByDefaultContext.Provider value={props.expandByDefault}>
-      {children}
+      <DetailedProgressContext.Provider value={props.detailedProgress ?? false}>
+        {children}
+      </DetailedProgressContext.Provider>
     </ExpandProcessByDefaultContext.Provider>
   );
 }
 
 export function useExpandProcessByDefault(): boolean {
   return useContext(ExpandProcessByDefaultContext);
+}
+
+export function useDetailedProgress(): boolean {
+  return useContext(DetailedProgressContext);
 }
 
 /**
@@ -86,8 +102,9 @@ export function ProcessViewportFollowingProvider(props: {
 /**
  * Disclosure state for one live process block (a tool batch, a reasoning segment):
  *
- * - it mounts open while `live`, so the output is visible as it happens, and
- *   mounts folded once settled (history, finished turns);
+ * - with detailed progress on, it mounts open while `live`, so the output is
+ *   visible as it happens; in the quiet view (the default) a live block stays
+ *   folded like a settled one, and its header alone tracks the activity;
  * - when it stops being live it folds itself, unless the user toggled it, the
  *   "expand process by default" preference is on, `keepOpenWhenSettled` holds
  *   (a failed batch keeps its error visible), an interaction still needs the
@@ -100,8 +117,9 @@ export function useLiveProcessDisclosure(options: {
   keepOpenWhenSettled?: boolean;
   attentionRequired?: boolean;
 }) {
-  const { live, keepOpenWhenSettled = false, attentionRequired = false } = options;
+  const { keepOpenWhenSettled = false, attentionRequired = false } = options;
   const expandByDefault = useExpandProcessByDefault();
+  const live = useDetailedProgress() && options.live;
   const isFollowing = useContext(ProcessViewportFollowingContext);
   const [open, setOpen] = useState(() => expandByDefault || live || attentionRequired);
   const userOwnsRef = useRef(false);

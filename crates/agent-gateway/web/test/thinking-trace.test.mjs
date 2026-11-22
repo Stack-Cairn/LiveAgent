@@ -12,40 +12,35 @@ const disclosureSource = readSource(
   "../../../agent-ui/src/components/chat/assistant-bubble/ThinkingDisclosure.tsx",
 );
 const workTraceSource = readSource("../../../agent-ui/src/components/chat/AssistantWorkTrace.tsx");
-const statusSource = readSource("../../../agent-ui/src/components/chat/AssistantStatus.tsx");
-const sparkleSource = readSource("../../../agent-ui/src/components/chat/LiveSparkle.tsx");
+const liveTurnStatusSource = readSource("../../../agent-ui/src/components/chat/LiveTurnStatus.tsx");
+const toolTraceSource = readSource(
+  "../../../agent-ui/src/components/chat/assistant-bubble/ToolTraceGroup.tsx",
+);
 
 test("WebUI transcript renders reasoning as expandable disclosures", () => {
   assert.match(roundContentSource, /<ThinkingDisclosure/);
   assert.doesNotMatch(roundContentSource, /ThinkingActivity/);
   assert.match(disclosureSource, /data-thinking-disclosure/);
   assert.match(disclosureSource, /aria-expanded=\{open\}/);
-  // Reasoning stays out of redacted share views entirely.
+  // Reasoning stays out of redacted share views entirely, also when it is
+  // folded into a tool group.
   assert.match(roundContentSource, /redactToolContent \? null : \(\s*<ThinkingDisclosure/);
+  assert.match(toolTraceSource, /const visibleReasoning = redactToolContent \? EMPTY_REASONING : reasoning;/);
 });
 
-test("the live reply shows verified progress with a paused sparkle fallback", () => {
-  assert.match(
-    roundContentSource,
-    /!attentionRequired && parseRunProgress\(normalizedToolStatus\)/,
-  );
-  assert.match(roundContentSource, /<LiveAssistantStatus status=\{normalizedToolStatus\} \/>/);
-  assert.match(roundContentSource, /<LiveSparkle paused=\{attentionRequired\} \/>/);
-  assert.match(sparkleSource, /data-live-sparkle/);
-  // The cluster twinkles via SMIL animations baked into the SVG itself.
-  assert.match(sparkleSource, /<animate/);
-  assert.match(sparkleSource, /repeatCount="indefinite"/);
-  // …unless the turn is parked on a user decision, where nothing is running.
-  assert.match(sparkleSource, /\{paused \? null : \(/);
-  // The pending-bubble status line falls back to the sparkle instead of the
-  // "Vibing..." filler phrase when there is no concrete activity to report.
-  assert.match(statusSource, /return <LiveSparkle className=\{className\} \/>/);
+test("the live reply shows one status row that freezes on a user decision", () => {
+  assert.match(roundContentSource, /<LiveAssistantStatus\s/);
+  assert.match(roundContentSource, /awaitingDecision=\{attentionRequired\}/);
+  assert.doesNotMatch(roundContentSource, /LiveSparkle/);
+  assert.match(liveTurnStatusSource, /role="status"/);
+  assert.match(liveTurnStatusSource, /data-live-turn-status/);
+  // The pixel grid stops and the label stops shimmering while the turn is
+  // parked on a user decision, where nothing is running.
+  assert.match(liveTurnStatusSource, /<WorkPixelGrid active=\{!awaitingDecision\} \/>/);
+  assert.match(liveTurnStatusSource, /!awaitingDecision && "shimmer"/);
 });
 
 test("a collapsed processing trace keeps the active block visible outside it", () => {
   assert.match(workTraceSource, /data-chat-work-collapsed-tail/);
-  assert.match(
-    roundContentSource,
-    /collapsedTail=\{collapsedTailEntry \? renderEntry\(collapsedTailEntry, true\) : null\}/,
-  );
+  assert.match(roundContentSource, /collapsedTail=\{collapsedTail\}/);
 });

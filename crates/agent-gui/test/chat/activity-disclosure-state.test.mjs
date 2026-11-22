@@ -39,6 +39,10 @@ const env = await createDomTestEnv({
             "chat.thinkingActive": "正在思考",
             "chat.work.activity": "已处理",
             "chat.work.running": "处理中",
+            "chat.work.trace": "执行过程",
+            "chat.work.toolCount": "{count} 个工具",
+            "chat.work.toolCountOne": "1 个工具",
+            "chat.work.thinkingTotal": "思考 {duration}",
             "chat.tool.activity.read.running": "正在读取",
             "chat.tool.activity.command.running": "正在运行",
             "chat.tool.activity.other.running": "正在执行",
@@ -103,12 +107,35 @@ const env = await createDomTestEnv({
 });
 const { React, act, createRoot } = env;
 
+const { ProcessDisclosureProvider } = env.loadModule(
+  "@liveagent/ui/components/chat/processDisclosure.tsx",
+);
 const { AssistantWorkTrace } = env.loadModule(
   "@liveagent/ui/components/chat/AssistantWorkTrace.tsx",
 );
 const { ToolTraceGroup } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/ToolTraceGroup.tsx",
 );
+
+// The quiet view (default) keeps live rows folded; the detailed-progress
+// setting restores open-while-live disclosures. Tests opt in per render.
+let detailedProgress = false;
+function withProgressMode(element) {
+  return React.createElement(
+    ProcessDisclosureProvider,
+    { expandByDefault: false, detailedProgress },
+    element,
+  );
+}
+
+function renderDetailed(callback) {
+  detailedProgress = true;
+  try {
+    callback();
+  } finally {
+    detailedProgress = false;
+  }
+}
 
 function click(element) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -136,11 +163,13 @@ const toolItem = {
 function renderToolTrace(root, running, items = [toolItem], showTurnStatus = false) {
   act(() => {
     root.render(
-      React.createElement(ToolTraceGroup, {
-        items,
-        runningToolCallIds: running ? items.map((item) => item.toolCall.id) : [],
-        showTurnStatus,
-      }),
+      withProgressMode(
+        React.createElement(ToolTraceGroup, {
+          items,
+          runningToolCallIds: running ? items.map((item) => item.toolCall.id) : [],
+          showTurnStatus,
+        }),
+      ),
     );
   });
 }
@@ -169,97 +198,80 @@ test("manual work-trace disclosure survives running state transitions", () => {
   act(() => root.unmount());
 });
 
-test("a running work trace keeps counting from the turn start across remounts", () => {
-  // 切换会话 / 虚拟列表回收会卸载工作区块；重挂后「处理中」必须接着回合真实
-  // 起点计时，而不是从挂载时刻重新从 1s 数起（#875）。
-  const startedAtMs = Date.now() - 15_000;
-  const mount = () => {
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    act(() => {
-      root.render(
-        React.createElement(AssistantWorkTrace, {
-          hasDetails: false,
-          running: true,
-          startedAtMs,
-          children: null,
-        }),
-      );
-    });
-    return { container, root };
-  };
-
-  const first = mount();
-  assert.match(first.container.textContent, /处理中 1[5-6]s/);
-  act(() => first.root.unmount());
-
-  const second = mount();
-  assert.match(second.container.textContent, /处理中 1[5-6]s/);
-  act(() => second.root.unmount());
-});
-
-test("an empty running work trace shows the plain processing header, not a button", () => {
+test("a running work trace with nothing to show yet renders no header at all", () => {
+  // The turn's single live status row says what is happening; an empty trace
+  // header above it would be a second status line.
   const container = document.createElement("div");
   const root = createRoot(container);
-
   act(() => {
     root.render(
       React.createElement(AssistantWorkTrace, {
         hasDetails: false,
         running: true,
+        startedAtMs: Date.now() - 15_000,
         children: null,
       }),
     );
   });
-
-  assert.match(container.textContent, /处理中/);
-  assert.ok(container.querySelector("[data-chat-work-grid]"));
-  // The pixels cycle in a staggered wave while the turn runs.
-  const pixels = [...container.querySelectorAll("[data-chat-work-grid] span span")];
-  assert.equal(pixels.length, 9);
-  for (const pixel of pixels) {
-    assert.match(pixel.className, /(?:^|\s)animate-chat-work-pixel(?:\s|$)/);
-    assert.match(pixel.className, /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
-    assert.equal(pixel.hasAttribute("data-paused"), false);
-  }
-  const delays = pixels.map((pixel) => pixel.style.getPropertyValue("--chat-work-delay"));
-  assert.ok(new Set(delays).size > 1, `delays should differ: ${delays}`);
-  assert.equal(container.querySelector("button"), null);
-  assert.equal(container.querySelector("[data-chat-work-collapsed-tail]"), null);
-
+  assert.equal(container.innerHTML, "");
   act(() => root.unmount());
 });
 
-test("a work trace parked on a user decision renders a frozen header", () => {
+test("a running work trace header is a static summary with no spinner or clock", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
+  act(() => {
+    root.render(
+      React.createElement(AssistantWorkTrace, {
+        hasDetails: true,
+        running: true,
+        startedAtMs: Date.now() - 15_000,
+        stats: { toolCount: 3, thinkingMs: 8_400 },
+        children: React.createElement("div", null, "details"),
+      }),
+    );
+  });
+  const summary = container.querySelector("[data-chat-work-summary]");
+  assert.equal(summary.textContent, "执行过程 · 3 个工具 · 思考 8s");
+  assert.equal(container.querySelector("[data-chat-work-grid]"), null);
+  assert.doesNotMatch(container.innerHTML, /shimmer|animate-spin/);
+  assert.equal(container.querySelector("section").getAttribute("aria-busy"), "true");
+  act(() => root.unmount());
+});
 
-  const render = (awaitingDecision) => {
+test("a completed turn folds its trace into one summary row", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const render = (running, stats) =>
     act(() => {
       root.render(
         React.createElement(AssistantWorkTrace, {
-          hasDetails: false,
-          running: true,
-          awaitingDecision,
-          children: null,
+          hasDetails: true,
+          running,
+          collapseAfterAnswer: true,
+          durationMs: running ? undefined : 12_300,
+          stats,
+          children: React.createElement("div", { "data-testid": "work-details" }, "details"),
         }),
       );
     });
-  };
 
-  render(false);
-  assert.equal(container.querySelector("section").getAttribute("aria-busy"), "true");
-  assert.equal(container.querySelector(".chat-work-pixel[data-paused]"), null);
-  assert.match(container.innerHTML, /shimmer/);
+  render(true, { toolCount: 3, thinkingMs: 8_000 });
+  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
 
-  render(true);
-  assert.equal(container.querySelector("section").getAttribute("aria-busy"), "false");
-  assert.equal(
-    container.querySelectorAll(".chat-work-pixel[data-paused]").length,
-    container.querySelectorAll(".chat-work-pixel").length,
-  );
-  assert.doesNotMatch(container.innerHTML, /shimmer/);
+  render(false, { toolCount: 3, thinkingMs: 8_000 });
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(button.textContent, "已处理 12s · 3 个工具 · 思考 8s");
 
+  // Expandable: the full trace is one click away.
+  click(button);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.ok(container.querySelector('[data-testid="work-details"]'));
+
+  // Singular tool count; unmeasured reasoning (history reload) is omitted.
+  render(false, { toolCount: 1, thinkingMs: null });
+  assert.equal(container.querySelector("button").textContent, "已处理 12s · 1 个工具");
   act(() => root.unmount());
 });
 
@@ -333,21 +345,23 @@ test("a new blocking interaction opens the work trace once without stealing late
 });
 
 test("a running tool batch opens, then folds once its calls finish", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
+  renderDetailed(() => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
 
-  renderToolTrace(root, true);
-  const button = container.querySelector("button");
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    renderToolTrace(root, true);
+    const button = container.querySelector("button");
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  renderToolTrace(root, false);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
+    renderToolTrace(root, false);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
 
-  // A later call in the same batch opens it again.
-  renderToolTrace(root, true);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    // A later call in the same batch opens it again.
+    renderToolTrace(root, true);
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  act(() => root.unmount());
+    act(() => root.unmount());
+  });
 });
 
 test("a finished tool batch loaded from history mounts collapsed", () => {
@@ -361,77 +375,85 @@ test("a finished tool batch loaded from history mounts collapsed", () => {
 });
 
 test("manual tool-batch disclosure survives tool completion and restart", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
+  renderDetailed(() => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
 
-  renderToolTrace(root, true);
-  const button = container.querySelector("button");
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    renderToolTrace(root, true);
+    const button = container.querySelector("button");
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  // Collapsed by hand while running: finishing and restarting leave it shut.
-  click(button);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
-  renderToolTrace(root, false);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
-  renderToolTrace(root, true);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
+    // Collapsed by hand while running: finishing and restarting leave it shut.
+    click(button);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
+    renderToolTrace(root, false);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
+    renderToolTrace(root, true);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
 
-  // Reopened by hand: finishing no longer folds it.
-  click(button);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
-  renderToolTrace(root, false);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    // Reopened by hand: finishing no longer folds it.
+    click(button);
+    assert.equal(button.getAttribute("aria-expanded"), "true");
+    renderToolTrace(root, false);
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  act(() => root.unmount());
+    act(() => root.unmount());
+  });
 });
 
 test("a tool batch that settles with a failed call stays open", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  const pending = { toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make" } } };
-  const failed = { ...pending, toolResult: { isError: true } };
+  renderDetailed(() => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const pending = { toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make" } } };
+    const failed = { ...pending, toolResult: { isError: true } };
 
-  renderToolTrace(root, true, [pending]);
-  const button = container.querySelector("button");
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    renderToolTrace(root, true, [pending]);
+    const button = container.querySelector("button");
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  renderToolTrace(root, false, [failed]);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    renderToolTrace(root, false, [failed]);
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  // Reloaded from history the failure shows in the folded header instead.
-  act(() => root.unmount());
-  const reloaded = document.createElement("div");
-  const reloadedRoot = createRoot(reloaded);
-  renderToolTrace(reloadedRoot, false, [failed]);
-  const header = reloaded.querySelector("button");
-  assert.equal(header.getAttribute("aria-expanded"), "false");
-  assert.match(header.textContent, /失败/);
-  act(() => reloadedRoot.unmount());
+    // Reloaded from history the failure shows in the folded header instead.
+    act(() => root.unmount());
+    const reloaded = document.createElement("div");
+    const reloadedRoot = createRoot(reloaded);
+    renderToolTrace(reloadedRoot, false, [failed]);
+    const header = reloaded.querySelector("button");
+    assert.equal(header.getAttribute("aria-expanded"), "false");
+    assert.match(header.textContent, /失败/);
+    act(() => reloadedRoot.unmount());
+  });
 });
 
 test("the trailing batch of a running turn stays open between calls", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  const render = (live, runningToolCallIds) =>
-    act(() => {
-      root.render(
-        React.createElement(ToolTraceGroup, { items: [toolItem], runningToolCallIds, live }),
-      );
-    });
+  renderDetailed(() => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const render = (live, runningToolCallIds) =>
+      act(() => {
+        root.render(
+          withProgressMode(
+            React.createElement(ToolTraceGroup, { items: [toolItem], runningToolCallIds, live }),
+          ),
+        );
+      });
 
-  render(true, ["tool-1"]);
-  const button = container.querySelector("button");
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    render(true, ["tool-1"]);
+    const button = container.querySelector("button");
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  // The call finished but the model is still deciding on the next one.
-  render(true, []);
-  assert.equal(button.getAttribute("aria-expanded"), "true");
+    // The call finished but the model is still deciding on the next one.
+    render(true, []);
+    assert.equal(button.getAttribute("aria-expanded"), "true");
 
-  // An answer started after it (or the turn ended): now it folds.
-  render(false, []);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
+    // An answer started after it (or the turn ended): now it folds.
+    render(false, []);
+    assert.equal(button.getAttribute("aria-expanded"), "false");
 
-  act(() => root.unmount());
+    act(() => root.unmount());
+  });
 });
 
 test("a tool batch opens when a pending user interaction appears inside it", () => {
@@ -500,22 +522,45 @@ test("a single-category tool batch renders no separator", () => {
   act(() => root.unmount());
 });
 
-test("latest tool batch shows 运行中 while running and no filler status when idle", () => {
+test("the quiet view keeps a running batch folded and leaves its status to the turn row", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const commandItem = {
+    toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
+  };
+
+  // Latest batch of the running turn: folded, no running status, no spinner,
+  // and the header keeps its category label instead of naming the command
+  // (the turn's single status row says "正在运行 make test").
+  renderToolTrace(root, true, [commandItem], true);
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(button.textContent, "正在运行命令");
+  assert.doesNotMatch(container.innerHTML, /animate-spin|shimmer/);
+
+  // An older batch still running in the background keeps a plain count.
+  renderToolTrace(root, true, [commandItem], false);
+  assert.match(container.querySelector("button").textContent, /1 运行中/);
+
+  act(() => root.unmount());
+});
+
+test("latest tool batch never shows its own running status", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
-  // All tools settled: no fake "思考中" phase — the turn-level sparkle and
-  // real reasoning rows carry the live state instead.
-  renderToolTrace(root, false, [toolItem], true);
-  assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
-  assert.doesNotMatch(container.querySelector("button").textContent, /运行中/);
+  renderDetailed(() => {
+    // All tools settled: no filler status.
+    renderToolTrace(root, false, [toolItem], true);
+    assert.doesNotMatch(container.querySelector("button").textContent, /思考中|运行中/);
 
-  // Running, it opens and leaves the status to its rows; folded, the header says 运行中.
-  renderToolTrace(root, true, [toolItem], true);
-  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
-  click(container.querySelector("button"));
-  assert.match(container.querySelector("button").textContent, /运行中/);
-  assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
+    // Running: open in the detailed view; folded by hand, still no 运行中 —
+    // the turn's status row is the one live indicator.
+    renderToolTrace(root, true, [toolItem], true);
+    assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
+    click(container.querySelector("button"));
+    assert.doesNotMatch(container.querySelector("button").textContent, /运行中|思考中/);
+  });
 
   act(() => root.unmount());
 });
@@ -527,18 +572,19 @@ test("a running tool batch names the current operation and caps its expanded hei
     toolCall: { id: "read-1", name: "Read", arguments: { path: "src/App.tsx" } },
   };
 
-  renderToolTrace(root, true, [readItem], true);
-  const button = container.querySelector("button");
-  // Open while running; folded by hand, the header names the running call.
-  assert.equal(button.getAttribute("aria-expanded"), "true");
-  click(button);
-  assert.match(button.textContent, /正在读取 App\.tsx/);
-  assert.match(button.textContent, /运行中/);
+  renderDetailed(() => {
+    renderToolTrace(root, true, [readItem], true);
+    const button = container.querySelector("button");
+    // Open while running; folded by hand, the detailed header names the running call.
+    assert.equal(button.getAttribute("aria-expanded"), "true");
+    click(button);
+    assert.equal(button.textContent, "正在读取 App.tsx");
 
-  click(button);
-  const scrollRegion = container.querySelector("[data-tool-trace-scroll]");
-  assert.match(scrollRegion.className, /max-h-400px/);
-  assert.match(scrollRegion.className, /overflow-y-auto/);
+    click(button);
+    const scrollRegion = container.querySelector("[data-tool-trace-scroll]");
+    assert.match(scrollRegion.className, /max-h-400px/);
+    assert.match(scrollRegion.className, /overflow-y-auto/);
+  });
 
   act(() => root.unmount());
 });
@@ -579,55 +625,61 @@ test("an expanded tool batch leaves the running call and its status to the call'
     toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
   };
 
-  renderToolTrace(root, true, [commandItem], true);
-  const button = container.querySelector("button");
-  // Open while running: the row inside names the command and says 运行中; the
-  // header only labels the batch, in the present tense while the command runs.
-  assert.equal(button.getAttribute("aria-expanded"), "true");
-  assert.equal(button.textContent, "正在运行命令");
+  renderDetailed(() => {
+    renderToolTrace(root, true, [commandItem], true);
+    const button = container.querySelector("button");
+    // Open while running: the row inside names the command; the header only
+    // labels the batch, in the present tense while the command runs.
+    assert.equal(button.getAttribute("aria-expanded"), "true");
+    assert.equal(button.textContent, "正在运行命令");
 
-  click(button);
-  assert.equal(container.querySelector("button").textContent, "正在运行 make test运行中");
+    click(button);
+    assert.equal(container.querySelector("button").textContent, "正在运行 make test");
 
-  click(container.querySelector("button"));
-  assert.equal(container.querySelector("button").textContent, "正在运行命令");
+    click(container.querySelector("button"));
+    assert.equal(container.querySelector("button").textContent, "正在运行命令");
+  });
 
   act(() => root.unmount());
 });
 
 test("an expanded batch label stays in the present tense until its calls are done", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  const readItem = {
-    toolCall: { id: "read-1", name: "read_file", arguments: {} },
-    toolResult: { isError: false },
-  };
-  const commandItem = {
-    toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
-  };
-  const render = (items, runningToolCallIds) =>
-    act(() => {
-      root.render(
-        React.createElement(ToolTraceGroup, { items, runningToolCallIds, showTurnStatus: true }),
-      );
-    });
+  renderDetailed(() => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const readItem = {
+      toolCall: { id: "read-1", name: "read_file", arguments: {} },
+      toolResult: { isError: false },
+    };
+    const commandItem = {
+      toolCall: { id: "bash-1", name: "Bash", arguments: { command: "make test" } },
+    };
+    const render = (items, runningToolCallIds) =>
+      act(() => {
+        root.render(
+          withProgressMode(
+            React.createElement(ToolTraceGroup, { items, runningToolCallIds, showTurnStatus: true }),
+          ),
+        );
+      });
 
-  render([readItem, commandItem], ["bash-1"]);
-  // Open while running. Fold and reopen it by hand so it stays open once done.
-  click(container.querySelector("button"));
-  click(container.querySelector("button"));
-  assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
-  // Only the category with a running call reads as ongoing.
-  assert.equal(container.querySelector("button").textContent, "读取了文件｜正在运行命令");
+    render([readItem, commandItem], ["bash-1"]);
+    // Open while running. Fold and reopen it by hand so it stays open once done.
+    click(container.querySelector("button"));
+    click(container.querySelector("button"));
+    assert.equal(container.querySelector("button").getAttribute("aria-expanded"), "true");
+    // Only the category with a running call reads as ongoing.
+    assert.equal(container.querySelector("button").textContent, "读取了文件｜正在运行命令");
 
-  render([readItem, { ...commandItem, toolResult: { isError: false } }], []);
-  assert.equal(container.querySelector("button").textContent, "读取了文件｜运行了命令");
+    render([readItem, { ...commandItem, toolResult: { isError: false } }], []);
+    assert.equal(container.querySelector("button").textContent, "读取了文件｜运行了命令");
 
-  // A call left without a result in a settled turn is not running any more.
-  render([readItem, commandItem], []);
-  assert.match(container.querySelector("button").textContent, /^读取了文件｜运行了命令/);
+    // A call left without a result in a settled turn is not running any more.
+    render([readItem, commandItem], []);
+    assert.match(container.querySelector("button").textContent, /^读取了文件｜运行了命令/);
 
-  act(() => root.unmount());
+    act(() => root.unmount());
+  });
 });
 
 test("an expanded tool batch keeps the waiting status its rows do not show", () => {

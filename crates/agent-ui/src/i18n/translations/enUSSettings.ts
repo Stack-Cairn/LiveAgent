@@ -437,6 +437,9 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.expandProcessByDefault": "Expand agent activity by default",
   "settings.expandProcessByDefaultDesc":
     'Show the work trace, thinking, and tool calls (such as "Ran commands") expanded in conversations, and keep them open after the turn finishes. Saved on this device only.',
+  "settings.showDetailedProgress": "Show detailed progress",
+  "settings.showDetailedProgressDesc":
+    "While a reply is running, name every backend stage with its timings and open reasoning and tool output as they stream. When off, a single status line is shown and the details stay one click away.",
   "settings.defaultTimeZoneAuto": "Automatic (system: {zone})",
   "settings.timeZoneSearch": "Search time zones or cities",
   "settings.timeZoneEmpty": "No matching time zones",

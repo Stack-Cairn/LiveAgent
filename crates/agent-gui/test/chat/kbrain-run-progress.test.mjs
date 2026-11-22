@@ -56,20 +56,22 @@ test("rejected run clears connecting status",async()=>{
   assert.equal(statuses.at(-1),null);
 });
 
-test("desktop activity progress yields to manual approval and disappears after settling",()=>{
+test("desktop activity row shows one status row that pauses for manual approval and disappears after settling",()=>{
   const renderLoader=createTsModuleLoader({mocks:{
     react:{...React,memo:fn=>fn,useMemo:fn=>fn()},
     "@liveagent/ui/components/chat/AssistantStatus":{LiveAssistantStatus:()=>null},
-    "@liveagent/ui/components/chat/LiveSparkle":{LiveSparkle:()=>null},
+    "@liveagent/ui/components/chat/assistant-bubble/RoundContent":{useRunningToolActivity:()=>null},
     [new URL("../../src/pages/chat/transcript/AssistantRenderUnit.tsx",import.meta.url).pathname]:{AssistantRenderUnit:()=>null},
   }});
   const {AssistantActivityRow}=renderLoader.loadModule("src/pages/chat/transcript/AssistantActivityRow.tsx");
   const {LiveAssistantStatus}=renderLoader.loadModule("@liveagent/ui/components/chat/AssistantStatus");
-  const {LiveSparkle}=renderLoader.loadModule("@liveagent/ui/components/chat/LiveSparkle");
   const status=encodeRunProgress({stage:"waiting_model"});
-  const render=(live,approval)=>AssistantActivityRow({row:{live,units:[]},hasPendingToolApproval:approval,toolStatus:status}).props.children.at(-1);
+  const render=(live,approval)=>AssistantActivityRow({row:{live,units:[]},hasPendingToolApproval:approval,isCompactionRunning:false,toolStatus:status}).props.children.at(-1);
   assert.equal(render(true,false).type,LiveAssistantStatus);
-  assert.equal(render(true,true).type,LiveSparkle);
-  assert.equal(render(true,true).props.paused,true);
+  assert.equal(render(true,false).props.status,status);
+  assert.equal(render(true,false).props.awaitingDecision,false);
+  // Waiting on the user: still the same single row, frozen instead of replaced.
+  assert.equal(render(true,true).type,LiveAssistantStatus);
+  assert.equal(render(true,true).props.awaitingDecision,true);
   assert.equal(render(false,false),null);
 });

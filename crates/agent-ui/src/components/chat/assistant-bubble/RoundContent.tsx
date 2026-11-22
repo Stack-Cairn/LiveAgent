@@ -1,17 +1,19 @@
 import {
-  CompactingText,
   GenerationStoppedNotice,
   LiveAssistantStatus,
 } from "@liveagent/ui/components/chat/AssistantStatus";
-import { AssistantWorkTrace } from "@liveagent/ui/components/chat/AssistantWorkTrace";
+import {
+  AssistantWorkTrace,
+  type WorkTraceStats,
+} from "@liveagent/ui/components/chat/AssistantWorkTrace";
 import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
-import { LiveSparkle } from "@liveagent/ui/components/chat/LiveSparkle";
+import { useDetailedProgress } from "@liveagent/ui/components/chat/processDisclosure";
 import { StreamingSplitMarkdown } from "@liveagent/ui/components/chat/StreamingSplitMarkdown";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { isStoppedReply, normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { parseRunProgress } from "@liveagent/ui/lib/chat/runProgress";
 import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode, useMemo } from "react";
@@ -21,16 +23,174 @@ import {
   hasActiveUserInteraction,
   isBuiltinShareToolName,
   resolveActiveThinkingEntryKey,
-  resolveActiveWorkEntry,
   resolveAssistantTurnLayout,
 } from "./assistantBubbleUtils";
 import { CompactionSeamRow } from "./CompactionSeamRow";
-import { ThinkingDisclosure } from "./ThinkingDisclosure";
+import { resolveReasoningDurationMs, ThinkingDisclosure } from "./ThinkingDisclosure";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
-import { ToolTraceGroup } from "./ToolTraceGroup";
+import { getRunningToolActivity, ToolTraceGroup } from "./ToolTraceGroup";
+import {
+  buildWorkTraceItems,
+  collectWorkTraceReasoning,
+  countWorkTraceToolCalls,
+  findLatestRunningToolItem,
+  resolveActiveWorkItem,
+  type WorkTraceItem,
+} from "./workTraceDisplay";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
+
+export type WorkTraceModel = {
+  items: WorkTraceItem[];
+  activeThinkingKey: string | null;
+  /** The item the turn is busy with, for the collapsed-trace tail (detailed view only). */
+  activeItem: WorkTraceItem | null;
+  /** Key of the last tool activity group, the one the live status row speaks for. */
+  latestActivityKey: string | null;
+  /** Key of the trailing item while running (the next call may still join it). */
+  trailingKey: string | null;
+  stats: WorkTraceStats;
+};
+
+/**
+ * Presentation model of a turn's processing trace. Also the one place that
+ * times reasoning: every segment's clock is advanced here, in a parent that
+ * stays mounted while the trace and its rows are folded, so durations are
+ * measured even when no reasoning row is on screen.
+ */
+export function useWorkTraceModel(
+  entries: readonly AssistantTurnLayoutEntry[],
+  running: boolean,
+): WorkTraceModel {
+  const items = useMemo(() => buildWorkTraceItems(entries), [entries]);
+  const reasoning = useMemo(() => collectWorkTraceReasoning(entries), [entries]);
+  const toolCount = useMemo(() => countWorkTraceToolCalls(entries), [entries]);
+  const activeThinkingKey = running ? resolveActiveThinkingEntryKey(entries) : null;
+  const thinkingMs = resolveReasoningDurationMs(reasoning, activeThinkingKey);
+  let latestActivityKey: string | null = null;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "activity") {
+      latestActivityKey = item.key;
+      break;
+    }
+  }
+  return {
+    items,
+    activeThinkingKey,
+    activeItem: running ? resolveActiveWorkItem(items, entries, activeThinkingKey) : null,
+    latestActivityKey: running ? latestActivityKey : null,
+    trailingKey: running ? (items.at(-1)?.key ?? null) : null,
+    stats: { toolCount, thinkingMs },
+  };
+}
+
+/** Names the latest running call ("正在运行 pnpm test") for the turn's status row. */
+export function useRunningToolActivity(entries: readonly AssistantTurnLayoutEntry[] | undefined) {
+  const { t } = useLocale();
+  return useMemo(() => {
+    const item = entries ? findLatestRunningToolItem(entries) : null;
+    if (!item) return null;
+    const { label, title } = getRunningToolActivity(item, t);
+    return { label, title };
+  }, [entries, t]);
+}
+
+/** One row of the processing trace (see buildWorkTraceItems for the merge rule). */
+export function WorkTraceItemView(props: {
+  item: WorkTraceItem;
+  model: WorkTraceModel;
+  running: boolean;
+  renderMode: "streaming" | "static";
+  readOnly?: boolean;
+  redactToolContent?: boolean;
+  workdir?: string;
+  onOpenFileLink?: (link: ChatFileLink) => void;
+}) {
+  const {
+    item,
+    model,
+    running,
+    renderMode,
+    readOnly = false,
+    redactToolContent = false,
+    workdir,
+    onOpenFileLink,
+  } = props;
+  if (item.kind === "entry") {
+    const { entry } = item;
+    return (
+      <RoundBlockContent
+        block={entry.block}
+        isLive={running}
+        renderMode={renderMode}
+        runningToolCallIds={entry.runningToolCallIds}
+        thinkingOpen={running ? entry.thinkingOpen : false}
+        isLatestThinking={entry.key === model.activeThinkingKey}
+        traceKey={entry.key}
+        isTrailingWork={entry.key === model.trailingKey}
+        revealText={running}
+        readOnly={readOnly}
+        redactToolContent={redactToolContent}
+        workdir={workdir}
+        onOpenFileLink={onOpenFileLink}
+      />
+    );
+  }
+  // Shared/redacted views hide tool internals; model reasoning is at least as
+  // sensitive, so it disappears entirely there.
+  if (item.kind === "reasoning") {
+    if (redactToolContent) return null;
+    return (
+      <div data-assistant-operation="">
+        <ThinkingDisclosure
+          segments={item.segments}
+          activeKey={model.activeThinkingKey}
+          renderMode={renderMode}
+          readOnly={readOnly}
+          workdir={workdir}
+          onOpenFileLink={onOpenFileLink}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className={running ? undefined : "w-full"} data-assistant-operation="">
+      <ToolTraceGroup
+        items={item.items}
+        runningToolCallIds={running ? item.runningToolCallIds : EMPTY_RUNNING_TOOL_CALL_IDS}
+        live={running && item.key === model.trailingKey}
+        showTurnStatus={running && item.key === model.latestActivityKey}
+        reasoning={item.reasoning}
+        activeReasoningKey={model.activeThinkingKey}
+        renderMode={renderMode}
+        readOnly={readOnly}
+        redactToolContent={redactToolContent}
+        workdir={workdir}
+        onOpenFileLink={onOpenFileLink}
+      />
+    </div>
+  );
+}
+
+/** All rows of the processing trace plus the collapsed-trace tail. */
+export function useWorkTraceRows(
+  model: WorkTraceModel,
+  options: Omit<Parameters<typeof WorkTraceItemView>[0], "item" | "model">,
+): { rows: ReactNode; collapsedTail: ReactNode } {
+  const detailed = useDetailedProgress();
+  const rows = model.items.map((item) => (
+    <WorkTraceItemView key={item.key} item={item} model={model} {...options} />
+  ));
+  // The quiet view leaves the collapsed trace collapsed: the live status row
+  // already names what is happening.
+  const collapsedTail =
+    detailed && model.activeItem ? (
+      <WorkTraceItemView item={model.activeItem} model={model} {...options} />
+    ) : null;
+  return { rows, collapsedTail };
+}
 
 function RevealedStreamingMarkdown(
   props: { reveal: boolean } & Parameters<typeof StreamingSplitMarkdown>[0],
@@ -80,11 +240,11 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     // Shared/redacted views hide tool internals; model reasoning is at least
     // as sensitive, so it disappears entirely there instead of rendering a
     // teasing header without a body.
+    const segmentKey = traceKey ?? block.key;
     content = redactToolContent ? null : (
       <ThinkingDisclosure
-        text={block.text}
-        trackKey={traceKey ?? block.key}
-        active={Boolean(isLive && thinkingOpen && isLatestThinking)}
+        segments={[{ key: segmentKey, text: block.text }]}
+        activeKey={isLive && thinkingOpen && isLatestThinking ? segmentKey : null}
         renderMode={renderMode}
         readOnly={readOnly}
         workdir={workdir}
@@ -188,21 +348,6 @@ type AssistantTurnRound = UiRound & {
   thinkingOpen?: boolean;
 };
 
-function hasRunningToolCall(entries: AssistantTurnLayoutEntry[]) {
-  return entries.some((entry) => {
-    const runningIds = new Set(entry.runningToolCallIds);
-    if (entry.block.kind === "tool") {
-      return Boolean(entry.block.item.toolCall.id && runningIds.has(entry.block.item.toolCall.id));
-    }
-    if (entry.block.kind === "toolGroup") {
-      return entry.block.items.some((item) =>
-        Boolean(item.toolCall.id && runningIds.has(item.toolCall.id)),
-      );
-    }
-    return false;
-  });
-}
-
 function hasInteractionRequiringAttention(entries: AssistantTurnLayoutEntry[]) {
   return entries.some((entry) => {
     if (entry.block.kind === "tool") {
@@ -249,44 +394,34 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
   );
   const running = Boolean(isLive && isStreaming);
   const normalizedToolStatus = running ? normalizeLiveToolStatus(toolStatus ?? null) : null;
-  const isCompactionStatus = toolStatusVariant === "compaction";
-  const showDetailedStatus = Boolean(
-    normalizedToolStatus && isCompactionStatus && !hasRunningToolCall(layout.work),
-  );
   const attentionRequired =
     running && hasInteractionRequiringAttention([...layout.work, ...layout.interaction]);
-  const latestToolGroupKey = useMemo(() => {
-    for (let index = layout.work.length - 1; index >= 0; index -= 1) {
-      const entry = layout.work[index];
-      if (entry?.block.kind === "toolGroup") return entry.key;
-    }
-    return null;
-  }, [layout.work]);
-  const activeThinkingKey = running ? resolveActiveThinkingEntryKey(layout.work) : null;
-  const trailingWorkKey = running ? (layout.work.at(-1)?.key ?? null) : null;
-  const collapsedTailEntry = running ? resolveActiveWorkEntry(layout.work) : null;
+  const model = useWorkTraceModel(layout.work, running);
+  const toolActivity = useRunningToolActivity(running ? layout.work : undefined);
+  const { rows, collapsedTail } = useWorkTraceRows(model, {
+    running,
+    renderMode,
+    readOnly,
+    redactToolContent,
+    workdir,
+    onOpenFileLink,
+  });
   const showWorkTrace = running || layout.work.length > 0;
   const stopped = !running && isStoppedReply(rounds);
 
   if (!showWorkTrace && !stopped && layout.interaction.length === 0 && layout.answer.length === 0)
     return null;
 
-  const renderEntry = (
-    entry: AssistantTurnLayoutEntry,
-    insideWorkTrace: boolean,
-    liveInteraction = false,
-  ) => (
+  const renderEntry = (entry: AssistantTurnLayoutEntry, liveInteraction: boolean) => (
     <RoundBlockContent
       key={entry.key}
       block={entry.block}
-      isLive={running && (insideWorkTrace || liveInteraction)}
+      isLive={running && liveInteraction}
       renderMode={renderMode}
       runningToolCallIds={entry.runningToolCallIds}
-      thinkingOpen={insideWorkTrace && running ? entry.thinkingOpen : false}
-      isLatestThinking={entry.key === activeThinkingKey}
+      thinkingOpen={false}
+      isLatestThinking={false}
       traceKey={entry.key}
-      showTurnStatus={insideWorkTrace && running && entry.key === latestToolGroupKey}
-      isTrailingWork={insideWorkTrace && entry.key === trailingWorkKey}
       revealText={running}
       readOnly={readOnly}
       redactToolContent={redactToolContent}
@@ -300,32 +435,30 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
       {showWorkTrace ? (
         <AssistantWorkTrace
           attentionRequired={attentionRequired}
-          awaitingDecision={attentionRequired}
           collapseAfterAnswer={layout.answer.length > 0}
-          collapsedTail={collapsedTailEntry ? renderEntry(collapsedTailEntry, true) : null}
+          collapsedTail={collapsedTail}
           durationMs={durationMs}
-          hasDetails={layout.work.length > 0 || showDetailedStatus}
+          hasDetails={layout.work.length > 0}
           running={running}
           startedAtMs={startedAtMs}
+          stats={model.stats}
         >
-          {layout.work.map((entry) => renderEntry(entry, true))}
-          {showDetailedStatus ? (
-            <div className="py-1.5">
-              <CompactingText />
-            </div>
-          ) : null}
+          {rows}
         </AssistantWorkTrace>
       ) : null}
 
-      {layout.interaction.map((entry) => renderEntry(entry, false, true))}
+      {layout.interaction.map((entry) => renderEntry(entry, true))}
       {layout.answer.map((entry) => renderEntry(entry, false))}
       {stopped ? <GenerationStoppedNotice /> : null}
+      {/* The turn's one live status row: phase, elapsed time, nothing else. */}
       {running ? (
-        !attentionRequired && parseRunProgress(normalizedToolStatus) ? (
-          <LiveAssistantStatus status={normalizedToolStatus} />
-        ) : (
-          <LiveSparkle paused={attentionRequired} />
-        )
+        <LiveAssistantStatus
+          status={normalizedToolStatus}
+          isCompaction={toolStatusVariant === "compaction"}
+          awaitingDecision={attentionRequired}
+          startedAtMs={startedAtMs}
+          toolActivity={toolActivity}
+        />
       ) : null}
     </div>
   );

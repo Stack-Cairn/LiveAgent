@@ -7,7 +7,7 @@ const EmptyIcon = () => null;
 
 // The duration store is mocked so the settled label is deterministic; the
 // real module is unit-tested separately below.
-const durationState = { settledMs: null };
+const durationState = { settledMs: null, byKey: {} };
 
 // The follow engine is unit-tested in scroll-follow-core.test.mjs; here we
 // only assert the disclosure hands it the right elements and gates.
@@ -19,7 +19,8 @@ const env = await createDomTestEnv({
       Markdown: ({ content }) => content,
     },
     "@liveagent/ui/lib/chat/thinkingDurations": {
-      resolveThinkingDurationMs: (_key, active) => (active ? null : durationState.settledMs),
+      resolveThinkingDurationMs: (key, active) =>
+        active ? null : (durationState.byKey[key] ?? durationState.settledMs),
     },
     "@liveagent/ui/lib/chat-scroll/useScrollFollow": {
       useScrollFollow: (args) => {
@@ -34,6 +35,7 @@ const env = await createDomTestEnv({
           ({
             "chat.thinking": "思考中",
             "chat.thoughtFor": "思考了",
+            "chat.thoughtDuration": "思考 · {duration}",
             "chat.thinkingProcess": "思考过程",
             "chat.work.running": "处理中",
             "chat.work.activity": "已处理",
@@ -56,19 +58,33 @@ const env = await createDomTestEnv({
 });
 const { React, act, createRoot } = env;
 
+const { ProcessDisclosureProvider } = env.loadModule(
+  "@liveagent/ui/components/chat/processDisclosure.tsx",
+);
 const { ThinkingDisclosure } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/ThinkingDisclosure.tsx",
 );
 
+const SEGMENT_KEY = "turn-1:r1:thinking-1";
+
+// Most tests exercise the detailed-progress view, where a streaming stretch
+// opens to show its reasoning; `detailedProgress: false` is the quiet default.
 function renderDisclosure(root, props = {}) {
+  const {
+    active = true,
+    detailedProgress = true,
+    segments = [{ key: SEGMENT_KEY, text: "先读取文件，再检查测试。" }],
+  } = props;
   act(() => {
     root.render(
-      React.createElement(ThinkingDisclosure, {
-        text: "先读取文件，再检查测试。",
-        trackKey: "turn-1:r1:thinking-1",
-        active: true,
-        ...props,
-      }),
+      React.createElement(
+        ProcessDisclosureProvider,
+        { expandByDefault: false, detailedProgress },
+        React.createElement(ThinkingDisclosure, {
+          segments,
+          activeKey: active ? (segments.at(-1)?.key ?? null) : null,
+        }),
+      ),
     );
   });
 }
@@ -77,13 +93,14 @@ function click(element) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-test("a streaming segment shows 思考中 with its reasoning open, then folds into 思考了 Xs", () => {
+test("a streaming stretch opens in the detailed view, then folds into 思考 · Xs", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
   renderDisclosure(root, { active: true });
   const button = container.querySelector("button");
-  assert.match(button.textContent, /思考中/);
+  // The row never says 思考中: that wording belongs to the turn's status row.
+  assert.equal(button.textContent, "思考过程");
   assert.equal(button.getAttribute("aria-expanded"), "true");
   assert.match(container.textContent, /先读取文件/);
   assert.ok(container.querySelector("[data-thinking-disclosure]"));
@@ -92,7 +109,7 @@ test("a streaming segment shows 思考中 with its reasoning open, then folds in
   durationState.settledMs = 23_000;
   renderDisclosure(root, { active: false });
   assert.equal(button.getAttribute("aria-expanded"), "false");
-  assert.match(button.textContent, /思考了 23s/);
+  assert.equal(button.textContent, "思考 · 23s");
   assert.equal(container.querySelector("[data-thinking-active]"), null);
 
   act(() => root.unmount());
@@ -195,20 +212,56 @@ test("scroll follow disengages once the segment settles or is collapsed", () => 
   act(() => root.unmount());
 });
 
-test("an active segment spins a loader in place of the brain icon", () => {
+test("a reasoning row never spins: brain icon and no shimmer while streaming or settled", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
   renderDisclosure(root, { active: true });
-  const loader = container.querySelector('[data-icon="loader"]');
-  assert.ok(loader, "thinking shows a spinning loader");
-  assert.match(loader.getAttribute("class"), /(?:^|\s)animate-spin(?:\s|$)/);
-  assert.match(loader.getAttribute("class"), /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
-  assert.equal(container.querySelector('[data-icon="brain"]'), null);
+  assert.equal(container.querySelector('[data-icon="loader"]'), null);
+  assert.ok(container.querySelector('[data-icon="brain"]'));
+  assert.doesNotMatch(container.innerHTML, /shimmer|animate-spin/);
 
   renderDisclosure(root, { active: false });
   assert.equal(container.querySelector('[data-icon="loader"]'), null);
   assert.ok(container.querySelector('[data-icon="brain"]'));
+
+  act(() => root.unmount());
+});
+
+test("the quiet view keeps a streaming stretch folded; its text is one click away", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  renderDisclosure(root, { active: true, detailedProgress: false });
+  const button = container.querySelector("button");
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.doesNotMatch(container.textContent, /先读取文件/);
+
+  click(button);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.match(container.textContent, /先读取文件/);
+
+  act(() => root.unmount());
+});
+
+test("consecutive reasoning segments fold into one row with their total duration", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const segments = [
+    { key: "turn-1:r1:thinking-1", text: "先读取文件。" },
+    { key: "turn-1:r2:thinking-1", text: "再检查测试。" },
+  ];
+
+  durationState.settledMs = null;
+  durationState.byKey = { "turn-1:r1:thinking-1": 2_000, "turn-1:r2:thinking-1": 3_500 };
+  renderDisclosure(root, { active: false, segments });
+  const buttons = container.querySelectorAll("button");
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].textContent, "思考 · 5s");
+
+  click(buttons[0]);
+  assert.match(container.textContent, /先读取文件。\s*再检查测试。/);
+  durationState.byKey = {};
 
   act(() => root.unmount());
 });

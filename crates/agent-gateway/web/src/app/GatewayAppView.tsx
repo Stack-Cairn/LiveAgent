@@ -1838,6 +1838,10 @@ export function GatewayAppView({
                                               settings.customSettings.chatTranscript
                                                 .expandProcessByDefault
                                             }
+                                            showDetailedProgress={
+                                              settings.customSettings.chatTranscript
+                                                .showDetailedProgress
+                                            }
                                             isViewportFollowing={transcriptFollow.isFollowing}
                                             viewportFollowing={transcriptFollowing}
                                             navRef={transcriptNavRef}
