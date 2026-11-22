@@ -22,6 +22,7 @@ import {
 type UseRightDockProjectTabsOptions = {
   backgroundTasksVisible: boolean;
   browserAvailable?: boolean;
+  panelsAvailable?: boolean;
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
   projectPathKey: string;
@@ -37,6 +38,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
   const {
     backgroundTasksVisible,
     browserAvailable = false,
+    panelsAvailable = false,
     leasedTools,
     localSessions,
     onProjectStateChange,
@@ -51,11 +53,13 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
   const tunnelInitialized = Boolean(projectState.tools.tunnel && tunnelAvailable);
   const sshTunnelInitialized = Boolean(projectPathKey && projectState.tools.sshTunnel);
   const browserInitialized = Boolean(projectState.tools.browser && browserAvailable);
+  const panelsInitialized = Boolean(projectState.tools.plugins && panelsAvailable);
   const visibleTabs = useMemo(
     () =>
       getRightDockVisibleTabs({
         backgroundTasksVisible,
         browserAvailable,
+        panelsAvailable,
         leasedTools,
         localSessions,
         projectPathKey,
@@ -65,6 +69,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
     [
       backgroundTasksVisible,
       browserAvailable,
+      panelsAvailable,
       leasedTools,
       localSessions,
       projectPathKey,
@@ -164,6 +169,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
     fileTreeInitialized,
     gitReviewInitialized,
     openSingletonTab,
+    panelsInitialized,
     orderedProjectTabIds,
     orderedProjectTabs,
     setDraftTabOrder,

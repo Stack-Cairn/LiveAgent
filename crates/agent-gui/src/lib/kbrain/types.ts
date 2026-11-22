@@ -127,6 +127,8 @@ export type KBrainToolResult = KBrainToolRunInfo &
     output: string;
     failed?: boolean;
     cancelled?: boolean;
+    /** MCP App view of this result (capability mcp_apps); fetching `url` needs the token. */
+    ui_resource?: { server_id: string; uri: string; url: string };
   };
 
 export type KBrainQuestionOption = {
@@ -395,6 +397,11 @@ export type KBrainRunOptions = {
    * K-brain advertises capability mcp_elicitation: older backends reject unknown options.
    */
   mcp_elicitation?: boolean;
+  /**
+   * Save "html preview" fences and Write-to-.html results as previews (`preview.created`).
+   * Sent only when K-brain advertises capability html_previews.
+   */
+  html_previews?: boolean;
   /**
    * MCP servers K-brain may offer in this run. Omitted means K-brain's saved
    * selection (or every enabled server); an empty list means the same, so "no

@@ -14,6 +14,7 @@ import {
   Globe,
   Key,
   Mic,
+  Plug,
   Settings2,
   ShieldCheck,
   Wrench,
@@ -21,6 +22,11 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
+import {
+  KBRAIN_HTML_PREVIEWS_CAPABILITY,
+  KBRAIN_PLUGIN_UI_CAPABILITY,
+  KBRAIN_PLUGINS_CAPABILITY,
+} from "../../lib/plugins/types";
 import { AgentsSection } from "./AgentsSection";
 import { AIApprovalSection } from "./AIApprovalSection";
 import { CalendarSection } from "./CalendarSection";
@@ -28,6 +34,7 @@ import { CronSection } from "./CronSection";
 import { HooksSection } from "./HooksSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { PermissionRulesSection } from "./PermissionRulesSection";
+import { PluginsSection } from "./PluginsSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
 import { ResourceHubSection } from "./ResourceHubSection";
@@ -86,6 +93,9 @@ export function SettingsPage(props: SettingsPageProps) {
     [onSttProviderChange, sttSettingsService],
   );
 
+  const sandboxedUi = useSandboxedUiCapabilities(props.settingsHost?.kbrain?.getCapabilities);
+  const pluginsClient = sandboxedUi.plugins ? props.settingsHost?.kbrain?.plugins : undefined;
+
   const sections = useMemo<SettingsSectionDefinition<void>[]>(
     () => [
       {
@@ -95,7 +105,13 @@ export function SettingsPage(props: SettingsPageProps) {
         order: 10,
         labelKey: "settings.navSystem",
         icon: <Settings2 className={extension.iconClassName} />,
-        render: () => <SystemSettingsForm settings={settings} setSettings={setSettings} />,
+        render: () => (
+          <SystemSettingsForm
+            settings={settings}
+            setSettings={setSettings}
+            htmlPreviewsAvailable={sandboxedUi.htmlPreviews}
+          />
+        ),
       },
       {
         id: "providers",
@@ -161,6 +177,27 @@ export function SettingsPage(props: SettingsPageProps) {
           <ResourceHubSection resource={id} settings={settings} setSettings={setSettings} />
         ),
       })),
+      // Desktop only (the host talks to K-brain directly) and only when K-brain has plugins.
+      ...(pluginsClient
+        ? [
+            {
+              id: "plugins",
+              groupKey: "settings.groupResources",
+              groupOrder: 20,
+              order: 32,
+              labelKey: "sandboxedUi.plugins.nav",
+              icon: <Plug className={extension.iconClassName} />,
+              render: () => (
+                <PluginsSection
+                  client={pluginsClient}
+                  workdir={settings.system.workdir || undefined}
+                  panels={sandboxedUi.pluginUi}
+                  trustClient={props.settingsHost?.kbrain?.folderTrust}
+                />
+              ),
+            } satisfies SettingsSectionDefinition<void>,
+          ]
+        : []),
       {
         id: "planning",
         groupKey: "settings.groupResources",
@@ -301,7 +338,9 @@ export function SettingsPage(props: SettingsPageProps) {
     ],
     [
       extension,
+      pluginsClient,
       props.settingsHost,
+      sandboxedUi,
       rejectedLegacyProviders,
       onRetryRejectedLegacyProviders,
       onDismissRejectedLegacyProviders,
@@ -333,4 +372,50 @@ export function SettingsPage(props: SettingsPageProps) {
       fontScale={settings.customSettings.fontScale.settings}
     />
   );
+}
+
+type SandboxedUiCapabilities = { plugins: boolean; pluginUi: boolean; htmlPreviews: boolean };
+const NO_SANDBOXED_UI: SandboxedUiCapabilities = {
+  plugins: false,
+  pluginUi: false,
+  htmlPreviews: false,
+};
+
+/** K-brain's plugin and preview capabilities; none until (or unless) the read succeeds. */
+function useSandboxedUiCapabilities(
+  getCapabilities: (() => Promise<Record<string, unknown>>) | undefined,
+): SandboxedUiCapabilities {
+  const [value, setValue] = useState<SandboxedUiCapabilities>(NO_SANDBOXED_UI);
+  useEffect(() => {
+    if (!getCapabilities) {
+      setValue(NO_SANDBOXED_UI);
+      return;
+    }
+    let cancelled = false;
+    getCapabilities().then(
+      (capabilities) => {
+        if (cancelled) return;
+        const has = (name: string) => capabilities[name] === 1;
+        const next = {
+          plugins: has(KBRAIN_PLUGINS_CAPABILITY),
+          pluginUi: has(KBRAIN_PLUGIN_UI_CAPABILITY),
+          htmlPreviews: has(KBRAIN_HTML_PREVIEWS_CAPABILITY),
+        };
+        setValue((current) =>
+          current.plugins === next.plugins &&
+          current.pluginUi === next.pluginUi &&
+          current.htmlPreviews === next.htmlPreviews
+            ? current
+            : next,
+        );
+      },
+      () => {
+        if (!cancelled) setValue(NO_SANDBOXED_UI);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [getCapabilities]);
+  return value;
 }

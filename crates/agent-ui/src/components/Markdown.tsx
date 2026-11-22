@@ -37,6 +37,7 @@ import {
   encodeChatFileLink,
   parseChatFileLink,
 } from "../lib/chat/chatFileLinks";
+import { HTML_PREVIEW_FENCE_LANGUAGE, markHtmlPreviewFences } from "../lib/chat/htmlPreviews";
 import {
   rememberExternalLinkConfirmation,
   shouldSkipExternalLinkConfirmation,
@@ -69,6 +70,7 @@ import {
   StreamingBlock,
   StreamingBlocksProvider,
 } from "./markdown/streamingTailBlock";
+import { HtmlPreviewFence } from "./sandboxed-ui/HtmlPreviewFence";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { CopyButton } from "./ui/copy-button";
@@ -632,6 +634,26 @@ export function CollapsibleCodePre({
 
   if (!childElement) return children;
 
+  if (language === HTML_PREVIEW_FENCE_LANGUAGE) {
+    // An "html preview" fence: a preview card once K-brain saved it, else plain HTML.
+    const htmlChild = cloneElement(childElement, {
+      className: cn(
+        childElement.props.className?.replace(`language-${HTML_PREVIEW_FENCE_LANGUAGE}`, ""),
+        "language-html",
+      ),
+    });
+    return (
+      <HtmlPreviewFence
+        code={codeContent}
+        fallback={
+          <CollapsibleCodePre allowMermaidFullscreen={allowMermaidFullscreen}>
+            {htmlChild}
+          </CollapsibleCodePre>
+        }
+      />
+    );
+  }
+
   if (isRenderedMermaid) {
     return <MarkdownMermaidBlock chart={codeContent} readOnly={!allowMermaidFullscreen} />;
   }
@@ -914,9 +936,11 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
   );
   const normalizedContent = useMemo(
     () =>
-      normalizeLatexDelimiters(
-        stripMarkdownCitationMarkers(content, citationAtDocumentEnd, streaming),
-        streaming && showCaret,
+      markHtmlPreviewFences(
+        normalizeLatexDelimiters(
+          stripMarkdownCitationMarkers(content, citationAtDocumentEnd, streaming),
+          streaming && showCaret,
+        ),
       ),
     [citationAtDocumentEnd, content, showCaret, streaming],
   );

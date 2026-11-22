@@ -71,6 +71,7 @@ import { SubagentControlToolCall, SubagentToolCall } from "./SubagentToolCard";
 import { ToolElicitations } from "./ToolElicitations";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
+import { ToolSandboxedViews } from "./ToolSandboxedViews";
 
 // 折叠摘要里行内命令的展示上限:远超任何实际窗口一行可容纳的字符数,视觉
 // 省略仍由 CSS truncate 决定;仅防御超长单行命令(如内联脚本)把常驻 DOM
@@ -668,6 +669,14 @@ function ToolCallItem({
         details={result?.details}
         canAnswer={!readOnly && !result}
       />
+      {result ? (
+        <ToolSandboxedViews
+          toolCallId={item.toolCall.id}
+          toolName={item.toolCall.name}
+          args={item.toolCall.arguments}
+          result={result}
+        />
+      ) : null}
     </>
   );
 

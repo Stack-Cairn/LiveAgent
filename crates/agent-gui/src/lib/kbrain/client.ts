@@ -16,6 +16,7 @@ import {
   supportsPermissionMode,
   supportsRunSandbox,
 } from "@liveagent/ui/lib/kbrain/health";
+import { KBRAIN_HTML_PREVIEWS_CAPABILITY } from "@liveagent/ui/lib/plugins/types";
 import { createKBrainQueueClient } from "./queueClient";
 import { createSseRecordSplitter } from "./sseRecords";
 import { fetchKBrain, KBrainTransportError } from "./transport";
@@ -694,7 +695,8 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
 
   /**
    * Run options with review_scope "per_run" when the backend reviews per permission mode, and
-   * without mcp_elicitation when the backend cannot relay form elicitations.
+   * without mcp_elicitation when the backend cannot relay form elicitations, and without
+   * html_previews when it cannot save previews.
    */
   async function scopedRunOptions<T extends KBrainRunOptions | undefined>(
     options: T,
@@ -711,6 +713,13 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       !(health && hasFrozenCapability(health, MCP_ELICITATION_CAPABILITY))
     ) {
       const { mcp_elicitation: _unsupported, ...rest } = scoped;
+      scoped = rest;
+    }
+    if (
+      scoped.html_previews &&
+      !(health && hasFrozenCapability(health, KBRAIN_HTML_PREVIEWS_CAPABILITY))
+    ) {
+      const { html_previews: _unsupported, ...rest } = scoped;
       scoped = rest;
     }
     return scoped as T;

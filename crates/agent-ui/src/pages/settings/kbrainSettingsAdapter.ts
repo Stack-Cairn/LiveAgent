@@ -1,4 +1,6 @@
+import type { WorkspaceFolderTrustClient } from "@liveagent/ui/contracts/workspaceFolderTrust";
 import type { KBrainHealth } from "@liveagent/ui/lib/kbrain/health";
+import type { PluginsClient } from "@liveagent/ui/lib/plugins/types";
 import type { KBrainWebSearchSettings } from "@liveagent/ui/lib/providers/webSearchFallback";
 import type { UsageStatsAnswer, UsageStatsQuery } from "@liveagent/ui/lib/usage/usageStats";
 export type KBrainSettingsProvider = {
@@ -137,6 +139,13 @@ export type KBrainSettingsAdapter = {
    * cannot reach it leave this out and Settings hides the page.
    */
   getUsageStats?: (query: UsageStatsQuery) => Promise<UsageStatsAnswer>;
+  /**
+   * K-brain plugins (`capabilities.plugins`). Only hosts that talk to K-brain directly
+   * provide it; Settings shows the Plugins page when the capability is advertised.
+   */
+  plugins?: PluginsClient;
+  /** Folder trust, offered on the Plugins page when the project folder is not trusted. */
+  folderTrust?: WorkspaceFolderTrustClient;
 };
 
 export type SettingsHostAdapter = {

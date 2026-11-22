@@ -396,7 +396,8 @@ function validatePaneRecord(pane: PaneRecord): PaneRecordIssue | null {
     case "tunnel":
     case "sshTunnel":
     case "backgroundTasks":
-    case "browser": {
+    case "browser":
+    case "plugins": {
       if (!surface.project.projectId.trim() || !surface.project.projectPathKey.trim()) {
         return {
           code: "invalid-layout",

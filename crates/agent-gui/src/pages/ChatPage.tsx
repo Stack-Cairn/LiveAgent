@@ -190,6 +190,10 @@ import {
 import { publishGoalState } from "../lib/kbrain/goalStore";
 import { subscribeHistoryImported } from "../lib/kbrain/manualHistoryImport";
 import { getKBrainSessionId } from "../lib/kbrain/mapping";
+import {
+  setKBrainHtmlPreviewsPreferred,
+  subscribeKBrainPanelsDockRequests,
+} from "../lib/kbrain/sandboxedUiPreferences";
 import { watchKBrainHistory } from "../lib/kbrain/watchHistory";
 import { createUnreadConversationStore } from "../lib/notifications/runAttention";
 import { createProviderRuntimeConfig, toModelValue } from "../lib/providers/llm";
@@ -301,6 +305,11 @@ import {
 } from "./chat/runtime/useManualCompaction";
 import { useProjectToolTextGenerationClient } from "./chat/runtime/useProjectToolTextGenerationClient";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
+import {
+  kbrainDockPluginsClient,
+  useKBrainDockHtmlPreviews,
+  useKBrainSandboxedUiCapabilities,
+} from "./chat/sandboxed/KBrainSandboxedUi";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import {
   type ConversationPaneBinding,
@@ -3993,6 +4002,7 @@ function ChatPageContent(props: ChatPageProps) {
       case "sshTunnel":
       case "backgroundTasks":
       case "browser":
+      case "plugins":
         return t(projectToolSurfaceTitleKey(surface.kind));
       case "localTerminal":
         return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
@@ -4091,6 +4101,18 @@ function ChatPageContent(props: ChatPageProps) {
     );
   };
 
+  // Right dock "Panels" tool: plugin side-pane panels and this conversation's HTML previews.
+  const sandboxedUiCapabilities = useKBrainSandboxedUiCapabilities();
+  const dockPluginsClient = kbrainDockPluginsClient(sandboxedUiCapabilities);
+  const dockHtmlPreviews = useKBrainDockHtmlPreviews(
+    sandboxedUiCapabilities,
+    currentConversationId,
+  );
+  const htmlPreviewsSetting = settings.customSettings.chatTranscript.htmlPreviews;
+  useEffect(() => {
+    setKBrainHtmlPreviewsPreferred(htmlPreviewsSetting);
+  }, [htmlPreviewsSetting]);
+
   // 项目工具 Pane 的运行环境:与 RightDockPanel 拿到的是同一批 client/回调,
   // 只是按 Pane 自己的 ProjectRef 解析项目(见 ProjectToolPaneHost)。
   const projectToolPaneEnvironment = useMemo<ProjectToolPaneEnvironment>(
@@ -4106,6 +4128,8 @@ function ChatPageContent(props: ChatPageProps) {
         // 浏览器宿主没有 `gateway_tunnel_*`：不注入 client，内网穿透入口直接置灰。
         tunnel: projectToolTunnelClient,
         browser: embeddedBrowserClient,
+        plugins: dockPluginsClient,
+        htmlPreviews: dockHtmlPreviews,
         workspaceActivity: tauriWorkspaceActivityClient,
       },
       capabilities: {
@@ -4167,6 +4191,8 @@ function ChatPageContent(props: ChatPageProps) {
     }),
     [
       codeReviewSkill,
+      dockHtmlPreviews,
+      dockPluginsClient,
       effectiveTheme,
       embeddedBrowserClient,
       gitReviewFocusRequest,
@@ -4239,6 +4265,19 @@ function ChatPageContent(props: ChatPageProps) {
     if (!embeddedBrowserClient) return;
     return setInAppBrowserLinkHandler((url) => inAppBrowserLinkRef.current(url));
   }, [embeddedBrowserClient]);
+
+  // "Open in side panel" on a preview card: reveal the dock's Panels tool unless a
+  // workbench pane already shows it.
+  const openPanelsDockRef = useRef<() => void>(() => {});
+  openPanelsDockRef.current = () => {
+    setActiveView("chat");
+    if (leasedDockTools.has("plugins")) return;
+    setRightDockOpen(true);
+    if (terminalProjectPathKey) {
+      setSettings((prev) => openRightDockSingletonTab(prev, terminalProjectPathKey, "plugins"));
+    }
+  };
+  useEffect(() => subscribeKBrainPanelsDockRequests(() => openPanelsDockRef.current()), []);
 
   const chatContent = sessionWorkbench.enabled ? (
     <ConversationPaneHostEnvironmentProvider value={conversationPaneHostEnvironment}>
@@ -4931,6 +4970,8 @@ function ChatPageContent(props: ChatPageProps) {
                 settings.remote.gatewayPort,
               )}
               browserClient={embeddedBrowserClient}
+              pluginsClient={dockPluginsClient}
+              htmlPreviews={dockHtmlPreviews}
               workspaceActivityClient={tauriWorkspaceActivityClient}
               onProjectStateChange={handleRightDockProjectStateChange}
               onFileTreeStateChange={handleRightDockFileTreeStateChange}

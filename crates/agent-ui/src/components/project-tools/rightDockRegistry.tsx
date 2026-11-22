@@ -1,4 +1,11 @@
-import { AppWindow, FolderTree, GitBranch, Globe, Key } from "@liveagent/ui/components/IconSet";
+import {
+  AppWindow,
+  FolderTree,
+  GitBranch,
+  Globe,
+  Key,
+  Plug,
+} from "@liveagent/ui/components/IconSet";
 import { FileTreePanel } from "@liveagent/ui/components/project-tools/file-tree/index";
 import { GitReviewPanel } from "@liveagent/ui/components/project-tools/git-review/index";
 import type { ReactNode } from "react";
@@ -6,6 +13,7 @@ import { EmbeddedBrowserPanel } from "./EmbeddedBrowserPanel";
 import { LocalTunnelPanel } from "./LocalTunnelPanel";
 import { type RightDockToolContextValue, useRightDockToolContext } from "./RightDockContext";
 import type { RightDockSingletonTabKind } from "./rightDockModel";
+import { SandboxedPanelsPanel } from "./SandboxedPanelsPanel";
 import { SshTunnelPanel } from "./SshTunnelPanel";
 
 export type { RightDockSingletonTabKind } from "./rightDockModel";
@@ -163,7 +171,33 @@ export const RIGHT_DOCK_TOOL_DEFINITIONS: readonly RightDockToolDefinition[] = [
     isAvailable: (context) => Boolean(context.clients.browser),
     render: (input) => <BrowserTool active={input.active} />,
   },
+  {
+    kind: "plugins",
+    titleKey: "sandboxedUi.dock.title",
+    createTitleKey: "sandboxedUi.dock.open",
+    descriptionKey: "sandboxedUi.dock.description",
+    closeKey: "sandboxedUi.dock.close",
+    projectRequired: false,
+    icon: (className) => <Plug className={className} />,
+    containerActiveClassName: "flex flex-col",
+    isAvailable: (context) => Boolean(context.clients.plugins || context.clients.htmlPreviews),
+    render: (input) => <SandboxedPanelsTool active={input.active} />,
+  },
 ];
+
+function SandboxedPanelsTool(props: RightDockToolRenderInput) {
+  const context = useRightDockToolContext();
+  const openFile = context.fileTree.onOpenFile;
+  return (
+    <SandboxedPanelsPanel
+      active={props.active}
+      plugins={context.clients.plugins ?? null}
+      previews={context.clients.htmlPreviews ?? null}
+      workdir={context.cwd}
+      onOpenFile={openFile ? (path) => openFile(path) : undefined}
+    />
+  );
+}
 
 const RIGHT_DOCK_TOOL_DEFINITION_BY_KIND = new Map(
   RIGHT_DOCK_TOOL_DEFINITIONS.map((definition) => [definition.kind, definition]),

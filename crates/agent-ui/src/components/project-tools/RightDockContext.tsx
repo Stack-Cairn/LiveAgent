@@ -16,10 +16,12 @@ import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { createContext, useContext } from "react";
 import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
 import type { EmbeddedBrowserClient } from "../../lib/browser/embeddedBrowser";
+import type { PluginsClient } from "../../lib/plugins/types";
 import type { TerminalClient, TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import type { FileTreeExternalRoot } from "./file-tree/model";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
+import type { RightDockHtmlPreviews } from "./SandboxedPanelsPanel";
 
 export type RightDockToolClients = {
   terminal: TerminalClient;
@@ -28,6 +30,10 @@ export type RightDockToolClients = {
   tunnel?: LocalTunnelClient | null;
   /** Embedded browser pane; absent on hosts without one (web UI). */
   browser?: EmbeddedBrowserClient | null;
+  /** Plugin side-pane panels (K-brain plugin_ui); absent where the host has none. */
+  plugins?: PluginsClient | null;
+  /** The current conversation's HTML previews (K-brain html_previews). */
+  htmlPreviews?: RightDockHtmlPreviews | null;
   workspaceActivity?: WorkspaceActivityClient | null;
 };
 

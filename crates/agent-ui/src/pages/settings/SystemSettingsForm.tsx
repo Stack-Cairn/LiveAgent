@@ -17,6 +17,7 @@ import {
   type Theme,
   updateCustomSettings,
   updateExpandProcessByDefault,
+  updateHtmlPreviews,
   updateShowDetailedProgress,
   updateSystem,
 } from "@liveagent/app/lib/settings";
@@ -127,8 +128,13 @@ function ProxySettingsRow({
   );
 }
 
-export function SystemSettingsForm(props: SettingsSectionProps) {
-  const { settings, setSettings } = props;
+export function SystemSettingsForm(
+  props: SettingsSectionProps & {
+    /** K-brain can save HTML previews (capability html_previews): show their switch. */
+    htmlPreviewsAvailable?: boolean;
+  },
+) {
+  const { settings, setSettings, htmlPreviewsAvailable = false } = props;
   const { t, locale } = useLocale();
 
   useEffect(() => preloadTimeZoneOptions(locale), [locale]);
@@ -515,6 +521,25 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
             />
           }
         />
+
+        {htmlPreviewsAvailable ? (
+          <SettingsRow
+            data-settings-anchor="html-previews"
+            title={t("settings.htmlPreviews")}
+            description={t("settings.htmlPreviewsDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={settings.customSettings.chatTranscript.htmlPreviews}
+                title={t("settings.htmlPreviews")}
+                onToggle={() =>
+                  setSettings((prev) =>
+                    updateHtmlPreviews(prev, !prev.customSettings.chatTranscript.htmlPreviews),
+                  )
+                }
+              />
+            }
+          />
+        ) : null}
       </SettingsGroup>
 
       <SidebarShortcutsSection settings={settings} setSettings={setSettings} />

@@ -313,6 +313,9 @@ function ToolTraceGroupInner(props: {
               className={cn(
                 "-mx-3 flex max-h-400px flex-col gap-1 overflow-y-auto overscroll-contain px-3",
                 "[scrollbar-gutter:stable]",
+                // An MCP App view or HTML preview card sizes itself; it is not squeezed
+                // into the scrolling trace.
+                "has-[[data-sandboxed-view]]:max-h-none",
               )}
             >
               {items.map((item, index) => (

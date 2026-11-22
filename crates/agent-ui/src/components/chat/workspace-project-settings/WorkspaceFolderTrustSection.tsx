@@ -27,8 +27,10 @@ function errorMessage(error: unknown): string {
 export function WorkspaceFolderTrustSection(props: {
   path: string;
   client: WorkspaceFolderTrustClient;
+  /** Called after the user granted or revoked trust here. */
+  onChange?: (status: WorkspaceFolderTrustStatus) => void;
 }) {
-  const { path, client } = props;
+  const { path, client, onChange } = props;
   const { t } = useLocale();
   const [state, setState] = useState<TrustState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
@@ -64,6 +66,7 @@ export function WorkspaceFolderTrustSection(props: {
     try {
       const status = grant ? await client.trust(path) : await client.revoke(path);
       setState({ phase: "ready", status });
+      onChange?.(status);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {

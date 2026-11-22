@@ -617,6 +617,7 @@ export function GatewayAppView({
         case "sshTunnel":
         case "backgroundTasks":
         case "browser":
+        case "plugins":
           return translate(projectToolSurfaceTitleKey(surface.kind), settings.locale);
         case "localTerminal":
           return surface.launchSpec.title?.trim() || surface.launchSpec.shell?.trim() || "Terminal";
