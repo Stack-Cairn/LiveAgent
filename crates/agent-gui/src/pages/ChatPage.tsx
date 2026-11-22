@@ -4653,6 +4653,7 @@ function ChatPageContent(props: ChatPageProps) {
           unreadStore={unreadConversationStore}
           visibleConversationId={activeView === "chat" ? currentConversationId : ""}
           enabled={settings.customSettings.runNotifications}
+          completionSound={settings.customSettings.runCompletionSound}
         />
         {/* ---- Left column: navigation/sidebar ---- */}
         <ChatSidebarContainer

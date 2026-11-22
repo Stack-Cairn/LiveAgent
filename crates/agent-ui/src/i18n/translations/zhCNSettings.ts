@@ -392,6 +392,9 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.runNotifications": "后台对话通知",
   "settings.runNotificationsDesc":
     "窗口不在前台时，对话完成或需要你批准、回答，会发送系统通知（点击直接打开该对话），并在 Dock 图标显示角标；在其他对话中完成的回复会在侧栏显示未读圆点。仅保存在本机。",
+  "settings.runCompletionSound": "对话完成提示音",
+  "settings.runCompletionSoundDesc":
+    "窗口不在前台时，对话运行完成会播放一声简短提示音；与系统通知开关互不影响。仅保存在本机。",
   "settings.notificationTest": "测试系统通知",
   "settings.notificationTestHint":
     "请求通知权限并发送测试通知。请在 macOS 系统设置中允许横幅；专注模式可能隐藏横幅。",

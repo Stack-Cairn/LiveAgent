@@ -17,6 +17,13 @@ export const desktopSettingsSearch: SettingsSearchExtension = {
     },
     {
       section: "system",
+      anchor: "run-completion-sound",
+      labelKey: "settings.runCompletionSound",
+      descriptionKey: "settings.runCompletionSoundDesc",
+      keywords: ["sound", "chime", "audio", "beep", "finished", "done"],
+    },
+    {
+      section: "system",
       anchor: "close-window",
       labelKey: "settings.defaultCloseWindowBehavior",
       keywords: ["close", "quit", "minimize", "tray"],

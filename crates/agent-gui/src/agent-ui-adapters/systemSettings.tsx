@@ -12,7 +12,7 @@ import {
   useEditors,
   writePreferredEditorId,
 } from "@liveagent/ui/lib/editors/editors";
-import { updateRunNotifications } from "@liveagent/ui/lib/settings/index";
+import { updateRunCompletionSound, updateRunNotifications } from "@liveagent/ui/lib/settings/index";
 import {
   AgentActivationSwitch,
   SettingsGroup,
@@ -21,6 +21,7 @@ import {
 import { useMemo, useState } from "react";
 import { isTauriHost } from "../lib/host";
 import { LegacyHistoryImportSettings } from "../lib/kbrain/LegacyHistoryImportSettings";
+import { completionSoundPlayer } from "../lib/notifications/completionSound";
 import { inferRuntimePlatform } from "../lib/runtimePlatform";
 import { CLOSE_WINDOW_BEHAVIOR_OPTIONS } from "../lib/settings";
 import { useTrayPrefs, writeTrayPrefs } from "../lib/tray/trayPrefs";
@@ -70,6 +71,24 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
                     updateRunNotifications(prev, !prev.customSettings.runNotifications),
                   )
                 }
+              />
+            }
+          />
+          <SettingsRow
+            data-settings-anchor="run-completion-sound"
+            title={t("settings.runCompletionSound")}
+            description={t("settings.runCompletionSoundDesc")}
+            control={
+              <AgentActivationSwitch
+                checked={settings.customSettings.runCompletionSound}
+                title={t("settings.runCompletionSound")}
+                onToggle={() => {
+                  const enabled = !settings.customSettings.runCompletionSound;
+                  // Turning it on previews the chime; the click also unlocks audio
+                  // for later background playback.
+                  if (enabled) completionSoundPlayer().play();
+                  setSettings((prev) => updateRunCompletionSound(prev, enabled));
+                }}
               />
             }
           />

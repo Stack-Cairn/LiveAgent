@@ -201,6 +201,9 @@ export type CustomSettings = {
   // Desktop system notifications (and Dock badge) when a background run
   // finishes or blocks on approval / a question. Device-local, never synced.
   runNotifications: boolean;
+  // A short generated chime when a run finishes while the window is in the
+  // background. Off by default; device-local, never synced.
+  runCompletionSound: boolean;
   rightDock: RightDockSettings;
   composerContextDisplay: ComposerContextDisplayMode;
   // Empty strings select the built-in stacks for each typography role.

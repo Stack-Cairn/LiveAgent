@@ -179,6 +179,7 @@ function readLocalUiSettings(): {
       sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
       chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
       runNotifications: obj.runNotifications !== false,
+      runCompletionSound: obj.runCompletionSound === true,
       rightDock: normalizeRightDockSettings(obj.rightDock),
       // 三档枚举（与 normalizeCustomSettings 同口径）：脏值/缺省落回统计状态栏。
       composerContextDisplay:
