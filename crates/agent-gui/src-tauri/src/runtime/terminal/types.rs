@@ -62,6 +62,7 @@ pub struct TerminalListResponse {
 pub struct TerminalSnapshotResponse {
     pub session: TerminalSessionRecord,
     pub output: String,
+    #[serde(with = "wire_bytes")]
     pub output_bytes: Vec<u8>,
     pub truncated: bool,
     pub output_start_offset: u64,
@@ -74,6 +75,7 @@ pub struct TerminalSshCreateResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<TerminalSessionRecord>,
     pub output: String,
+    #[serde(with = "wire_bytes")]
     pub output_bytes: Vec<u8>,
     pub truncated: bool,
     pub output_start_offset: u64,
@@ -198,7 +200,11 @@ pub struct TerminalEventPayload {
     pub project_path_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<TerminalSessionRecord>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "optional_wire_bytes"
+    )]
     pub data: Option<Vec<u8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_start_offset: Option<u64>,
@@ -223,6 +229,7 @@ pub struct TerminalStreamEventPayload {
     pub project_path_key: String,
     pub start_offset: u64,
     pub end_offset: u64,
+    #[serde(with = "wire_bytes")]
     pub bytes: Vec<u8>,
 }
 
@@ -235,6 +242,7 @@ pub struct TerminalStreamEvent {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalStreamSnapshotResponse {
     pub session: TerminalSessionRecord,
+    #[serde(with = "wire_bytes")]
     pub bytes: Vec<u8>,
     pub truncated: bool,
     pub output_start_offset: u64,
@@ -248,4 +256,69 @@ pub struct TerminalReadTailResponse {
     pub selected_session: Option<TerminalSessionRecord>,
     pub output: String,
     pub truncated: bool,
+}
+
+/// Terminal output crosses the webview IPC as JSON. A `Vec<u8>` serializes as a number array,
+/// which turns an 8 KiB chunk into ~29 KB of text that the page has to parse number by number;
+/// standard base64 keeps it at ~11 KB and decodes natively. Deserialization accepts both forms.
+/// The gateway path is protobuf and carries the raw bytes.
+pub(crate) mod wire_bytes {
+    use base64::Engine;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    pub(super) enum WireBytes {
+        Base64(String),
+        Array(Vec<u8>),
+    }
+
+    impl WireBytes {
+        pub(super) fn into_bytes<E: serde::de::Error>(self) -> Result<Vec<u8>, E> {
+            match self {
+                Self::Base64(text) => base64::engine::general_purpose::STANDARD
+                    .decode(text)
+                    .map_err(E::custom),
+                Self::Array(bytes) => Ok(bytes),
+            }
+        }
+    }
+
+    pub(crate) fn encode(bytes: &[u8]) -> String {
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    }
+
+    pub(crate) fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&encode(bytes))
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<u8>, D::Error> {
+        WireBytes::deserialize(deserializer)?.into_bytes()
+    }
+}
+
+pub(crate) mod optional_wire_bytes {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    use super::wire_bytes::{encode, WireBytes};
+
+    pub(crate) fn serialize<S: Serializer>(
+        bytes: &Option<Vec<u8>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match bytes {
+            Some(bytes) => serializer.serialize_some(&encode(bytes)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Vec<u8>>, D::Error> {
+        Option::<WireBytes>::deserialize(deserializer)?
+            .map(WireBytes::into_bytes)
+            .transpose()
+    }
 }

@@ -4,6 +4,7 @@ import {
   buildTerminalCreatePayload,
   buildTerminalSshCreatePayload,
   buildTerminalSshPromptAnswerPayload,
+  decodeBase64Bytes,
   normalizeOptionalOffset,
   normalizeSshTerminalTabsSnapshot,
   normalizeTerminalByteContainer,
@@ -115,8 +116,9 @@ function normalizeStreamEvent(input: RawTerminalStreamEvent): TerminalStreamChun
   };
 }
 
+// The desktop host sends terminal bytes as base64 (see `wire_bytes` in the terminal runtime).
 function normalizeBytes(value: unknown): Uint8Array {
-  return normalizeTerminalByteContainer(value, (text) => new TextEncoder().encode(text));
+  return normalizeTerminalByteContainer(value, decodeBase64Bytes);
 }
 
 class TauriTerminalStreamHandle extends TerminalStreamBuffer {

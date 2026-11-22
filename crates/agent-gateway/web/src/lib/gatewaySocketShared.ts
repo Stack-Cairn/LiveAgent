@@ -9,6 +9,7 @@ import type { SftpTransferEvent } from "@liveagent/ui/lib/sftp/types";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { errorMessageWithFallback as asErrorMessage } from "@liveagent/ui/lib/shared/value";
 import {
+  decodeBase64Bytes,
   normalizeTerminalByteContainer,
   type RawSshTerminalTabsSnapshot,
   type RawTerminalSession,
@@ -768,7 +769,7 @@ export function sftpPathPayload(side: "local" | "remote", path = "") {
 export function normalizeTerminalBytes(value: unknown, fallbackText?: string): Uint8Array {
   const bytes = normalizeTerminalByteContainer(value, (text) => {
     try {
-      return Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+      return decodeBase64Bytes(text);
     } catch {
       return new TextEncoder().encode(text);
     }

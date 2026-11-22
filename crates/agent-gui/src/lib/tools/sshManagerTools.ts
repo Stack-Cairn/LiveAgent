@@ -1,5 +1,6 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import { decodeBase64Bytes } from "@liveagent/ui/lib/terminal/normalization";
 import { Type } from "typebox";
 
 import type { SshHostConfig } from "../settings";
@@ -91,10 +92,11 @@ function normalizeTerminalBytes(value: unknown): Uint8Array {
     );
   }
   if (Array.isArray(value)) {
-    return Uint8Array.from(value.map((item) => Number(item) & 0xff));
+    return Uint8Array.from(value, (item) => Number(item) & 0xff);
   }
+  // Terminal output bytes arrive as base64 (see `wire_bytes` in the terminal runtime).
   if (typeof value === "string" && value.length > 0) {
-    return new TextEncoder().encode(value);
+    return decodeBase64Bytes(value);
   }
   return new Uint8Array();
 }
