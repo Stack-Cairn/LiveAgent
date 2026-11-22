@@ -1,0 +1,131 @@
+name: Desktop E2E
+
+# Builds the debug desktop app and drives it through tauri-driver/WebKitWebDriver
+# under Xvfb against a local fake model provider (see docs/testing/desktop-e2e.md).
+#
+# Triggers: a cold run compiles the whole Tauri crate graph (~20 min), a warm
+# run with the Rust cache is ~8-10 min. That is too slow to gate every PR, so
+# PRs only run it when desktop app, shared UI or build inputs change; pushes to
+# main refresh the shared Rust cache; the nightly run catches drift (for
+# example WebKitGTK updates on the runner image) on quiet days.
+on:
+  pull_request:
+    paths:
+      - "crates/agent-gui/**"
+      - "crates/agent-ui/**"
+      - "crates/virtual-core/**"
+      - "!crates/agent-gui/test/**"
+      - "!**/*.md"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "scripts/release/prepare-kbrain.mjs"
+      - "scripts/release/kbrain.lock.json"
+      - ".github/workflows/desktop-e2e.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/agent-gui/**"
+      - "crates/agent-ui/**"
+      - "Cargo.lock"
+      - "pnpm-lock.yaml"
+      - "scripts/release/kbrain.lock.json"
+      - ".github/workflows/desktop-e2e.yml"
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-e2e-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.19.0
+  PNPM_VERSION: 10.32.1
+  TAURI_DRIVER_VERSION: 2.0.6
+  CARGO_TERM_COLOR: always
+  # Line tables keep backtraces readable at a fraction of full debuginfo cost.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  RUSTFLAGS: -C link-arg=-fuse-ld=mold
+
+jobs:
+  desktop-e2e:
+    name: Desktop E2E (Linux, WebKitGTK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux build and WebDriver dependencies
+        run: crates/agent-gui/e2e/docker/install-linux-deps.sh
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: |
+          npm install -g pnpm@${PNPM_VERSION}
+          echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-store-desktop-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-desktop-e2e-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: >
+          pnpm install --frozen-lockfile
+          --filter liveagent-workspace --filter liveagent...
+          --filter @liveagent/gateway-webui... --filter @liveagent/desktop-e2e...
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+          shared-key: desktop-e2e
+          # Also caches ~/.cargo/bin, so tauri-driver is only compiled once.
+          cache-bin: true
+          # PRs restore the main/nightly cache but do not write their own copy.
+          save-if: ${{ github.event_name != 'pull_request' }}
+
+      - name: Install tauri-driver
+        run: |
+          if ! tauri-driver --help >/dev/null 2>&1; then
+            cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+          fi
+
+      - name: Download checksum-verified K-brain release
+        run: |
+          node scripts/release/prepare-kbrain.mjs --release
+          echo "LIVEAGENT_KBRAIN_BINARY=$PWD/crates/agent-gui/src-tauri/binaries/k-brain-x86_64-unknown-linux-gnu" >> "$GITHUB_ENV"
+
+      - name: Build debug desktop app
+        run: pnpm build:e2e:desktop
+
+      - name: Run desktop E2E suite
+        env:
+          E2E_ARTIFACTS_DIR: ${{ runner.temp }}/desktop-e2e-artifacts
+          E2E_RUN_DIR: ${{ runner.temp }}/desktop-e2e-run
+        run: >
+          xvfb-run -a -s "-screen 0 1600x1000x24"
+          dbus-run-session --
+          pnpm test:e2e:desktop
+
+      - name: Upload screenshots and logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-e2e-artifacts-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-e2e-artifacts
+          retention-days: 14
+          if-no-files-found: ignore

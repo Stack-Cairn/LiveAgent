@@ -280,6 +280,8 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                 <div
                   className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground"
                   title={saveIndicator.title}
+                  data-testid="settings-save-state"
+                  data-state={saveState.status}
                 >
                   <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
                   {saveIndicator.text}
@@ -307,6 +309,8 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                     "whitespace-nowrap text-xs text-muted-foreground web:max-820:flex-none web:max-820:whitespace-nowrap",
                   )}
                   title={saveIndicator.title}
+                  data-testid="settings-save-state"
+                  data-state={saveState.status}
                 >
                   <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
                   {saveIndicator.text}

@@ -212,6 +212,7 @@ export function ToolApprovalBar({
       ref={panelRef}
       tabIndex={-1}
       aria-label={t("chat.toolApproval.title")}
+      data-testid="tool-approval"
       onKeyDown={(event) => {
         if (
           event.defaultPrevented ||
@@ -407,6 +408,7 @@ export function ToolApprovalBar({
           disabled={submitting}
           aria-busy={submittingAction === `deny:${current.toolCallId}`}
           aria-keyshortcuts="Escape 3"
+          data-testid="tool-approval-deny"
           onClick={deny}
           className="h-7 shrink-0 px-3 text-xs"
         >
@@ -432,6 +434,7 @@ export function ToolApprovalBar({
               aria-busy={submittingAction === `approve:${current.toolCallId}`}
               aria-keyshortcuts="Enter"
               title={t("chat.toolApproval.approveShortcutHint")}
+              data-testid="tool-approval-approve"
               onClick={approveOnce}
               className={cn("h-7 px-3 text-xs shadow-none", hasMoreActions && "rounded-r-none")}
             >

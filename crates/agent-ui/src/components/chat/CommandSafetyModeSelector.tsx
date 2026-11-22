@@ -210,6 +210,8 @@ export function CommandSafetyModeSelector(props: {
           }
           title={shortcutHint ? `${selectedLabel} (${shortcutHint})` : selectedLabel}
           aria-label={`${t("chat.safety.label")}: ${selectedLabel}`}
+          data-testid="composer-safety-mode"
+          data-mode={selected}
         >
           {modeIcon(selected, triggerIconClass(selected, reviewerMissing))}
         </DropdownMenuTrigger>
@@ -232,6 +234,7 @@ export function CommandSafetyModeSelector(props: {
               <DropdownMenuItem
                 key={mode}
                 disabled={entryDisabled}
+                data-testid={`composer-safety-mode-${mode}`}
                 onSelect={() => onChange(mode)}
                 className={cn(
                   "h-auto items-start gap-2.5 py-2 text-xs whitespace-normal",
