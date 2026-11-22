@@ -54,6 +54,23 @@ const SHARED_SERVER_FIELDS = ["policy", "workspaceRoots"] as const;
 /** Fields every K-brain with live MCP settings accepts (it rejects unknown fields). */
 const KBRAIN_SERVER_FIELDS = new Set([...LIVEAGENT_SERVER_FIELDS, ...SHARED_SERVER_FIELDS]);
 
+/**
+ * The display name, shared like policy but only accepted by backends with
+ * `mcp_tool_server_ids` (older ones reject the request), so it is sent only there.
+ */
+const SERVER_NAME_FIELD = "name";
+
+export type KBrainMcpSaveOptions = {
+  /** The backend takes servers[].name (`mcp_tool_server_ids`). */
+  serverNames?: boolean;
+};
+
+/** Whether a save changes any server's display name (so it needs the capability). */
+export function mcpServerNamesChanged(previous: McpSettings | undefined, next: McpSettings) {
+  const before = new Map((previous?.servers ?? []).map((server) => [server.id, server.name]));
+  return next.servers.some((server) => (server.name ?? "") !== (before.get(server.id) ?? ""));
+}
+
 function liveAgentServerFields(server: McpServerConfig): RawServer {
   return {
     id: server.id,
@@ -142,6 +159,7 @@ export function mergeKBrainMcpSettings(
   current: unknown,
   next: McpSettings,
   previous?: McpSettings,
+  options: KBrainMcpSaveOptions = {},
 ): Record<string, unknown> {
   const document = kbrainMcpSettingsDocument(current);
   if (!document) throw new Error("Malformed K-brain MCP settings");
@@ -181,6 +199,14 @@ export function mergeKBrainMcpSettings(
           : server[field];
       if (value === undefined) delete out[field];
       else out[field] = value;
+    }
+    if (options.serverNames) {
+      const name = server.name?.trim() || undefined;
+      const changed = before ? (before.name ?? "") !== (name ?? "") : name !== undefined;
+      if (changed) {
+        if (name === undefined) delete out[SERVER_NAME_FIELD];
+        else out[SERVER_NAME_FIELD] = name;
+      }
     }
     return out;
   });

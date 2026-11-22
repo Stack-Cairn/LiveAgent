@@ -245,6 +245,7 @@ export function McpHubPage(props: McpHubPageProps) {
           existingServers={settings.mcp.servers}
           onClose={() => setEditing(null)}
           onSave={handleModalSave}
+          allowDisplayName={runtime.serverNames}
         />
       ) : null}
     </div>

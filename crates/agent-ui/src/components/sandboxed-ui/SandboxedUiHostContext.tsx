@@ -4,6 +4,7 @@
 
 import { createContext, useContext } from "react";
 import type { HtmlPreviewRecord } from "../../lib/chat/htmlPreviews";
+import type { McpToolCallResponse } from "../../lib/mcp/toolCall";
 import type { McpAppToolTarget } from "../../lib/sandboxed-ui/mcpAppHost";
 
 export type SandboxedUiTranscriptHost = {
@@ -18,14 +19,23 @@ export type SandboxedUiTranscriptHost = {
   loadPreviewHtml: (url: string) => Promise<string>;
   /** HTML (with the backend's CSP meta) of a tool result's `ui_resource.url`. */
   loadMcpAppHtml: (url: string) => Promise<string>;
+  /**
+   * The backend confirms "ask" tools itself (`mcp_tool_call_approval`): a call may come
+   * back approval_required and is repeated with the approval id once the user agrees.
+   */
+  mcpToolCallApproval?: boolean;
   /** Finds `toolName` on `serverId` only, with its effective policy. */
   resolveMcpTool: (serverId: string, toolName: string) => Promise<McpAppToolTarget | null>;
+  /** POST /v1/mcp/tools/call as an App view; `approvalId` repeats an approved call. */
   callMcpTool: (
     fullName: string,
     args: Record<string, unknown>,
-  ) => Promise<{ output: string; failed: boolean }>;
-  /** Display name of an MCP server id, when known. */
-  mcpServerLabel?: (serverId: string) => string | undefined;
+    approvalId?: string,
+  ) => Promise<McpToolCallResponse>;
+  /** The stored raw result at a `ui_resource.result_url` (`mcp_apps_structured_content`). */
+  loadMcpToolResult?: (resultUrl: string) => Promise<Record<string, unknown> | null>;
+  /** Display name of an MCP server id, when it has one. */
+  mcpServerLabel?: (serverId: string) => Promise<string | undefined>;
   openExternal?: (url: string) => void;
   /** Shows a preview in the right dock; omitted where there is no dock. */
   openPreviewInSidePanel?: (preview: HtmlPreviewRecord) => void;

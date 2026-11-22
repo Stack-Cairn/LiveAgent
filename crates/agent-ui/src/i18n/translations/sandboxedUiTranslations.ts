@@ -23,6 +23,14 @@ export const SANDBOXED_UI_TRANSLATIONS = {
     "sandboxedUi.confirmLink.open": "打开链接",
     "sandboxedUi.mcpApp.unavailableHere": "此处无法显示该 MCP 应用界面。",
     "sandboxedUi.mcpApp.loadFailed": "MCP 应用界面加载失败，已显示文本结果。",
+    "sandboxedUi.mcpApp.approvalConflict":
+      "工具调用未执行：批准已过期或与请求不一致。请在界面中重新操作。",
+    "sandboxedUi.panelError.title": "面板无法加载",
+    "sandboxedUi.panelError.missing": "插件中缺少该面板的页面文件。",
+    "sandboxedUi.panelError.tooLarge": "该面板的页面文件过大，无法加载。",
+    "sandboxedUi.panelError.unavailable":
+      "插件当前不可用（可能已停用、已移动，或项目不再受信任）。",
+    "sandboxedUi.panelError.generic": "加载该面板时出错。",
     "sandboxedUi.preview.untitled": "HTML 预览",
     "sandboxedUi.preview.loadFailed": "预览加载失败。",
     "sandboxedUi.preview.sourceFile": "文件",
@@ -94,6 +102,14 @@ export const SANDBOXED_UI_TRANSLATIONS = {
     "sandboxedUi.confirmLink.open": "Open link",
     "sandboxedUi.mcpApp.unavailableHere": "This MCP App view can't be shown here.",
     "sandboxedUi.mcpApp.loadFailed": "The MCP App view failed to load; showing the text result.",
+    "sandboxedUi.mcpApp.approvalConflict":
+      "The tool call did not run: the approval expired or no longer matches the request. Try again from the view.",
+    "sandboxedUi.panelError.title": "This panel could not load",
+    "sandboxedUi.panelError.missing": "The plugin is missing this panel's page.",
+    "sandboxedUi.panelError.tooLarge": "This panel's page is too large to load.",
+    "sandboxedUi.panelError.unavailable":
+      "The plugin is not available right now (it may be disabled, moved, or the project is no longer trusted).",
+    "sandboxedUi.panelError.generic": "Something went wrong while loading this panel.",
     "sandboxedUi.preview.untitled": "HTML preview",
     "sandboxedUi.preview.loadFailed": "The preview failed to load.",
     "sandboxedUi.preview.sourceFile": "File",

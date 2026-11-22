@@ -31,6 +31,8 @@ export type McpAuthConfig = {
 
 export type McpServerConfig = {
   id: string;
+  /** Display name; K-brain with `mcp_tool_server_ids` only. Tool names stay on `id`. */
+  name?: string;
   description?: string;
   docsUrl?: string;
   enabled: boolean;

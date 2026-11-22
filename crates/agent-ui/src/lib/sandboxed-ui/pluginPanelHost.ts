@@ -56,9 +56,41 @@ export type PluginPanelHostOptions = {
     args: Record<string, unknown>,
   ) => Promise<{ output: string; failed: boolean }>;
   post: (message: JsonRpcResponse | JsonRpcNotification) => void;
+  /**
+   * The page reported it could not load (`host.panelLoadError`, sent by the backend's
+   * error page under `plugin_ui_errors`). Only ever shown as an error state.
+   */
+  onLoadError?: (error: PluginPanelLoadError) => void;
   grants?: SessionToolGrants;
   now?: () => number;
 };
+
+export type PluginPanelLoadError = {
+  /** asset_not_found, plugin_unavailable, asset_too_large, or a page's own code. */
+  code: string;
+  message: string;
+  status?: number;
+};
+
+const LOAD_ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+const LOAD_ERROR_MESSAGE_MAX_CHARS = 300;
+
+/** Validates `host.panelLoadError` params; anything malformed is dropped. */
+export function parsePanelLoadError(params: unknown): PluginPanelLoadError | null {
+  if (!isPlainRecord(params)) return null;
+  const code = typeof params.code === "string" ? params.code.trim() : "";
+  if (!LOAD_ERROR_CODE.test(code)) return null;
+  const flat = typeof params.message === "string" ? params.message.replace(/\s+/g, " ").trim() : "";
+  const message =
+    flat.length > LOAD_ERROR_MESSAGE_MAX_CHARS
+      ? `${flat.slice(0, LOAD_ERROR_MESSAGE_MAX_CHARS - 1)}…`
+      : flat;
+  const status =
+    typeof params.status === "number" && Number.isInteger(params.status)
+      ? params.status
+      : undefined;
+  return { code, message, ...(status !== undefined ? { status } : {}) };
+}
 
 /** Tool calls the user allowed for the rest of the app session. */
 export type SessionToolGrants = {
@@ -215,6 +247,12 @@ export function createPluginPanelHost(options: PluginPanelHostOptions): PluginPa
           }
           throw error;
         }
+      },
+    },
+    notifications: {
+      "host.panelLoadError": (params) => {
+        const error = parsePanelLoadError(params);
+        if (error) options.onLoadError?.(error);
       },
     },
   });

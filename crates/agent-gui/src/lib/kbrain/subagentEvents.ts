@@ -3,6 +3,7 @@ import type {
   KBrainMessage,
   KBrainModelRef,
   KBrainSubagent,
+  KBrainToolCall,
   KBrainUsage,
 } from "./types";
 
@@ -105,6 +106,31 @@ export function subagentDurationMs(subagent: KBrainSubagent, now = Date.now()) {
 type MutableMessage = KBrainMessage & { content: NonNullable<KBrainMessage["content"]> };
 
 /**
+ * Puts a child tool's MCP App view on its tool_calls[] entry, where history keeps it too,
+ * so the subagent transcript renders the view like the main one.
+ */
+function attachToolCallUiResource(
+  messages: KBrainMessage[],
+  callId: string,
+  uiResource: Record<string, unknown>,
+) {
+  if (!callId) return;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const calls = message?.role === "assistant" ? message.tool_calls : undefined;
+    const position = calls?.findIndex((call) => call.id === callId) ?? -1;
+    if (!calls || position < 0) continue;
+    const nextCalls = [...calls];
+    nextCalls[position] = {
+      ...calls[position],
+      ui_resource: uiResource as NonNullable<KBrainToolCall["ui_resource"]>,
+    };
+    messages[index] = { ...message, tool_calls: nextCalls };
+    return;
+  }
+}
+
+/**
  * Applies one `trajectory.child.*` event to a subagent transcript, the way K-brain
  * rebuilds it for /subagents/{task}: text and thinking extend the open assistant
  * message, thinking after text or tool calls opens the next one, a tool result or
@@ -188,6 +214,8 @@ export function applyChildEvent(
     case "trajectory.child.tool_end": {
       const stop =
         payload?.cancelled === true ? "cancelled" : payload?.failed === true ? "error" : undefined;
+      const uiResource = record(payload?.ui_resource);
+      if (uiResource) attachToolCallUiResource(next, text(payload?.id), uiResource);
       next.push({
         role: "tool",
         tool_call_id: text(payload?.id),

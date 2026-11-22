@@ -166,7 +166,20 @@ function PluginRow(props: {
             {toolNames.length ? (
               <>
                 <span>{t("sandboxedUi.plugins.toolList")}</span>
-                <span className="font-mono text-foreground/85">{toolNames.join(", ")}</span>
+                <span className="font-mono text-foreground/85">
+                  {plugin.contributes.toolDetails
+                    ? plugin.contributes.toolDetails.map((tool, index) => (
+                        <span
+                          key={tool.name}
+                          // The name the model sees, which permission rules use.
+                          title={[tool.modelName, tool.description].filter(Boolean).join(" · ")}
+                        >
+                          {index > 0 ? ", " : ""}
+                          {tool.name}
+                        </span>
+                      ))
+                    : toolNames.join(", ")}
+                </span>
               </>
             ) : null}
           </div>

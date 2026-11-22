@@ -14,6 +14,8 @@ export type McpRuntimeStatusState = {
   statuses: Map<string, McpServerRuntimeStatus> | null;
   available: boolean;
   reconnecting: boolean;
+  /** The backend takes a server display name. */
+  serverNames: boolean;
   error: string | null;
   reconnect: () => Promise<void>;
 };
@@ -31,6 +33,7 @@ export function useMcpRuntimeStatus(): McpRuntimeStatusState {
   const [statuses, setStatuses] = useState<Map<string, McpServerRuntimeStatus> | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverNames, setServerNames] = useState(false);
   const generation = useRef(0);
   const pollStartedAt = useRef<number | null>(null);
 
@@ -48,6 +51,21 @@ export function useMcpRuntimeStatus(): McpRuntimeStatusState {
       // Statuses are informational; the cards still render without them.
     }
   }, [adapter, apply]);
+
+  useEffect(() => {
+    const supports = adapter?.supportsServerNames;
+    if (!supports) return;
+    let cancelled = false;
+    supports().then(
+      (value) => {
+        if (!cancelled) setServerNames(value);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [adapter]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -103,5 +121,5 @@ export function useMcpRuntimeStatus(): McpRuntimeStatusState {
     }
   }, [adapter, apply]);
 
-  return { statuses, available: Boolean(adapter), reconnecting, error, reconnect };
+  return { statuses, available: Boolean(adapter), reconnecting, serverNames, error, reconnect };
 }
