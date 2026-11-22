@@ -28,6 +28,7 @@ LiveAgent 是 K-brain 的桌面和 Web 交互端：模型请求、Agent、工具
 | [design/planning-google-benchmark.md](design/planning-google-benchmark.md) | Google Calendar / Tasks 实测数据与 Planning 对标映射 | Planning 前端开发 |
 | [design/planning-design-alignment.md](design/planning-design-alignment.md) | 最新 main 前端设计规范分析与 Planning 对齐方式 | Planning 与共享 UI 开发 |
 | [design/proma-planning-reproduction.md](design/proma-planning-reproduction.md) | Proma 日程、Todo、提醒与自动化的源码分析及 LiveAgent 能力对照 | Planning 调研与开发 |
+| [design-system.md](design-system.md) | 设计令牌（颜色角色、字号、圆角、阴影、层级）、共享 UI 原语与 `check:design-tokens` 守护检查 | 前端开发 |
 | [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |
 | [operations/deployment.md](operations/deployment.md) | CI/CD、Gateway Docker、用户自部署、桌面 Release 自动化 | 发布维护 |
 | [operations/multi-agent.md](operations/multi-agent.md) | 多桌面 Agent 部署、每 Agent 凭证签发/轮换/删除、安全模型 | 多设备部署 |

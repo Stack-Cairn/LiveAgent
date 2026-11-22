@@ -340,8 +340,9 @@ jobs:
 
   code-rules:
     # Cheap repository-wide rules, run on every PR (~2 min, mostly the install):
-    # source file size limit, knip (unused files/exports/dependencies, new
-    # findings only) and the node micro-benchmark regression gate.
+    # source file size limit, design tokens (no new hard-coded colors or
+    # arbitrary sizes), knip (unused files/exports/dependencies, new findings
+    # only) and the node micro-benchmark regression gate.
     name: Code Rules
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -354,6 +355,9 @@ jobs:
 
       - name: Check source file size limit
         run: node scripts/check-file-size.mjs
+
+      - name: Check design tokens (no new hard-coded styles)
+        run: node scripts/check-design-tokens.mjs
 
       - name: Install pnpm
         run: npm install -g pnpm@10.32.1
