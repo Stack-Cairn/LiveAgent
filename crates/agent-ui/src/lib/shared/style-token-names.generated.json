@@ -1,6 +1,8 @@
 {
   "shadow": [
+    "card",
     "chat-user-bubble-editor",
+    "dialog",
     "gateway-bubble",
     "gateway-history-switch-overlay-card",
     "hub-frost-hero",
@@ -9,6 +11,7 @@
     "login-container-2",
     "login-input-wrap--focus-2",
     "login-input-wrap-focus",
+    "popover",
     "settings-surface",
     "status-board-event-dot",
     "status-board-pill",

@@ -39,6 +39,7 @@
   .layer-popover {
     font-size: calc(1rem * var(--zone-font-scale, 1));
     --text-tiny: calc(0.625rem * var(--zone-font-scale, 1));
+    --text-2xs: calc(0.6875rem * var(--zone-font-scale, 1));
     --text-xs: calc(0.75rem * var(--zone-font-scale, 1));
     --text-sm: calc(0.875rem * var(--zone-font-scale, 1));
     --text-base: calc(1rem * var(--zone-font-scale, 1));

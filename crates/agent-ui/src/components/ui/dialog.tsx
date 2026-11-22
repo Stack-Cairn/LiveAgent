@@ -33,7 +33,7 @@ const DialogOverlay = React.forwardRef<
     data-slot="dialog-overlay"
     forceRender
     className={cn(
-      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150",
+      "layer-modal fixed inset-0 bg-overlay backdrop-blur-xs transition-opacity duration-150",
       "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
