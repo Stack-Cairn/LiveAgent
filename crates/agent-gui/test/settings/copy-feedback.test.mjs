@@ -151,15 +151,15 @@ test("settings copy buttons preserve their surfaces and show success only after 
       assert.equal(button.hasAttribute("size"), false);
       assert.ok(button.classList.contains(size === "compact" ? "size-7" : "size-8"));
       await act(async () => button.click());
-      assert.equal(button.querySelector(".text-emerald-500"), null);
+      assert.equal(button.querySelector(".text-success"), null);
       await act(async () => resolveCopy());
-      assert.ok(button.querySelector(".text-emerald-500"));
+      assert.ok(button.querySelector(".text-success"));
       await act(async () => clock.advance(2000));
-      assert.equal(button.querySelector(".text-emerald-500"), null);
+      assert.equal(button.querySelector(".text-success"), null);
     }
     navigator.clipboard.writeText = async () => { throw Error("denied"); };
     await act(async () => container.firstElementChild.click());
-    assert.equal(container.querySelector(".text-emerald-500"), null);
+    assert.equal(container.querySelector(".text-success"), null);
     assert.equal(clock.timers.size, 0);
   } finally {
     await act(async () => root.unmount());

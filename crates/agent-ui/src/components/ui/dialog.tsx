@@ -115,7 +115,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
               // No default padding: the header/body/footer slots own their own
               // spacing, and every call site was cancelling a `p-6` here.
               "group/dialog relative my-auto w-full max-w-md",
-              "rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none",
+              "rounded-2xl border border-border/70 bg-background text-foreground shadow-dialog outline-none",
               "transition-[transform,opacity] duration-150 ease-out",
               "data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
               layout === "lightbox" &&

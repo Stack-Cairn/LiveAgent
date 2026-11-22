@@ -14,12 +14,12 @@ export const CommandDialogDescription = DialogPrimitive.Description;
 export function CommandDialogPopup({ className, children, ...props }: DialogPrimitive.Popup.Props) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="layer-modal fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-200 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-reduce:transition-none" />
+      <DialogPrimitive.Backdrop className="layer-modal fixed inset-0 bg-overlay backdrop-blur-sm transition-opacity duration-200 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-reduce:transition-none" />
       <DialogPrimitive.Viewport className="layer-modal fixed inset-0 flex flex-col items-center justify-center px-4 py-[4vh] sm:py-[6vh]">
         <DialogPrimitive.Popup
           data-slot="command-dialog-popup"
           className={cn(
-            "relative flex max-h-full min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-settings-tile text-popover-foreground shadow-xl outline-none transition-[opacity,scale] duration-200 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 motion-reduce:transition-none",
+            "relative flex max-h-full min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-settings-tile text-popover-foreground shadow-dialog outline-none transition-[opacity,scale] duration-200 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 motion-reduce:transition-none",
             className,
           )}
           {...props}

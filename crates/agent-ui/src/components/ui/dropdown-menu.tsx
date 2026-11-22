@@ -103,7 +103,7 @@ export const DropdownMenuSubTrigger = React.forwardRef<HTMLElement, DropdownMenu
       ref={ref}
       openOnHover={clickToggle ? false : undefined}
       className={cn(
-        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5",
+        "relative flex cursor-default select-none items-center rounded-xs px-row-x py-row-y",
         "text-sm outline-hidden transition-colors",
         "data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground data-[disabled]:opacity-50",
         React.useContext(MenuVariantContext) === "soft" && softItemClassName,
@@ -176,7 +176,7 @@ export const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuIte
     <Menu.Item
       ref={ref}
       className={cn(
-        "relative flex cursor-default select-none items-center rounded-xs px-2 py-1.5",
+        "relative flex cursor-default select-none items-center rounded-xs px-row-x py-row-y",
         "text-sm outline-hidden transition-colors",
         "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         React.useContext(MenuVariantContext) === "soft" && softItemClassName,

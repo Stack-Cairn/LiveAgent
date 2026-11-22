@@ -105,32 +105,23 @@ const ToastEntry = memo(function ToastEntry(props: { toast: ToastObject<ToastDat
           "data-[starting-style]:translate-x-5 data-[ending-style]:translate-x-5",
         notice
           ? isWarning
-            ? "border-amber-500/30"
+            ? "border-warning/30"
             : isSuccess
-              ? "border-emerald-500/30"
+              ? "border-success/30"
               : "border-destructive/30"
           : isWarning
-            ? "border-amber-500/30 bg-amber-50/95 dark:bg-amber-950/80 dark:border-amber-500/25"
+            ? "border-warning/30 bg-amber-50/95 dark:bg-amber-950/80"
             : isSuccess
-              ? "border-emerald-500/30 bg-emerald-50/95 dark:bg-emerald-950/80 dark:border-emerald-500/25"
-              : "border-red-500/30 bg-red-50/95 dark:bg-red-950/80 dark:border-red-500/25",
+              ? "border-success/30 bg-emerald-50/95 dark:bg-emerald-950/80"
+              : "border-destructive/30 bg-red-50/95 dark:bg-red-950/80",
       )}
     >
       {isWarning ? (
-        <AlertTriangle
-          aria-hidden="true"
-          className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-        />
+        <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
       ) : isSuccess ? (
-        <CheckCircle2
-          aria-hidden="true"
-          className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
-        />
+        <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />
       ) : (
-        <XCircle
-          aria-hidden="true"
-          className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400"
-        />
+        <XCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
       )}
       <div className="min-w-0 flex-1">
         {notification.title ? (
@@ -144,10 +135,10 @@ const ToastEntry = memo(function ToastEntry(props: { toast: ToastObject<ToastDat
                 ? "mt-0.5 max-h-40 overflow-y-auto text-xs text-muted-foreground"
                 : "text-foreground"
               : isWarning
-                ? "text-amber-800 dark:text-amber-200"
+                ? "text-warning"
                 : isSuccess
-                  ? "text-emerald-800 dark:text-emerald-200"
-                  : "text-red-800 dark:text-red-200",
+                  ? "text-success"
+                  : "text-destructive",
           )}
         />
         {notification.data?.action ? (

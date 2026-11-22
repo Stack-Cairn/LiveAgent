@@ -39,4 +39,7 @@
   --color-chip: hsl(var(--chip-bg));
   --color-chip-hover: hsl(var(--chip-bg-hover));
   --color-send-disabled: hsl(var(--send-disabled-bg));
+  --color-hub-canvas: hsl(var(--hub-canvas));
+  --color-chat-user: hsl(var(--chat-user-bg));
+  --color-chat-user-foreground: hsl(var(--chat-user-fg));
 }
