@@ -13,6 +13,8 @@ import type { VirtualItem } from "@tanstack/react-virtual";
 export type TranscriptMeasurementsLru = {
   save: (conversationId: string, layoutKey: string, measurements: VirtualItem[]) => void;
   restore: (conversationId: string, layoutKey: string) => VirtualItem[] | null;
+  /** Writes a pending persisted snapshot now (also runs on pagehide). */
+  flush: () => void;
 };
 
 export type TranscriptMeasurementsLruOptions = {
@@ -21,6 +23,9 @@ export type TranscriptMeasurementsLruOptions = {
   // previous in-memory-only behavior. Failures (quota, disabled storage,
   // malformed payloads) silently degrade to memory-only.
   persistNamespace?: string;
+  // Delay before a save reaches localStorage. Saves within the window are
+  // written once; the page hiding (pagehide, visibilitychange) writes early.
+  persistDelayMs?: number;
 };
 
 // The composite key both callers must use. Owning the shape here keeps the two
@@ -34,6 +39,7 @@ export function buildTranscriptLayoutKey(viewportWidth: number, contentWidth: nu
 }
 
 const DEFAULT_CAPACITY = 12;
+const DEFAULT_PERSIST_DELAY_MS = 1000;
 // Giant transcripts are cheap to re-measure relative to their storage cost;
 // exclude them from the persisted payload rather than risk quota churn. The
 // write itself still runs so a previously persisted (now stale) snapshot of
@@ -125,7 +131,35 @@ export function createTranscriptMeasurementsLru(
 ): TranscriptMeasurementsLru {
   const capacity = options.capacity ?? DEFAULT_CAPACITY;
   const persistNamespace = options.persistNamespace;
+  const persistDelayMs = options.persistDelayMs ?? DEFAULT_PERSIST_DELAY_MS;
   let entries: Map<string, StoredEntry> | null = null;
+  // Serializing every snapshot and writing localStorage is synchronous work
+  // on the conversation-switch path (save runs in an unmount cleanup), so the
+  // write is deferred and coalesced; memory is updated immediately.
+  let writeTimer: ReturnType<typeof setTimeout> | null = null;
+  let listening = false;
+
+  const flush = () => {
+    if (writeTimer === null) return;
+    clearTimeout(writeTimer);
+    writeTimer = null;
+    if (persistNamespace && entries) writePersistedEntries(persistNamespace, entries);
+  };
+
+  const onPageHide = () => flush();
+  const onVisibilityChange = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") flush();
+  };
+
+  const scheduleWrite = () => {
+    if (!listening && typeof globalThis.addEventListener === "function") {
+      listening = true;
+      globalThis.addEventListener("pagehide", onPageHide);
+      globalThis.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    if (writeTimer !== null) return;
+    writeTimer = setTimeout(flush, persistDelayMs);
+  };
 
   // Lazy so module-level singletons don't pay the localStorage read until a
   // transcript actually mounts.
@@ -154,9 +188,7 @@ export function createTranscriptMeasurementsLru(
         if (oldest === undefined) break;
         map.delete(oldest);
       }
-      if (persistNamespace) {
-        writePersistedEntries(persistNamespace, map);
-      }
+      if (persistNamespace) scheduleWrite();
     },
     restore: (conversationId, layoutKey) => {
       const map = getEntries();
@@ -168,5 +200,6 @@ export function createTranscriptMeasurementsLru(
       map.set(conversationId, hit);
       return hit.measurements;
     },
+    flush,
   };
 }
