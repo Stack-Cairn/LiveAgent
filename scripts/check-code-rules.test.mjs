@@ -189,12 +189,12 @@ function load(options) {
   assert.doesNotMatch(compiled, /from "pkg"/, "unresolved specifiers are skipped");
 });
 
-test("perf gate: time metrics are normalized, ratios are absolute", () => {
+test("perf gate: ratios are absolute, times are a wide normalized backstop", () => {
   assert.equal(median([3, 1, 2]), 2);
   assert.equal(median([4, 1, 2, 3]), 2.5);
   const baseline = {
     metrics: {
-      "sse.incremental8mbMs": 2,
+      "sse.incremental2mbMs": 2,
       "projection.reuseRatio": 0.03,
       "store.usPerEvent200": 1,
       "lru.persistedBytes": 1000,
@@ -202,17 +202,27 @@ test("perf gate: time metrics are normalized, ratios are absolute", () => {
   };
   const rows = (metrics, speed = 1) =>
     Object.fromEntries(comparePerf(metrics, baseline, speed).map((row) => [row.key, row.status]));
-  const fine = { "sse.incremental8mbMs": 6, "projection.reuseRatio": 0.2, "store.usPerEvent200": 2.9, "lru.persistedBytes": 1040 };
+  const fine = {
+    "sse.scaling16vs2": 5,
+    "sse.incremental2mbMs": 8,
+    "projection.reuseRatio": 0.2,
+    "store.usPerEvent200": 4.9,
+    "lru.persistedBytes": 1040,
+  };
   const result = rows(fine);
-  assert.equal(result["sse.incremental8mbMs"], "ok", "limit is max(2*3, 2+3) = 6");
+  assert.equal(result["sse.scaling16vs2"], "ok");
+  assert.equal(result["sse.incremental2mbMs"], "ok", "4x the baseline is engine/runner noise, not a regression");
   assert.equal(result["projection.reuseRatio"], "ok");
-  assert.equal(result["store.usPerEvent200"], "ok");
+  assert.equal(result["store.usPerEvent200"], "ok", "limit is max(1*5, 1+3) = 5");
   assert.equal(result["lru.persistedBytes"], "ok");
   assert.equal(result["projection.freshMs"], "missing", "a gated metric without baseline fails");
+  assert.equal(result["store.historyScaling"], "missing", "a ratio that was not measured fails");
 
-  assert.equal(rows({ ...fine, "sse.incremental8mbMs": 12 })["sse.incremental8mbMs"], "fail");
-  assert.equal(rows({ ...fine, "sse.incremental8mbMs": 12 }, 2)["sse.incremental8mbMs"], "ok", "a 2x slower machine halves the reading");
-  assert.equal(rows({ ...fine, "projection.reuseRatio": 0.9 }, 0.1)["projection.reuseRatio"], "fail", "ratios ignore machine speed");
+  assert.equal(rows({ ...fine, "sse.scaling16vs2": 100 })["sse.scaling16vs2"], "fail", "quadratic growth");
+  assert.equal(rows({ ...fine, "sse.scaling16vs2": 100 }, 0.1)["sse.scaling16vs2"], "fail", "ratios ignore machine speed");
+  assert.equal(rows({ ...fine, "sse.incremental2mbMs": 25 })["sse.incremental2mbMs"], "fail", "limit is max(2*10, 2+5) = 20");
+  assert.equal(rows({ ...fine, "sse.incremental2mbMs": 25 }, 2)["sse.incremental2mbMs"], "ok", "a 2x slower machine halves the reading");
+  assert.equal(rows({ ...fine, "projection.reuseRatio": 0.9 }, 0.1)["projection.reuseRatio"], "fail");
   assert.equal(rows({ ...fine, "lru.persistedBytes": 1100 })["lru.persistedBytes"], "fail");
 });
 

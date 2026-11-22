@@ -58,6 +58,14 @@ for (const [name, run] of selected) {
   }
   times.sort((a, b) => a - b);
   console.log(
-    JSON.stringify({ parser: name, mb: megabytes, chunkBytes, medianMs: Number(times[Math.floor(runs / 2)].toFixed(1)) }),
+    JSON.stringify({
+      parser: name,
+      mb: megabytes,
+      chunkBytes,
+      medianMs: Number(times[Math.floor(runs / 2)].toFixed(1)),
+      // Interference (other processes, GC of earlier runs) only adds time,
+      // so the fastest run is the most stable estimate of the work itself.
+      minMs: Number(times[0].toFixed(2)),
+    }),
   );
 }

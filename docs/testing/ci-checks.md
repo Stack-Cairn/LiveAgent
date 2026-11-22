@@ -11,7 +11,7 @@ budget is always a deliberate commit with a reason in the message.
 | Bundle size budget | `pnpm check:bundle-size` | `ci.yml` → Frontend Bundles | yes | (in the job above, <1 s) |
 | Source file size limit | `pnpm check:file-size` | `ci.yml` → Code Rules | yes | ~2 min for the job |
 | Unused code (knip) | `pnpm check:knip` | `ci.yml` → Code Rules | yes, new findings only | (in the job above, ~5 s) |
-| Micro-benchmark gate | `pnpm check:perf-micro` | `ci.yml` → Code Rules | yes | (in the job above, ~15 s) |
+| Micro-benchmark gate | `pnpm check:perf-micro` | `ci.yml` → Code Rules | yes | (in the job above, ~20 s) |
 | Transcript browser scenarios | `pnpm perf:scenarios` | `perf.yml` | no, report only | ~3 min (quick), ~6 min (full) |
 
 Frontend Bundles runs on pushes and on PRs whose `frontend` path filter
@@ -155,28 +155,47 @@ in the commit.
 - `store-bench`: WebUI transcript store.
 - `lru-bench`: measurement LRU.
 
-It compares them with `scripts/budgets/perf-micro-baseline.json`. CI timings
-are noisy, so the gate avoids raw wall-clock thresholds:
+CI timings are noisy, and they differ by engine and memory bandwidth in ways
+a CPU calibration does not capture. The first CI run (Node 22, ubuntu)
+measured the SSE split about 4× slower, after normalization, than the Node 26
+machine that recorded the baseline. So the gate does not rest on wall-clock
+thresholds:
 
-- Every benchmark runs in 5 fresh processes, and the median is used.
-- Timings are normalized by a calibration workload measured in the same job,
-  before and after the benchmarks. A time fails only beyond
-  `max(baseline × factor, baseline + floor)`, with a factor of 3-4×.
-- Scaling ratios are compared with fixed limits, since they do not depend on
-  the machine. Examples are store cost with 2000 vs. 200 turns, and
-  re-projection vs. fresh projection. These ratios catch work that starts
-  growing with conversation length.
-- Deterministic outputs (persisted snapshot bytes) are compared exactly, with
-  a 5% tolerance.
+- **Scaling ratios are the primary gate.** They have fixed limits, need no
+  baseline, and are the same on any machine or engine. They catch the
+  regressions that matter, which is work that grows quadratically with event
+  or conversation size.
+
+  | Ratio | Linear work | Limit | Quadratic regression |
+  | --- | --- | --- | --- |
+  | SSE split, 16 MB / 2 MB event | 5-13 (idle or all cores busy) | 30 | ~115 (re-join per chunk) |
+  | Store event, 2000 / 200 turns | 0.8-1.8 | 5 | ~11 (copy every turn per event) |
+  | Re-projection / fresh projection | 0.03-0.08 | 0.5 | - |
+
+  The SSE sizes stay small on purpose. Past about 16 MB, the cost per MB
+  itself rises when the machine is busy: 32 MB / 8 MB went from 7 to 12 with
+  every core loaded.
+- **Every benchmark runs in 5 fresh processes**, and the gate uses the
+  median. For the SSE split it is the median of each process's fastest run,
+  because interference only adds time and hits the longer run more.
+- **Timings are only a backstop against gross slowdowns.** They are
+  normalized by a calibration workload measured in the same job, and fail
+  only beyond `max(baseline × factor, baseline + floor)`. The factor is 10×
+  for the SSE split and 5-6× for the rest, compared with the up to 4× seen
+  on CI.
+- **Deterministic outputs** (persisted snapshot bytes) are compared with
+  `scripts/budgets/perf-micro-baseline.json` within a 5% tolerance.
 
 ```sh
 pnpm check:perf-micro
 pnpm check:perf-micro --update   # rewrite the baseline from this machine
 ```
 
-If it fails, re-run it locally and profile the benchmark it names. If a
-slowdown is intended, update the baseline and explain it in the commit. Thanks
-to the calibration factor, the baseline can be recorded on any machine.
+If it fails, re-run it locally and profile the benchmark it names. A failed
+ratio means the work stopped being linear, which is a real regression on any
+machine. If a slowdown is intended, update the baseline and explain it in the
+commit. Only the backstop timings and the snapshot size come from the
+baseline, so it can be recorded on any machine.
 
 ## Transcript browser scenarios (report only)
 

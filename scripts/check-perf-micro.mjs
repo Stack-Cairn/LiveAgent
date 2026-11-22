@@ -3,16 +3,19 @@
 // crates/agent-gui/perf (SSE record splitting, transcript projection, WebUI
 // transcript store, measurement LRU).
 //
-// Wall-clock numbers on shared CI runners are noisy, so the gate leans on
-// signals that survive a slow or busy machine:
+// Wall-clock numbers on shared CI runners are noisy, and they also differ by
+// engine and memory bandwidth in ways a CPU calibration does not capture
+// (the SSE split measured ~4x slower, normalized, on Node 22 / ubuntu than
+// on the Node 26 machine that recorded the baseline). So the gate is built on
+// signals that survive a slow, busy or different machine:
+//   - scaling ratios are the primary gate: cost for 8x the event size (SSE),
+//     10x the history (store), re-projection vs. fresh projection. They need
+//     no baseline, are the same on any engine, and catch the regressions that
+//     matter: work that grows quadratically with event or conversation size;
 //   - every benchmark runs in several fresh processes and the median is used;
-//   - timings are normalized by a fixed calibration workload measured in the
-//     same job (a runner twice as slow has a calibration twice as long), and
-//     fail only beyond a wide factor of the committed baseline plus an
-//     absolute floor, so jitter on sub-millisecond numbers cannot trip it;
-//   - scaling ratios (cost with 10x the history vs. without, re-projection
-//     vs. fresh projection) are machine-independent and catch the regressions
-//     that matter: work that starts growing with conversation length;
+//   - timings are only a backstop against gross slowdowns: normalized by a
+//     calibration workload measured in the same job, they fail beyond a wide
+//     factor (5-10x) of the committed baseline plus an absolute floor;
 //   - deterministic outputs (persisted snapshot bytes) are compared directly.
 //
 // Usage:
@@ -31,20 +34,31 @@ const appRoot = path.join(repoRoot, "crates/agent-gui");
 export const BASELINE_FILE = path.join(repoRoot, "scripts/budgets/perf-micro-baseline.json");
 
 // Gate kinds:
-//   time:  normalized value may not exceed baseline * factor AND baseline + floor;
-//   ratio: value may not exceed `max` (machine-independent);
+//   time:  normalized value may not exceed max(baseline * factor, baseline + floor);
+//   ratio: value may not exceed `max` (machine- and engine-independent);
 //   exact: value may not drift more than `tolerance` (relative) from baseline;
 //   info:  reported only.
+//
+// Limits (observed: Node 26 / macOS arm64 baseline machine, Node 22 / ubuntu CI):
+//   - SSE 16 MB / 2 MB: linear work gives 5-10, idle or with every core
+//     busy; a splitter that re-joins its buffer per chunk gives ~100.
+//     Limit 30. The sizes stay small on purpose: past ~16 MB the per-MB cost
+//     itself rises under load (32 MB / 8 MB went from 7 to 12 with all cores
+//     busy) and the ratio stops meaning "linear or not".
+//   - SSE times: CI ran at ~4x the baseline after normalization (engine and
+//     memory differences); the backstop allows 10x. The quadratic splitter
+//     measured 30-100x.
+//   - store/projection times: CI ran at 1.2-2x; the backstop allows 5-6x.
 export const METRICS = [
-  { key: "sse.incremental8mbMs", label: "SSE split, 8 MB event (ms)", kind: "time", factor: 3, floor: 3 },
-  { key: "sse.incremental32mbMs", label: "SSE split, 32 MB event (ms)", kind: "time", factor: 3, floor: 10 },
-  { key: "sse.scaling32vs8", label: "SSE split 32 MB / 8 MB", kind: "info" },
-  { key: "projection.freshMs", label: "Projection, 2000 messages (ms)", kind: "time", factor: 3, floor: 5 },
-  { key: "projection.reprojectMs", label: "Re-projection, same messages (ms)", kind: "time", factor: 4, floor: 2 },
+  { key: "sse.scaling16vs2", label: "SSE split 16 MB / 2 MB", kind: "ratio", max: 30 },
+  { key: "sse.incremental2mbMs", label: "SSE split, 2 MB event, fastest run (ms)", kind: "time", factor: 10, floor: 5 },
+  { key: "sse.incremental16mbMs", label: "SSE split, 16 MB event, fastest run (ms)", kind: "time", factor: 10, floor: 20 },
   { key: "projection.reuseRatio", label: "Re-projection / projection", kind: "ratio", max: 0.5 },
-  { key: "store.usPerEvent200", label: "Store token event, 200 turns (us)", kind: "time", factor: 3, floor: 2 },
-  { key: "store.usPerEvent2000", label: "Store token event, 2000 turns (us)", kind: "time", factor: 3, floor: 2 },
+  { key: "projection.freshMs", label: "Projection, 2000 messages (ms)", kind: "time", factor: 5, floor: 10 },
+  { key: "projection.reprojectMs", label: "Re-projection, same messages (ms)", kind: "time", factor: 6, floor: 3 },
   { key: "store.historyScaling", label: "Store event 2000 / 200 turns", kind: "ratio", max: 5 },
+  { key: "store.usPerEvent200", label: "Store token event, 200 turns (us)", kind: "time", factor: 5, floor: 3 },
+  { key: "store.usPerEvent2000", label: "Store token event, 2000 turns (us)", kind: "time", factor: 5, floor: 3 },
   { key: "lru.persistedBytes", label: "Measurement snapshot (bytes)", kind: "exact", tolerance: 0.05 },
 ];
 
@@ -123,11 +137,13 @@ export function measure(repeat) {
     samples[key].push(value);
   };
   for (let run = 0; run < repeat; run += 1) {
-    const [sse8] = runBench("perf/sse-bench.mjs", ["--parsers=incremental", "--mb=8", "--runs=9"]);
-    const [sse32] = runBench("perf/sse-bench.mjs", ["--parsers=incremental", "--mb=32", "--runs=5"]);
-    add("sse.incremental8mbMs", sse8.medianMs);
-    add("sse.incremental32mbMs", sse32.medianMs);
-    add("sse.scaling32vs8", sse32.medianMs / Math.max(0.05, sse8.medianMs));
+    // Fastest of several runs per process: interference only adds time, and
+    // it hits the longer run more, which would skew the ratio.
+    const [sse2] = runBench("perf/sse-bench.mjs", ["--parsers=incremental", "--mb=2", "--runs=15"]);
+    const [sse16] = runBench("perf/sse-bench.mjs", ["--parsers=incremental", "--mb=16", "--runs=9"]);
+    add("sse.incremental2mbMs", sse2.minMs);
+    add("sse.incremental16mbMs", sse16.minMs);
+    add("sse.scaling16vs2", sse16.minMs / Math.max(0.01, sse2.minMs));
 
     const [projection] = runBench("perf/projection-bench.mjs");
     add("projection.freshMs", projection.freshMedianMs);
@@ -156,6 +172,7 @@ export function compare(metrics, baseline, speed) {
     const expected = baseline.metrics?.[metric.key];
     const row = { ...metric, current, baseline: expected ?? null, normalized: null, limit: null };
     if (metric.kind === "info") return { ...row, status: "info" };
+    if (typeof current !== "number" || Number.isNaN(current)) return { ...row, status: "missing" };
     if (metric.kind === "ratio") {
       row.limit = metric.max;
       return { ...row, status: current > metric.max ? "fail" : "ok" };
