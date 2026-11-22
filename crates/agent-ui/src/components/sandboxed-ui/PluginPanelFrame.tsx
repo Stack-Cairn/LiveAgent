@@ -2,6 +2,7 @@
 
 import { AlertTriangle, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -72,19 +73,16 @@ function PluginPanelError(props: {
 }) {
   const { t } = useLocale();
   return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-8 text-center",
-        props.className,
-      )}
+    <EmptyState
+      className={cn("min-h-0 flex-1 gap-2 px-6 py-8", props.className)}
       data-plugin-panel-error={props.code}
       role="alert"
     >
       <AlertTriangle className="size-5 text-destructive" />
-      <p className="text-sm font-medium text-foreground/85">{t("sandboxedUi.panelError.title")}</p>
+      <p className="font-medium text-foreground">{t("sandboxedUi.panelError.title")}</p>
       <p className="max-w-sm text-xs text-muted-foreground">{t(panelErrorKey(props.code))}</p>
       {props.message ? (
-        <p className="max-w-sm break-words text-xs text-foreground/45">{props.message}</p>
+        <p className="max-w-sm break-words text-xs text-muted-foreground/75">{props.message}</p>
       ) : null}
       <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-tiny text-muted-foreground">
         {props.code}
@@ -95,7 +93,7 @@ function PluginPanelError(props: {
           {t("sandboxedUi.reload")}
         </Button>
       ) : null}
-    </div>
+    </EmptyState>
   );
 }
 
