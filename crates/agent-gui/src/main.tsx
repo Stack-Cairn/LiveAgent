@@ -15,6 +15,7 @@ import {
 import { migrateAllHistoryOnce } from "./lib/kbrain/historyMigration";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { createStartupRenderer } from "./lib/startup/render";
+import { runStartupSequence } from "./lib/startup/sequence";
 import { installWebviewNavigationGuard } from "./lib/system/webviewNavigationGuard";
 import { listen } from "./shims/tauriEvent";
 
@@ -39,6 +40,9 @@ function runBootstrapAgain() {
     });
 }
 
+// Loaded only once K-brain is connected (its modules expect the runtime connection).
+const loadApp = () => import("./App");
+
 const bootstrap = createKBrainBootstrapRunner(async () => {
   const screen = createStartupRenderer();
   // Settles when the user leaves this attempt: "skip" opens the app now, "retry" ends the
@@ -60,7 +64,7 @@ const bootstrap = createKBrainBootstrapRunner(async () => {
   };
   const openApp = async () => {
     screen.phase("opening");
-    const { default: App } = await import("./App");
+    const { default: App } = await loadApp();
     screen.dispose();
     root.render(
       <React.StrictMode>
@@ -69,28 +73,39 @@ const bootstrap = createKBrainBootstrapRunner(async () => {
     );
   };
   try {
-    await connectKBrainBackendWithRetry();
-    // Connected: from here on the user may skip the history check (it continues in the
-    // background) or restart the local service once a step stops making progress.
-    screen.offerEscapes({ skip: () => leave("skip"), retry: restartAndRetry });
-    // Startup skips conversations that already failed deterministically with unchanged
-    // content; they are listed in Settings and in the app notice instead of re-uploaded.
-    screen.phase("checking");
-    const migration = migrateAllHistoryOnce({
-      onProgress: screen.progress,
-      signal: attempt.signal,
-    }).then((result) => {
-      const newFailures = result.failures.filter((failure) => !failure.skipped);
-      if (newFailures.length > 0) {
-        console.warn("Legacy history migration incomplete", newFailures);
-      }
-    });
-    const outcome = await Promise.race([migration.then(() => "done" as const), left]);
+    const { outcome, history } = await runStartupSequence(
+      {
+        connect: (defer) =>
+          connectKBrainBackendWithRetry(undefined, { deferHostBridgeRefresh: defer }),
+        // Connected: from here on the user may skip the history check (it continues in the
+        // background) or restart the local service once a step stops making progress.
+        onConnected: () => {
+          screen.offerEscapes({ skip: () => leave("skip"), retry: restartAndRetry });
+          // Startup skips conversations that already failed deterministically with unchanged
+          // content; they are listed in Settings and in the app notice instead of re-uploaded.
+          screen.phase("checking");
+        },
+        checkHistory: () =>
+          migrateAllHistoryOnce({
+            onProgress: screen.progress,
+            signal: attempt.signal,
+          }).then((result) => {
+            const newFailures = result.failures.filter((failure) => !failure.skipped);
+            if (newFailures.length > 0) {
+              console.warn("Legacy history migration incomplete", newFailures);
+            }
+          }),
+        // The app code needs the backend connection but not the history check: it loads
+        // while the check runs and renders once the check is done.
+        preloadApp: loadApp,
+      },
+      left,
+    );
     if (outcome === "retry") return;
     if (outcome === "skip") {
       // Every step is time-bounded, so the remaining work ends on its own; whatever it does
       // not finish is retried on the next launch.
-      void migration.catch((error) => console.error("Background history migration failed", error));
+      void history.catch((error) => console.error("Background history migration failed", error));
     }
     await openApp();
   } catch (error) {

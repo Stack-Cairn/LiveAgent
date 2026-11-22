@@ -16,7 +16,11 @@ test("host and provider runtime are always K-brain", () => {
 test("main waits for backend readiness before dynamically importing App", () => {
   const source = readFileSync(new URL("../../src/main.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /import App from ["']\.\/App["']/);
-  assert.match(source, /await connectKBrainBackendWithRetry\(\)/);
-  assert.match(source, /await import\(["']\.\/App["']\)/);
+  // The app code loads only through the startup sequence, which connects first
+  // (test/startup/startup-sequence.test.mjs covers that order).
+  assert.match(source, /connect: \(defer\) =>\s+connectKBrainBackendWithRetry\(/);
+  assert.match(source, /const loadApp = \(\) => import\(["']\.\/App["']\)/);
+  assert.match(source, /preloadApp: loadApp/);
+  assert.equal(source.match(/import\(["']\.\/App["']\)/g)?.length, 1);
   assert.match(source, /notifyFrontendReady\(\)/);
 });

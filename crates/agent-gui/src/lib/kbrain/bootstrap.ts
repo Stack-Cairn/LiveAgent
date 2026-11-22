@@ -19,6 +19,11 @@ export type KBrainBootstrapOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
   fetch?: typeof globalThis.fetch;
+  /**
+   * Hands the desktop host bridge refresh to the caller instead of awaiting it, so startup can
+   * run it next to its other steps. Reconnects leave it unset and wait as before.
+   */
+  deferHostBridgeRefresh?: (refresh: Promise<unknown>) => void;
 };
 
 type BootstrapInvoke = typeof invoke;
@@ -168,10 +173,12 @@ export async function connectKBrainBackend(
   // The desktop registers its host bridge (ReadTerminal, TunnelManager) with every K-brain it
   // starts; refreshing here makes sure the backend just (re)connected has it before the first
   // run, and tells the run options which bridge tools K-brain knows. Never fails the connect.
-  await loadHostBridgeStatus(invokeFn, {
+  const refresh = loadHostBridgeStatus(invokeFn, {
     refresh: true,
     timeoutMs: HOST_BRIDGE_REFRESH_TIMEOUT_MS,
   });
+  if (options.deferHostBridgeRefresh) options.deferHostBridgeRefresh(refresh);
+  else await refresh;
   return getConfiguredKBrainConnection() as KBrainRuntimeConnection;
 }
 

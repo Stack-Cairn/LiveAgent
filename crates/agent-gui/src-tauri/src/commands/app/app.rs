@@ -40,6 +40,9 @@ pub fn app_frontend_ready(
     ready_state: State<'_, Arc<FrontendReadyState>>,
 ) -> Result<(), String> {
     ready_state.0.store(true, Ordering::SeqCst);
+    static FIRST_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    // The static boot screen asks first; the app asks again once it rendered or failed.
+    crate::runtime::startup_timing::log_once(&FIRST_READY, "window shown");
     if window.is_visible().unwrap_or(false) {
         return Ok(());
     }
