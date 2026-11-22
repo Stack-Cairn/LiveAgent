@@ -176,13 +176,90 @@ fn collect_pi_files(root: &Path, out: &mut Vec<PiCandidate>, budget: &mut usize)
     }
 }
 
-fn pi_candidates(home: &Path) -> Vec<PiCandidate> {
-    let root = std::env::var_os("PI_CODING_AGENT_SESSION_DIR")
+fn pi_sessions_root(home: &Path) -> PathBuf {
+    std::env::var_os("PI_CODING_AGENT_SESSION_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| pi_agent_root(home).join("sessions"));
+        .unwrap_or_else(|| pi_agent_root(home).join("sessions"))
+}
+
+/// More session files than this and the signature gives up (`None`): the frontend then runs
+/// the full pass, as it did before signatures existed.
+const PI_MAX_SIGNATURE_FILES: usize = 100_000;
+
+fn hash_pi_files(root: &Path, hasher: &mut sha2::Sha256, count: &mut usize) -> bool {
+    let Ok(entries) = fs::read_dir(root) else {
+        return true;
+    };
+    let mut entries: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+    entries.sort();
+    for path in entries {
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            if !hash_pi_files(&path, hasher, count) {
+                return false;
+            }
+            continue;
+        }
+        if !metadata.is_file() || !valid_pi_file(&path) {
+            continue;
+        }
+        *count += 1;
+        if *count > PI_MAX_SIGNATURE_FILES {
+            return false;
+        }
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        let path = path.to_string_lossy();
+        hasher.update((path.len() as u64).to_le_bytes());
+        hasher.update(path.as_bytes());
+        hasher.update(metadata.len().to_le_bytes());
+        hasher.update(modified.to_le_bytes());
+    }
+    true
+}
+
+/// Fingerprint of the Pi session files from directory metadata only (path, size, mtime of
+/// every `.jsonl` file; no file is opened). Any added, removed, rewritten or appended session
+/// changes it, so an unchanged directory lets startup skip the full rescan.
+fn pi_history_signature_for_root(root: &Path) -> Option<String> {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(b"pi-sessions-v1\0");
+    let root_text = root.to_string_lossy();
+    hasher.update((root_text.len() as u64).to_le_bytes());
+    hasher.update(root_text.as_bytes());
+    let mut count = 0;
+    if !hash_pi_files(root, &mut hasher, &mut count) {
+        return None;
+    }
+    let digest = hasher.finalize();
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    Some(format!("pi:{count}:{hex}"))
+}
+
+#[tauri::command]
+pub async fn pi_history_migration_signature() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = crate::runtime::data_home::home_dir()
+            .ok_or_else(|| "cannot locate user home".to_string())?;
+        Ok(pi_history_signature_for_root(&pi_sessions_root(&home)))
+    })
+    .await
+    .map_err(|e| format!("pi history signature join failed: {e}"))?
+}
+
+fn pi_candidates_for_root(root: &Path) -> Vec<PiCandidate> {
     let mut out = Vec::new();
     let mut budget = PI_MAX_FILES_PER_PAGE_SCAN;
-    collect_pi_files(&root, &mut out, &mut budget);
+    collect_pi_files(root, &mut out, &mut budget);
     out.sort_by(|left, right| {
         right
             .modified_at
@@ -577,16 +654,53 @@ pub async fn pi_history_migration_page(cursor: Option<String>) -> Result<PiMigra
 fn pi_history_migration_page_sync(cursor: Option<String>) -> Result<PiMigrationPage, String> {
     let home = crate::runtime::data_home::home_dir()
         .ok_or_else(|| "cannot locate user home".to_string())?;
-    let candidates = pi_candidates(&home);
+    Ok(pi_history_page_for_root(&pi_sessions_root(&home), cursor))
+}
+
+/// The candidate list of the pass in progress. A pass reads its pages in a row, and scanning
+/// (one open and header parse per file) on every page made a full pass quadratic in the
+/// number of sessions; the first page of a pass scans, its continuations reuse that scan.
+static PASS_CANDIDATES: std::sync::Mutex<Option<(PathBuf, std::sync::Arc<Vec<PiCandidate>>)>> =
+    std::sync::Mutex::new(None);
+
+fn candidates_for_page(root: &Path, continuing: bool) -> std::sync::Arc<Vec<PiCandidate>> {
+    let mut cached = PASS_CANDIDATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if continuing {
+        if let Some((cached_root, candidates)) = cached.as_ref() {
+            if cached_root == root {
+                return std::sync::Arc::clone(candidates);
+            }
+        }
+    }
+    let candidates = std::sync::Arc::new(pi_candidates_for_root(root));
+    *cached = Some((root.to_path_buf(), std::sync::Arc::clone(&candidates)));
+    candidates
+}
+
+fn cursor_position(candidates: &[PiCandidate], after: &str) -> Option<usize> {
+    candidates
+        .iter()
+        .position(|candidate| safe_id(&candidate.path.to_string_lossy()) == after)
+        .map(|index| index + 1)
+}
+
+fn pi_history_page_for_root(root: &Path, cursor: Option<String>) -> PiMigrationPage {
     let after = cursor.unwrap_or_default();
+    let mut candidates = candidates_for_page(root, !after.is_empty());
     let start = if after.is_empty() {
         0
     } else {
-        candidates
-            .iter()
-            .position(|candidate| safe_id(&candidate.path.to_string_lossy()) == after)
-            .map(|index| index + 1)
-            .unwrap_or(candidates.len())
+        match cursor_position(&candidates, &after) {
+            Some(start) => start,
+            None => {
+                // Not in this pass's scan (another pass started since): scan again, as every
+                // page did before the scan was shared.
+                candidates = candidates_for_page(root, false);
+                cursor_position(&candidates, &after).unwrap_or(candidates.len())
+            }
+        }
     };
     let selected = candidates.iter().skip(start).take(PI_PAGE_SIZE);
     let mut conversations = Vec::new();
@@ -597,12 +711,12 @@ fn pi_history_migration_page_sync(cursor: Option<String>) -> Result<PiMigrationP
     }
     let has_more = start.saturating_add(PI_PAGE_SIZE) < candidates.len();
     let next_cursor = conversations.last().map(|record| record.id.clone());
-    Ok(PiMigrationPage {
+    PiMigrationPage {
         conversations,
         next_cursor: has_more.then_some(next_cursor.unwrap_or_default()),
         complete: !has_more,
         source: "pi-jsonl".to_string(),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -679,5 +793,188 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["root", "active"]
         );
+    }
+
+    fn write_session(dir: &Path, name: &str, id: &str, messages: usize) -> PathBuf {
+        let path = dir.join(name);
+        let mut lines = vec![
+            serde_json::json!({"type":"session","version":3,"id":id,"timestamp":"2026-01-01T00:00:00Z","cwd":"/workspace"}),
+        ];
+        let mut parent = Value::Null;
+        for index in 0..messages {
+            let entry_id = format!("{id}-m{index}");
+            let role = if index % 2 == 0 { "user" } else { "assistant" };
+            lines.push(serde_json::json!({"type":"message","id":entry_id,"parentId":parent,"timestamp":"2026-01-01T00:00:01Z","message":{"role":role,"content":format!("synthetic message {index} of {id}")}}));
+            parent = Value::String(entry_id);
+        }
+        std::fs::write(
+            &path,
+            lines
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n",
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn signature_is_stable_and_follows_every_session_file_change() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        let missing = pi_history_signature_for_root(&sessions).expect("missing dir signature");
+        assert!(missing.starts_with("pi:0:"), "{missing}");
+
+        let project = sessions.join("--workspace--");
+        std::fs::create_dir_all(&project).unwrap();
+        let first = write_session(&project, "a.jsonl", "a", 2);
+        write_session(&project, "b.jsonl", "b", 2);
+        std::fs::write(project.join("notes.txt"), "not a session").unwrap();
+        let base = pi_history_signature_for_root(&sessions).unwrap();
+        assert!(base.starts_with("pi:2:"), "{base}");
+        assert_eq!(pi_history_signature_for_root(&sessions).unwrap(), base);
+
+        // Non-session files do not count.
+        std::fs::write(project.join("notes.txt"), "still not a session").unwrap();
+        assert_eq!(pi_history_signature_for_root(&sessions).unwrap(), base);
+
+        // Appending to a session changes its size.
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&first)
+            .unwrap();
+        std::io::Write::write_all(&mut file, b"{\"type\":\"message\"}\n").unwrap();
+        drop(file);
+        let appended = pi_history_signature_for_root(&sessions).unwrap();
+        assert_ne!(appended, base);
+
+        // A rewrite with the same size changes its mtime.
+        let earlier = SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&first)
+            .unwrap()
+            .set_modified(earlier)
+            .unwrap();
+        let touched = pi_history_signature_for_root(&sessions).unwrap();
+        assert_ne!(touched, appended);
+
+        // Added and removed sessions, including in a new subdirectory.
+        let other = sessions.join("--other--");
+        std::fs::create_dir_all(&other).unwrap();
+        let added = write_session(&other, "c.jsonl", "c", 1);
+        let with_new = pi_history_signature_for_root(&sessions).unwrap();
+        assert!(with_new.starts_with("pi:3:"), "{with_new}");
+        std::fs::remove_file(added).unwrap();
+        assert_eq!(pi_history_signature_for_root(&sessions).unwrap(), touched);
+    }
+
+    #[test]
+    fn a_pass_reads_every_session_once_with_one_scan_and_recovers_from_a_foreign_cursor() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        for index in 0..(PI_PAGE_SIZE * 2 + 5) {
+            write_session(
+                &sessions,
+                &format!("s{index:03}.jsonl"),
+                &format!("s{index:03}"),
+                2,
+            );
+        }
+        let mut seen = Vec::new();
+        let mut cursor = None;
+        let mut pages = 0;
+        loop {
+            let page = pi_history_page_for_root(&sessions, cursor.clone());
+            pages += 1;
+            seen.extend(
+                page.conversations
+                    .iter()
+                    .map(|record| record.session_id.clone()),
+            );
+            if page.complete {
+                break;
+            }
+            cursor = page.next_cursor;
+            // Files written during the pass are not part of its scan; the next pass sees them.
+            if pages == 1 {
+                write_session(&sessions, "late.jsonl", "late", 1);
+            }
+        }
+        assert_eq!(pages, 3);
+        let mut unique = seen.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), seen.len(), "no session is read twice");
+        assert_eq!(seen.len(), PI_PAGE_SIZE * 2 + 5);
+        assert!(!seen.contains(&"late".to_string()));
+
+        // A new pass scans again and includes the late file.
+        let first = pi_history_page_for_root(&sessions, None);
+        assert!(!first.complete);
+        // A cursor this scan does not know (e.g. from another root's pass) rescans
+        // instead of ending the pass early.
+        let other = root.path().join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        write_session(&other, "x.jsonl", "x", 1);
+        let _ = pi_history_page_for_root(&other, None);
+        let resumed = pi_history_page_for_root(&sessions, first.next_cursor.clone());
+        assert_eq!(resumed.conversations.len(), PI_PAGE_SIZE);
+    }
+
+    /// `cargo test --lib pi_migration::tests::bench_ -- --ignored --nocapture`
+    #[test]
+    #[ignore = "benchmark: prints Pi startup rescan timings for 2000 synthetic sessions"]
+    fn bench_pi_startup_rescan_2000_sessions() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        for project in 0..20 {
+            let dir = sessions.join(format!("--project-{project}--"));
+            std::fs::create_dir_all(&dir).unwrap();
+            for index in 0..100 {
+                write_session(
+                    &dir,
+                    &format!("{index:04}.jsonl"),
+                    &format!("p{project}-s{index}"),
+                    20,
+                );
+            }
+        }
+        let pass = |shared_scan: bool| {
+            let started = std::time::Instant::now();
+            let mut cursor: Option<String> = None;
+            let mut records = 0;
+            loop {
+                let page = if shared_scan {
+                    pi_history_page_for_root(&sessions, cursor.clone())
+                } else {
+                    // What every page did before: a fresh scan of all files.
+                    *PASS_CANDIDATES.lock().unwrap() = None;
+                    pi_history_page_for_root(&sessions, cursor.clone())
+                };
+                records += page.conversations.len();
+                if page.complete {
+                    break;
+                }
+                cursor = page.next_cursor;
+            }
+            assert_eq!(records, 2000);
+            started.elapsed()
+        };
+        for round in 0..3 {
+            let rescanning = pass(false);
+            let shared = pass(true);
+            let started = std::time::Instant::now();
+            let signature = pi_history_signature_for_root(&sessions).unwrap();
+            let signature_time = started.elapsed();
+            assert!(signature.starts_with("pi:2000:"));
+            println!(
+                "round {round}: full pass, scan per page {:?}; full pass, one scan {:?}; unchanged launch (signature only) {:?}",
+                rescanning, shared, signature_time
+            );
+        }
     }
 }

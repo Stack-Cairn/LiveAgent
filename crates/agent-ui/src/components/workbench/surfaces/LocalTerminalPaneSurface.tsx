@@ -3,7 +3,7 @@ import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "../../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../../lib/terminal/types";
-import { XTermViewport } from "../../project-tools/XTermViewport";
+import { XTermViewport } from "../../project-tools/LazyXTermViewport";
 import { Button } from "../../ui/button";
 
 export type TerminalPaneSurfacePhase = "dormant" | "connecting" | "ready" | "exited" | "error";

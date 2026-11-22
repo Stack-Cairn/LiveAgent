@@ -5,7 +5,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -85,6 +85,44 @@ pub struct KBrainBackendState {
     /// Every listener/token change (start, restart on a new port, shutdown), so
     /// dependents such as the managed Gateway never keep a stale backend.
     connection_tx: tokio::sync::watch::Sender<Option<KBrainBackendConnection>>,
+    /// The start launched from app setup, so K-brain boots while the webview loads; the
+    /// first frontend connect takes its outcome instead of starting a second attempt.
+    prestart: Mutex<Option<Arc<Prestart>>>,
+}
+
+/// Outcome of the start launched from app setup (see [`KBrainBackendState::prestart`]).
+struct Prestart {
+    /// Shutdown epoch when the start was launched: a later stop/restart makes its error stale.
+    epoch: u64,
+    result: Mutex<Option<Result<KBrainBackendConnection, String>>>,
+    done: Condvar,
+}
+
+impl Prestart {
+    fn finish(&self, result: Result<KBrainBackendConnection, String>) {
+        let mut guard = self
+            .result
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        *guard = Some(result);
+        self.done.notify_all();
+    }
+
+    fn wait(&self) -> Result<KBrainBackendConnection, String> {
+        let mut guard = self
+            .result
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        loop {
+            if let Some(result) = guard.as_ref() {
+                return result.clone();
+            }
+            guard = self
+                .done
+                .wait(guard)
+                .unwrap_or_else(|error| error.into_inner());
+        }
+    }
 }
 
 impl Default for KBrainBackendState {
@@ -96,6 +134,7 @@ impl Default for KBrainBackendState {
             exiting: AtomicBool::new(false),
             starts_suspended: AtomicBool::new(false),
             connection_tx: tokio::sync::watch::channel(None).0,
+            prestart: Mutex::new(None),
         }
     }
 }
@@ -399,6 +438,87 @@ impl KBrainBackendState {
         Ok(connection)
     }
 
+    /// Starts K-brain on a background thread during app setup, so the process boots while the
+    /// webview is still loading the frontend instead of after it asks for the connection.
+    pub fn prestart(self: &Arc<Self>, app: &AppHandle) {
+        let handle = app.clone();
+        self.prestart_with(move |state| state.ensure_started(&handle));
+    }
+
+    fn prestart_with<F>(self: &Arc<Self>, start: F)
+    where
+        F: FnOnce(&Self) -> Result<KBrainBackendConnection, String> + Send + 'static,
+    {
+        let slot = Arc::new(Prestart {
+            epoch: self.shutdown_epoch.load(Ordering::SeqCst),
+            result: Mutex::new(None),
+            done: Condvar::new(),
+        });
+        let Ok(mut pending) = self.prestart.lock() else {
+            return;
+        };
+        *pending = Some(Arc::clone(&slot));
+        drop(pending);
+        let state = Arc::clone(self);
+        let spawned = thread::Builder::new()
+            .name("kbrain-prestart".into())
+            .spawn(move || {
+                let started = Instant::now();
+                let result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| start(&state)))
+                        .unwrap_or_else(|_| Err("K-brain backend startup panicked".into()));
+                let elapsed = started.elapsed().as_millis();
+                let at = crate::runtime::startup_timing::since_launch_ms();
+                match &result {
+                    Ok(_) => eprintln!(
+                        "[startup] K-brain backend ready at {at} ms (start took {elapsed} ms)"
+                    ),
+                    Err(error) => eprintln!(
+                        "[startup] K-brain backend start failed at {at} ms after {elapsed} ms: {error}"
+                    ),
+                }
+                slot.finish(result);
+            });
+        if let Err(error) = spawned {
+            eprintln!("failed to start K-brain early: {error}");
+            // Nothing will fill the slot: the frontend starts the backend on demand instead.
+            if let Ok(mut pending) = self.prestart.lock() {
+                pending.take();
+            }
+        }
+    }
+
+    /// The connection for the frontend's bootstrap. The first call waits for the setup start
+    /// and reports its failure as its own (one start attempt, one startup timeout, exactly as
+    /// when the frontend launched it); afterwards, or once a stop/restart superseded that
+    /// start, it is a plain [`Self::ensure_started`].
+    pub fn connection_for_frontend(
+        &self,
+        app: &AppHandle,
+    ) -> Result<KBrainBackendConnection, String> {
+        self.connection_for_frontend_with(|state| state.ensure_started(app))
+    }
+
+    fn connection_for_frontend_with(
+        &self,
+        start: impl FnOnce(&Self) -> Result<KBrainBackendConnection, String>,
+    ) -> Result<KBrainBackendConnection, String> {
+        let prestart = self
+            .prestart
+            .lock()
+            .ok()
+            .and_then(|mut pending| pending.take());
+        if let Some(prestart) = prestart {
+            if let Err(error) = prestart.wait() {
+                if prestart.epoch == self.shutdown_epoch.load(Ordering::SeqCst) {
+                    return Err(error);
+                }
+            }
+        }
+        // A running backend is reused; a dead or stopped one is started again.
+        start(self)
+    }
+
     /// The live backend, without starting one: callers that merely follow
     /// K-Brain (the managed Gateway) must never launch it, e.g. during an update.
     pub fn running_connection(&self) -> Option<KBrainBackendConnection> {
@@ -515,11 +635,14 @@ pub async fn kbrain_backend_connection(
     app: AppHandle,
     state: State<'_, Arc<KBrainBackendState>>,
 ) -> Result<KBrainBackendConnection, String> {
+    static FIRST_REQUEST: AtomicBool = AtomicBool::new(false);
+    crate::runtime::startup_timing::log_once(&FIRST_REQUEST, "frontend asked for K-brain");
     let state = Arc::clone(state.inner());
     let handle = app.clone();
-    let connection = tauri::async_runtime::spawn_blocking(move || state.ensure_started(&handle))
-        .await
-        .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
+    let connection =
+        tauri::async_runtime::spawn_blocking(move || state.connection_for_frontend(&handle))
+            .await
+            .map_err(|error| format!("K-brain backend startup task failed: {error}"))??;
     Ok(connection)
 }
 
@@ -1030,6 +1153,119 @@ while True:
             state.shutdown();
             assert_fixture_reaped(&data);
         }
+    }
+
+    fn fake_connection(port: u16) -> KBrainBackendConnection {
+        KBrainBackendConnection {
+            base_url: format!("http://127.0.0.1:{port}"),
+            token: "token".into(),
+            protocol_version: PROTOCOL_VERSION.into(),
+            storage_id: "local-test".into(),
+        }
+    }
+
+    #[test]
+    fn frontend_connect_waits_for_the_setup_start_and_hands_over_its_failure_once() {
+        let state = Arc::new(KBrainBackendState::default());
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        state.prestart_with(move |_| {
+            release_rx.recv().expect("release");
+            Err("K-brain backend exited before becoming ready (code 23)".into())
+        });
+        let starts = AtomicU64::new(0);
+        let waiter = {
+            let state = Arc::clone(&state);
+            thread::spawn(move || {
+                state.connection_for_frontend_with(|_| Err("second start must not run".into()))
+            })
+        };
+        thread::sleep(Duration::from_millis(50));
+        assert!(
+            !waiter.is_finished(),
+            "the connect must wait for the setup start"
+        );
+        release_tx.send(()).expect("release");
+        let error = waiter.join().expect("waiter").expect_err("setup failure");
+        assert!(error.contains("code 23"), "{error}");
+        // The failure was reported once; the retry the frontend makes starts the backend again.
+        let retried = state
+            .connection_for_frontend_with(|_| {
+                starts.fetch_add(1, Ordering::SeqCst);
+                Ok(fake_connection(1))
+            })
+            .expect("retry starts");
+        assert_eq!(retried.base_url, "http://127.0.0.1:1");
+        assert_eq!(starts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_setup_start_failure_superseded_by_a_restart_is_not_reported() {
+        let state = Arc::new(KBrainBackendState::default());
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        state.prestart_with(move |_| {
+            let _ = done_tx.send(());
+            Err("K-brain backend startup cancelled".into())
+        });
+        done_rx.recv().expect("setup start ran");
+        // A stop/restart after the setup start made its outcome stale.
+        state.shutdown();
+        let connection = state
+            .connection_for_frontend_with(|_| Ok(fake_connection(2)))
+            .expect("fresh start");
+        assert_eq!(connection.base_url, "http://127.0.0.1:2");
+    }
+
+    #[test]
+    fn without_a_setup_start_the_frontend_connect_starts_on_demand() {
+        let state = KBrainBackendState::default();
+        let connection = state
+            .connection_for_frontend_with(|_| Ok(fake_connection(3)))
+            .expect("start");
+        assert_eq!(connection.base_url, "http://127.0.0.1:3");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn frontend_connect_reuses_the_backend_started_during_setup() {
+        let _serial = CHILD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let temp = test_dir();
+        let binary = fixture_binary(&temp, "parent-loss");
+        let data = temp.path().join("data");
+        let state = Arc::new(KBrainBackendState::default());
+        let mut changes = state.subscribe_connection();
+        {
+            let binary = binary.clone();
+            let data = data.clone();
+            state.prestart_with(move |state| state.ensure_started_with_binary(binary, data));
+        }
+        let connection = state
+            .connection_for_frontend_with(|state| {
+                state.ensure_started_with_binary(binary.clone(), data.clone())
+            })
+            .expect("connection");
+        let first_pid = std::fs::read_to_string(data.join("fixture.pid")).expect("pid");
+        // Followers saw the setup start, and the frontend got that same process.
+        assert_eq!(
+            changes
+                .borrow_and_update()
+                .as_ref()
+                .map(|c| c.token.clone()),
+            Some(connection.token.clone())
+        );
+        let again = state
+            .connection_for_frontend_with(|state| {
+                state.ensure_started_with_binary(binary, data.clone())
+            })
+            .expect("reconnect");
+        assert_eq!(again.token, connection.token);
+        assert_eq!(
+            std::fs::read_to_string(data.join("fixture.pid")).expect("pid"),
+            first_pid
+        );
+        state.shutdown();
+        assert_fixture_reaped(&data);
     }
 
     #[test]

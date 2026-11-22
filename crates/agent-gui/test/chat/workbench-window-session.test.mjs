@@ -214,8 +214,11 @@ test("startup paints theme and shell before progressively hydrating pane content
   assert.match(appSource, /chatPageModule \?\?= import\("\.\/pages\/ChatPage"\)/);
   assert.match(
     appSource,
-    /const persistedSettingsPromise = loadPersistedSettingsWithDefaults\(\);[\s\S]{0,320}void loadChatPage\(\);[\s\S]{0,160}await persistedSettingsPromise/,
+    /const persistedSettingsPromise = loadPersistedSettingsWithDefaults\(\);[\s\S]{0,320}chatPageLoaded = loadChatPage\(\)\.catch\(\(\) => undefined\);[\s\S]{0,160}await persistedSettingsPromise/,
   );
+  // The boot screen hands over only once the chat page chunk is there, so the chat surface never
+  // shows (and React never holds) its Suspense fallback on a normal start.
+  assert.match(appSource, /finally \{\s*await chatPageLoaded;\s*if \(!cancelled\) \{\s*setSettingsReady\(true\);/);
   assert.match(appSource, /getBootAlignedDefaultSettings/);
   assert.match(appSource, /document\.documentElement\.classList\.contains\("dark"\)/);
   assert.doesNotMatch(appSource, /\nvoid loadChatPage\(\);/);

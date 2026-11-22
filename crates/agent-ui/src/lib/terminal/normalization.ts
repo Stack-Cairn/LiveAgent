@@ -170,12 +170,29 @@ export function normalizeTerminalByteContainer(
   }
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   if (Array.isArray(value)) {
-    return Uint8Array.from(value.map((item) => Number(item) & 0xff));
+    return Uint8Array.from(value, (item) => Number(item) & 0xff);
   }
   if (typeof value === "string" && value.length > 0) {
     return decodeString(value);
   }
   return new Uint8Array();
+}
+
+type Base64Uint8ArrayConstructor = { fromBase64?: (text: string) => Uint8Array };
+const nativeFromBase64 = (Uint8Array as unknown as Base64Uint8ArrayConstructor).fromBase64;
+
+/**
+ * Decodes standard base64, the wire format of terminal output bytes from the desktop host.
+ * Uses the engine's native decoder when there is one. Throws on malformed input.
+ */
+export function decodeBase64Bytes(text: string): Uint8Array {
+  if (typeof nativeFromBase64 === "function") return nativeFromBase64.call(Uint8Array, text);
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 export function normalizeTerminalSession(input: RawTerminalSession): TerminalSession {

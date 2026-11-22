@@ -6,10 +6,10 @@ import { cn } from "../../lib/shared/utils";
 import type { TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import { Button } from "../ui/button";
 import { BackgroundTasksPanel } from "./BackgroundTasksPanel";
+import { XTermViewport } from "./LazyXTermViewport";
 import { useRightDockToolContext } from "./RightDockContext";
 import { NO_LEASED_RIGHT_DOCK_TOOLS, type RightDockLeasedToolKind } from "./rightDockModel";
 import { RIGHT_DOCK_TOOL_DEFINITIONS, type RightDockSingletonTabKind } from "./rightDockRegistry";
-import { XTermViewport } from "./XTermViewport";
 
 type RightDockContentProps = {
   isOpen: boolean;

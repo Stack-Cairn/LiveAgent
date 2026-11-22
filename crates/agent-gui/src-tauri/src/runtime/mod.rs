@@ -9,6 +9,7 @@ pub mod sandbox;
 pub mod sftp;
 pub mod shell_runner;
 pub mod shell_session;
+pub(crate) mod startup_timing;
 pub mod task_runner;
 pub mod terminal;
 #[cfg(target_os = "macos")]

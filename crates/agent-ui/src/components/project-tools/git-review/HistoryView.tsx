@@ -48,7 +48,7 @@ import {
 import { cn } from "../../../lib/shared/utils";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { useRightDockToolContext } from "../RightDockContext";
-import { DiffContent } from "./DiffView";
+import { DiffContent } from "./LazyDiffView";
 import {
   basename,
   type CommitRefKind,

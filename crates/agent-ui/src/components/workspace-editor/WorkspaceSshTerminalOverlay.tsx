@@ -9,7 +9,7 @@ import {
   Terminal,
   X,
 } from "@liveagent/ui/components/IconSet";
-import { XTermViewport } from "@liveagent/ui/components/project-tools/XTermViewport";
+import { XTermViewport } from "@liveagent/ui/components/project-tools/LazyXTermViewport";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";

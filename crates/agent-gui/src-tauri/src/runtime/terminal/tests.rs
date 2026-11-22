@@ -1412,3 +1412,140 @@ fn close_emits_exit_then_closed_without_a_trailing_exit() {
         .collect();
     assert_eq!(kinds, vec!["exit".to_string(), "closed".to_string()]);
 }
+
+#[test]
+fn terminal_output_bytes_cross_the_webview_as_base64_and_round_trip() {
+    // "é" (2 bytes), "€" (3 bytes) and "𝄞" (4 bytes) split across chunk boundaries: every
+    // chunk carries the raw bytes, never re-encoded text, so the stream decoder downstream
+    // still sees the original sequence.
+    let text = "héllo €uro 𝄞 clef\r\n".repeat(700);
+    let bytes = text.as_bytes();
+    let mut offset = 0usize;
+    let mut decoded = Vec::new();
+    for size in [1usize, 2, 3, 5, 7, 4096, 8191, 8192].iter().cycle() {
+        if offset >= bytes.len() {
+            break;
+        }
+        let end = (offset + size).min(bytes.len());
+        let payload = test_stream_payload(offset as u64, &bytes[offset..end]);
+        let json = serde_json::to_value(&payload).unwrap();
+        assert!(json["bytes"].is_string(), "bytes must be a base64 string");
+        let back: TerminalStreamEventPayload = serde_json::from_value(json).unwrap();
+        assert_eq!(back.start_offset, offset as u64);
+        assert_eq!(back.end_offset, end as u64);
+        decoded.extend_from_slice(&back.bytes);
+        offset = end;
+    }
+    assert_eq!(decoded, bytes);
+    assert_eq!(String::from_utf8(decoded).unwrap(), text);
+
+    // Chunks cut inside a multibyte sequence are not valid UTF-8 on their own and must survive.
+    let euro = "€".as_bytes();
+    for cut in 1..euro.len() {
+        for part in [&euro[..cut], &euro[cut..]] {
+            let json = serde_json::to_string(&test_stream_payload(0, part)).unwrap();
+            let back: TerminalStreamEventPayload = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.bytes, part);
+        }
+    }
+
+    // Older payloads with a number array still deserialize.
+    let legacy: TerminalStreamEventPayload = serde_json::from_value(serde_json::json!({
+        "kind": "output", "sessionId": "t", "projectPathKey": "/p",
+        "startOffset": 0, "endOffset": 3, "bytes": [0xe2, 0x82, 0xac],
+    }))
+    .unwrap();
+    assert_eq!(legacy.bytes, euro);
+}
+
+#[test]
+fn terminal_snapshots_and_events_encode_bytes_as_base64() {
+    let snapshot = serde_json::to_value(TerminalStreamSnapshotResponse {
+        session: test_session_record(),
+        bytes: vec![0, 255, 0xe2, 0x82],
+        truncated: false,
+        output_start_offset: 0,
+        output_end_offset: 4,
+    })
+    .unwrap();
+    assert_eq!(snapshot["bytes"], "AP/igg==");
+
+    let created = serde_json::to_value(TerminalSnapshotResponse {
+        session: test_session_record(),
+        output: String::new(),
+        output_bytes: b"ok".to_vec(),
+        truncated: false,
+        output_start_offset: 0,
+        output_end_offset: 2,
+    })
+    .unwrap();
+    assert_eq!(created["outputBytes"], "b2s=");
+
+    let mut event = TerminalEventPayload {
+        kind: "created".to_string(),
+        session_id: "t".to_string(),
+        project_path_key: "/p".to_string(),
+        session: None,
+        data: None,
+        output_start_offset: None,
+        output_end_offset: None,
+        ssh_tabs: None,
+        ssh_local_forward: None,
+    };
+    let without = serde_json::to_value(&event).unwrap();
+    assert!(without.get("data").is_none());
+    let back: TerminalEventPayload = serde_json::from_value(without).unwrap();
+    assert_eq!(back.data, None);
+    event.data = Some(b"ok".to_vec());
+    let with = serde_json::to_value(&event).unwrap();
+    assert_eq!(with["data"], "b2s=");
+    let back: TerminalEventPayload = serde_json::from_value(with).unwrap();
+    assert_eq!(back.data.as_deref(), Some(&b"ok"[..]));
+}
+
+fn test_session_record() -> TerminalSessionRecord {
+    serde_json::from_value(serde_json::json!({
+        "id": "t", "projectPathKey": "/p", "cwd": "/p", "shell": "sh", "title": "t",
+        "kind": "local", "pid": null, "cols": 80, "rows": 24, "createdAt": 0, "updatedAt": 0,
+        "finishedAt": null, "exitCode": null, "running": true,
+    }))
+    .unwrap()
+}
+
+/// `cargo test --lib terminal::tests::bench_ -- --ignored --nocapture`
+#[test]
+#[ignore = "benchmark: prints the webview wire size and serialization time of 50 MB of output"]
+fn bench_terminal_output_wire_encoding() {
+    let line = "drwxr-xr-x  12 user  staff   384 Nov 22 10:00 héllo-€-目录\r\n";
+    let output = line.repeat(50 * 1024 * 1024 / line.len());
+    let chunks: Vec<_> = output.as_bytes().chunks(8192).collect();
+    let mut array_size = 0usize;
+    let started = std::time::Instant::now();
+    for (index, chunk) in chunks.iter().enumerate() {
+        // The previous wire format: a plain `Vec<u8>` field.
+        let json = serde_json::to_string(&serde_json::json!({
+            "kind": "output", "sessionId": "terminal-1", "projectPathKey": "/tmp/project",
+            "startOffset": index * 8192, "endOffset": index * 8192 + chunk.len(), "bytes": chunk,
+        }))
+        .unwrap();
+        array_size += json.len();
+    }
+    let array_time = started.elapsed();
+    let mut base64_size = 0usize;
+    let started = std::time::Instant::now();
+    for (index, chunk) in chunks.iter().enumerate() {
+        let json =
+            serde_json::to_string(&test_stream_payload((index * 8192) as u64, chunk)).unwrap();
+        base64_size += json.len();
+    }
+    let base64_time = started.elapsed();
+    println!(
+        "{} chunks of 8 KiB ({} bytes): number array {} bytes in {:?}; base64 {} bytes in {:?}",
+        chunks.len(),
+        output.len(),
+        array_size,
+        array_time,
+        base64_size,
+        base64_time
+    );
+}
