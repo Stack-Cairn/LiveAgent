@@ -11,6 +11,21 @@ export const TIMEOUTS = {
   ui: 15_000,
 };
 
+/**
+ * Gives the window a desktop-sized viewport. Under Xvfb without a window
+ * manager the app window can come up at its minimum size, which collapses
+ * the sidebar into the narrow layout.
+ */
+export async function ensureDesktopViewport() {
+  const { width } = await browser.getWindowSize();
+  if (width >= 1280) return;
+  await browser.setWindowSize(1400, 900);
+  await browser.waitUntil(async () => (await browser.execute(() => window.innerWidth)) >= 1200, {
+    timeout: TIMEOUTS.ui,
+    timeoutMsg: "window did not resize",
+  });
+}
+
 /** Waits until the chat composer is interactive (backend connected, model loaded). */
 export async function waitForAppReady() {
   const composer = await $(`${byTestId("chat-composer")} [role="textbox"]`);
@@ -22,16 +37,69 @@ export async function waitForAppReady() {
   return composer;
 }
 
+function withDeadline(promise, ms, message) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Waits for the first launch of a session to become interactive. On the
+ * Tauri target a WebKitGTK web process occasionally comes up blank and stops
+ * answering script calls; relaunching once recovers it, while a second blank
+ * launch still fails the spec.
+ */
+export async function waitForLaunch() {
+  const attempts = target === "tauri" ? 2 : 1;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await withDeadline(
+        (async () => {
+          if (target === "tauri") await ensureDesktopViewport();
+          await waitForAppReady();
+        })(),
+        TIMEOUTS.boot,
+        "app launch did not become interactive",
+      );
+      return;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      console.warn(`[e2e] launch attempt ${attempt} failed (${error.message}); relaunching the app`);
+      await browser.reloadSession();
+    }
+  }
+}
+
 /** The platform modifier for app shortcuts (Cmd on macOS, Ctrl elsewhere). */
 export async function primaryModifier() {
   const isMac = await browser.execute(() => /mac/i.test(navigator.platform));
   return isMac ? "Meta" : "Control";
 }
 
+/**
+ * Types into an input or contenteditable. WebKitWebDriver drops repeated
+ * characters and spaces when sending text key by key, so insert it the way an
+ * IME commit does; the element sees the same input events as for typing.
+ */
+export async function insertText(selector, text) {
+  await browser.execute(
+    (target, value) => {
+      const element = document.querySelector(target);
+      if (!element) throw new Error(`no element for ${target}`);
+      element.focus();
+      document.execCommand("insertText", false, value);
+    },
+    selector,
+    text,
+  );
+}
+
 export async function typePrompt(text) {
   const composer = await waitForAppReady();
   await composer.click();
-  await browser.keys(text.split(""));
+  await insertText(`${byTestId("chat-composer")} [role="textbox"]`, text);
   await browser.waitUntil(async () => (await composer.getText()).includes(text), {
     timeout: TIMEOUTS.ui,
     timeoutMsg: `composer never contained ${JSON.stringify(text)}`,
@@ -126,5 +194,5 @@ export async function restartApp() {
   } else {
     await browser.refresh();
   }
-  await waitForAppReady();
+  await waitForLaunch();
 }

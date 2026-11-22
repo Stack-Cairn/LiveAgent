@@ -62,9 +62,11 @@ docker run "${common[@]}" -e E2E_SKIP_APP_BUILD="${E2E_SKIP_APP_BUILD:-0}" "$ima
 
 # 2) Run the suite offline under a virtual display and a session bus.
 shift_args=$(printf '%q ' "$@")
-docker run "${common[@]}" --network none --shm-size=1g \
+# --init: xvfb-run waits for a signal from Xvfb that never arrives when it is PID 1.
+docker run "${common[@]}" --init --network none --shm-size=1g \
   -e E2E_ARTIFACTS_DIR=/artifacts -e E2E_RUN_DIR=/tmp/e2e-run \
-  -e E2E_SCREENSHOTS="${E2E_SCREENSHOTS:-}" \
+  -e E2E_SCREENSHOTS="${E2E_SCREENSHOTS:-}" -e E2E_LOG_LEVEL="${E2E_LOG_LEVEL:-}" \
+  -e E2E_TEST_TIMEOUT="${E2E_TEST_TIMEOUT:-}" -e E2E_RETRIES="${E2E_RETRIES:-}" \
   "$image" bash -euo pipefail -c "
   cd /workspace/crates/agent-gui/e2e
   xvfb-run -a -s '-screen 0 1600x1000x24' dbus-run-session -- pnpm exec wdio run wdio.conf.mjs $shift_args

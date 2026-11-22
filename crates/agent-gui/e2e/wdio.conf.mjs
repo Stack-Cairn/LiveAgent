@@ -74,8 +74,9 @@ async function collectHomeLogs(home, destination) {
   }
 }
 
+// No browserName: WebKitWebDriver rejects any value other than its own, and
+// tauri-driver only needs the application path.
 const tauriCapabilities = {
-  browserName: "wry",
   "tauri:options": { application: appBinary() },
   "wdio:maxInstances": 1,
 };
@@ -115,17 +116,21 @@ export const config = {
   reporters: ["spec"],
   mochaOpts: {
     ui: "bdd",
-    timeout: 180_000,
+    timeout: Number(process.env.E2E_TEST_TIMEOUT || 180_000),
     // One retry in CI absorbs rare WebKit timing flakes; a real regression still
     // fails twice and is reported.
-    retries: isCI ? 1 : 0,
+    retries: Number(process.env.E2E_RETRIES ?? (isCI ? 1 : 0)),
   },
 
   async onPrepare() {
     // Empty rather than remove: either directory may be a bind mount.
     for (const dir of [runDir, artifactsDir]) {
       await mkdir(dir, { recursive: true });
-      for (const entry of await readdir(dir)) await rm(join(dir, entry), { recursive: true, force: true });
+      for (const entry of await readdir(dir)) {
+        // wdio-logs is opened by the launcher before this hook runs.
+        if (entry === "wdio-logs") continue;
+        await rm(join(dir, entry), { recursive: true, force: true });
+      }
     }
     if (target === "tauri" && !existsSync(appBinary())) {
       throw new Error(`desktop binary not found at ${appBinary()}; run \`pnpm --filter @liveagent/desktop-e2e build:app\``);
@@ -216,6 +221,8 @@ export const config = {
     if (target === "web") {
       await browser.url(`http://127.0.0.1:${ports.vite}/`);
     }
+    const { waitForLaunch } = await import("./support/app.mjs");
+    await waitForLaunch();
     globalThis.e2e = { home: specHome, target };
   },
 

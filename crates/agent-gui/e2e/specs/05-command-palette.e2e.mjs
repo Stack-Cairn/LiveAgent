@@ -1,5 +1,5 @@
 import { $, $$, browser, expect } from "@wdio/globals";
-import { TIMEOUTS, byTestId, primaryModifier, waitForAppReady } from "../support/app.mjs";
+import { TIMEOUTS, byTestId, insertText, primaryModifier, waitForAppReady } from "../support/app.mjs";
 
 const palette = "[data-command-palette]";
 const action = (id) => `${palette} [data-command-palette-action="${id}"]`;
@@ -11,9 +11,9 @@ describe("command palette", () => {
     await $(palette).waitForDisplayed({ timeout: TIMEOUTS.ui, timeoutMsg: "palette did not open" });
     await expect($(action("toggle-sidebar"))).toBeDisplayed();
 
-    const input = await $(`${palette} [role="combobox"]`);
-    await input.waitForDisplayed({ timeout: TIMEOUTS.ui });
-    await browser.keys("settings".split(""));
+    const input = `${palette} [role="combobox"]`;
+    await $(input).waitForDisplayed({ timeout: TIMEOUTS.ui });
+    await insertText(input, "settings");
     await browser.waitUntil(
       async () => (await $$(`${palette} [data-command-palette-action]`).length) >= 1 &&
         !(await $(action("toggle-sidebar")).isExisting()),
