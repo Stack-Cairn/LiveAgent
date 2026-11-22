@@ -1640,6 +1640,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "shortcuts.command.searchConversations": "搜索会话",
   "shortcuts.command.previousConversation": "上一个会话",
   "shortcuts.command.nextConversation": "下一个会话",
+  "shortcuts.command.navigateBack": "后退",
+  "shortcuts.command.navigateForward": "前进",
   "shortcuts.command.findInConversation": "在会话中查找",
   "shortcuts.command.focusComposer": "聚焦消息输入框",
   "shortcuts.command.openModelPicker": "打开模型选择",

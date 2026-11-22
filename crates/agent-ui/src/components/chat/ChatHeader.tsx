@@ -5,9 +5,11 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
 import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { NavigationHistoryControls } from "@liveagent/ui/lib/navigation/navigationHistory";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, type ReactNode } from "react";
 import { ThemeToggleButton } from "../ThemeToggleButton";
+import { NavigationHistoryButtons } from "./NavigationHistoryButtons";
 
 export type ChatHeaderProps = {
   settings: AppSettings;
@@ -16,6 +18,8 @@ export type ChatHeaderProps = {
   onToggleTheme: () => void;
   onOpenSidebar: () => void;
   navigationActions?: ReactNode;
+  /** Back / forward buttons after the sidebar controls. */
+  history?: NavigationHistoryControls;
   leadingActions?: ReactNode;
   preThemeActions?: ReactNode;
   trailingActions?: ReactNode;
@@ -31,6 +35,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
     onToggleTheme,
     onOpenSidebar,
     navigationActions,
+    history,
     leadingActions,
     preThemeActions,
     trailingActions,
@@ -81,6 +86,7 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
             </Button>
           </ShortcutTooltip>
         ) : null}
+        {history ? <NavigationHistoryButtons history={history} /> : null}
       </div>
       <div
         data-conversation-header=""

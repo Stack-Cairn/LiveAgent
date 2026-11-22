@@ -175,6 +175,8 @@ const SIDEBAR_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
   "searchConversations",
   "previousConversation",
   "nextConversation",
+  "navigateBack",
+  "navigateForward",
   "toggleRightPanel",
 ];
 const QUICK_OPEN_FILE_PALETTE_ACTION_ID = "quick-open-file";
@@ -447,7 +449,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     const action = paletteActionId
       ? getCommandPaletteActions?.().find((entry) => entry.id === paletteActionId)
       : undefined;
-    if (!action) return false;
+    if (!action) {
+      // At either end of the history the chord is still ours: letting it
+      // through would make a browser leave the app.
+      return command === "navigateBack" || command === "navigateForward";
+    }
     action.run();
     return true;
   });
@@ -492,7 +498,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       // An open dialog (the palette itself, confirmations) owns the keyboard.
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(SHORTCUT_DIALOG_SELECTOR)) return;
-      const repeatable = command === "previousConversation" || command === "nextConversation";
+      const repeatable =
+        command === "previousConversation" ||
+        command === "nextConversation" ||
+        command === "navigateBack" ||
+        command === "navigateForward";
       if (event.repeat && !repeatable) {
         event.preventDefault();
         return;

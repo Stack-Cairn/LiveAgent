@@ -73,6 +73,12 @@ import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import {
+  isWorkbenchNavigationLocationOpenable,
+  parseNavigationLocation,
+  useNavigationHistory,
+  workbenchNavigationLocation,
+} from "@liveagent/ui/lib/navigation/navigationHistory";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
@@ -4369,6 +4375,34 @@ function ChatPageContent(props: ChatPageProps) {
       </div>
     ) : null;
 
+  // Back / forward through the conversations and full-page views the main
+  // area showed. Unsent drafts are not recorded: there is nothing to return to.
+  const navigationHistory = useNavigationHistory({
+    location: workbenchNavigationLocation({
+      activeView,
+      conversationId: currentConversationId,
+      isDraft: isDraftConversation,
+    }),
+    isValid: (location) =>
+      isWorkbenchNavigationLocationOpenable(location, {
+        hasConversation: (id) => sidebarConversationsById.has(id),
+        visibleHubs: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+      }),
+    navigate: (location) => {
+      const target = parseNavigationLocation(location);
+      if (target?.kind === "view") {
+        cacheActiveComposerDraft();
+        setRightDockOpen(false);
+        setActiveView(target.view);
+      } else if (target) {
+        setActiveView("chat");
+        if (target.conversationId !== currentConversationIdRef.current) {
+          handleSelectConversation(target.conversationId);
+        }
+      }
+    },
+  });
+
   // Cmd/Ctrl+K palette: the sidebar reads this snapshot only when it opens, so
   // the closure is rebuilt per render without re-rendering the sidebar.
   const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
@@ -4439,6 +4473,7 @@ function ChatPageContent(props: ChatPageProps) {
         : undefined,
       onStopRun: isSending ? () => stopSendingActionRef.current() : undefined,
       windowPin: isKBrainBrowserHost() ? undefined : { onToggle: toggleDesktopWindowPin },
+      history: navigationHistory,
     });
   };
   const getCommandPaletteActions = useCallback(
@@ -4511,6 +4546,7 @@ function ChatPageContent(props: ChatPageProps) {
           onOpenSettings={onOpenSettings}
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleToggleSidebar}
+          history={navigationHistory}
           leadingActions={
             activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
               <ConversationViewTabs

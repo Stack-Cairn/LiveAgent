@@ -1,4 +1,6 @@
 import {
+  ArrowLeft,
+  ArrowRight,
   Blend,
   Bot,
   Brain,
@@ -23,6 +25,7 @@ import {
   Sun,
   Waypoints,
 } from "../../components/IconSet";
+import type { NavigationHistoryControls } from "../navigation/navigationHistory";
 import {
   SETTINGS_SEARCH_INDEX,
   SETTINGS_SEARCH_SECTION_LABEL_KEYS,
@@ -114,6 +117,8 @@ export type BuildCommandPaletteActionsInput = {
   };
   onStopRun?: () => void;
   windowPin?: { pinned?: boolean; onToggle: () => void };
+  /** Back / forward history; each action is listed only while it can move. */
+  history?: Pick<NavigationHistoryControls, "canGoBack" | "canGoForward" | "goBack" | "goForward">;
 };
 
 function format(template: string, values: Record<string, string>) {
@@ -184,6 +189,27 @@ export function buildCommandPaletteActions(
         run: () => onOpen(hub.id),
       });
     }
+  }
+
+  if (input.history?.canGoBack) {
+    actions.push({
+      id: "navigate-back",
+      group: "navigation",
+      label: t("shortcuts.command.navigateBack"),
+      keywords: ["back", "history", "previous"],
+      icon: ArrowLeft,
+      run: input.history.goBack,
+    });
+  }
+  if (input.history?.canGoForward) {
+    actions.push({
+      id: "navigate-forward",
+      group: "navigation",
+      label: t("shortcuts.command.navigateForward"),
+      keywords: ["forward", "history", "next"],
+      icon: ArrowRight,
+      run: input.history.goForward,
+    });
   }
 
   if (input.sidebar) {

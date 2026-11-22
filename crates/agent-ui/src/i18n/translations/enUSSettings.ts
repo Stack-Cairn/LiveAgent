@@ -1736,6 +1736,8 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "shortcuts.command.searchConversations": "Search conversations",
   "shortcuts.command.previousConversation": "Previous conversation",
   "shortcuts.command.nextConversation": "Next conversation",
+  "shortcuts.command.navigateBack": "Go back",
+  "shortcuts.command.navigateForward": "Go forward",
   "shortcuts.command.findInConversation": "Find in conversation",
   "shortcuts.command.focusComposer": "Focus message input",
   "shortcuts.command.openModelPicker": "Open model picker",

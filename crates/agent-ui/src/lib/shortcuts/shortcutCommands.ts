@@ -24,6 +24,8 @@ export type ShortcutCommandId =
   | "newConversation"
   | "previousConversation"
   | "nextConversation"
+  | "navigateBack"
+  | "navigateForward"
   | "focusComposer"
   | "openModelPicker"
   | "toggleSidebar"
@@ -99,6 +101,21 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
     labelKey: "shortcuts.command.nextConversation",
     defaultBinding: "Mod+Alt+BracketRight",
     paletteActionId: "next-conversation",
+  },
+  {
+    // Back / forward through what the main area showed (conversations, hubs).
+    id: "navigateBack",
+    group: "navigation",
+    labelKey: "shortcuts.command.navigateBack",
+    defaultBinding: "Mod+BracketLeft",
+    paletteActionId: "navigate-back",
+  },
+  {
+    id: "navigateForward",
+    group: "navigation",
+    labelKey: "shortcuts.command.navigateForward",
+    defaultBinding: "Mod+BracketRight",
+    paletteActionId: "navigate-forward",
   },
   {
     id: "findInConversation",

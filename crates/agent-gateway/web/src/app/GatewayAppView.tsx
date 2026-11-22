@@ -57,8 +57,17 @@ import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
+import {
+  isWorkbenchNavigationLocationOpenable,
+  parseNavigationLocation,
+  useNavigationHistory,
+  workbenchNavigationLocation,
+} from "@liveagent/ui/lib/navigation/navigationHistory";
 import { kbrainResourceHostCapabilities } from "@liveagent/ui/lib/resourceHost";
-import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
+import {
+  normalizeSidebarShortcuts,
+  type SidebarShortcutId,
+} from "@liveagent/ui/lib/settings/sidebarShortcuts";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -1370,6 +1379,33 @@ export function GatewayAppView({
     [workbenchController.leasedDockSessionIds],
   );
 
+  // Back / forward through the conversations and hubs the main area showed.
+  const displayedConversationIdRef = useRef(displayedConversationId);
+  displayedConversationIdRef.current = displayedConversationId;
+  const navigationHistory = useNavigationHistory({
+    location: workbenchNavigationLocation({
+      activeView,
+      conversationId: displayedConversationId,
+      isDraft:
+        isLocalDraftConversationId(displayedConversationId) ||
+        !sidebarConversationsById.has(displayedConversationId),
+    }),
+    isValid: (location) =>
+      isWorkbenchNavigationLocationOpenable(location, {
+        hasConversation: (id) => sidebarConversationsById.has(id),
+        visibleHubs: normalizeSidebarShortcuts(settings.customSettings.sidebarShortcuts),
+      }),
+    navigate: (location) => {
+      const target = parseNavigationLocation(location);
+      if (target?.kind === "view") {
+        handleSidebarOpenResourceHub(target.view.replace(/-hub$/, "") as SidebarShortcutId);
+      } else if (target) {
+        if (target.conversationId === displayedConversationIdRef.current) setActiveView("chat");
+        else handleSidebarSelectConversation(target.conversationId);
+      }
+    },
+  });
+
   // Cmd/Ctrl+K palette: rebuilt per render, read by the sidebar only when it opens.
   const buildCommandPaletteActionsLatestRef = useRef<() => CommandPaletteAction[]>(() => []);
   buildCommandPaletteActionsLatestRef.current = () =>
@@ -1430,6 +1466,7 @@ export function GatewayAppView({
             }
           : undefined,
       onStopRun: composerIsSending ? handlePrimaryComposerStop : undefined,
+      history: navigationHistory,
     });
   const getCommandPaletteActions = useCallback(
     () => buildCommandPaletteActionsLatestRef.current(),
@@ -1516,6 +1553,7 @@ export function GatewayAppView({
                 }))
               }
               onOpenSidebar={() => setSidebarOpen((open) => !open)}
+              history={navigationHistory}
               leadingActions={
                 activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
                   <ConversationViewTabs
