@@ -1,0 +1,150 @@
+name: Transcript Performance
+
+# Browser transcript scenarios from crates/agent-gui/perf/run.mjs (streaming,
+# find, scroll, edit/git diffs, projection) in headless Chromium. Browser
+# timings on shared runners are too noisy to gate on, so this workflow is
+# report only: it writes a table to the job summary, compared with the last
+# results from main, and never fails on the numbers. The node micro-benchmark
+# gate in ci.yml (Code Rules) is the blocking performance check.
+#
+# Profiles (results are only compared within the same profile):
+#   quick: PRs touching the transcript/chat code and pushes to main; 1x CPU,
+#          a 6k-character stream. ~3 min.
+#   full:  nightly and on demand; 1x and 4x CPU throttling, the default
+#          24k-character stream. ~6 min.
+# See docs/testing/ci-checks.md.
+on:
+  pull_request:
+    paths:
+      - "crates/agent-gui/src/pages/chat/transcript/**"
+      - "crates/agent-gui/src/pages/chat/hooks/**"
+      - "crates/agent-gui/src/lib/chat/messages/**"
+      - "crates/agent-gui/src/index.css"
+      - "crates/agent-gui/perf/**"
+      - "crates/agent-ui/src/components/chat/**"
+      - "crates/agent-ui/src/components/markdown/**"
+      - "crates/agent-ui/src/components/Markdown.tsx"
+      - "crates/agent-ui/src/components/project-tools/git-review/**"
+      - "crates/agent-ui/src/lib/chat/**"
+      - "crates/agent-ui/src/lib/chat-scroll/**"
+      - "pnpm-lock.yaml"
+      - "scripts/report-perf-scenarios.mjs"
+      - ".github/actions/setup-playwright/**"
+      - ".github/workflows/perf.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/agent-gui/src/pages/chat/transcript/**"
+      - "crates/agent-gui/src/pages/chat/hooks/**"
+      - "crates/agent-gui/src/lib/chat/messages/**"
+      - "crates/agent-gui/src/index.css"
+      - "crates/agent-gui/perf/**"
+      - "crates/agent-ui/src/components/chat/**"
+      - "crates/agent-ui/src/components/markdown/**"
+      - "crates/agent-ui/src/components/Markdown.tsx"
+      - "crates/agent-ui/src/components/project-tools/git-review/**"
+      - "crates/agent-ui/src/lib/chat/**"
+      - "crates/agent-ui/src/lib/chat-scroll/**"
+      - "pnpm-lock.yaml"
+      - "scripts/report-perf-scenarios.mjs"
+      - ".github/actions/setup-playwright/**"
+      - ".github/workflows/perf.yml"
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.19.0
+  PNPM_VERSION: 10.32.1
+
+jobs:
+  scenarios:
+    name: Transcript scenarios (report only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@${PNPM_VERSION}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter liveagent-workspace --filter liveagent...
+
+      - uses: ./.github/actions/setup-playwright
+        id: playwright
+        with:
+          browsers: chromium
+
+      - name: Select profile
+        id: profile
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "name=full" >> "$GITHUB_OUTPUT"
+            echo "args=--throttle=1,4" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=quick" >> "$GITHUB_OUTPUT"
+            echo "args=--scenarios=stream,find,scroll,editdiff,gitdiff,projection --throttle=1 --chars=6000" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The newest results saved by a main run of the same profile. The key
+      # never matches exactly (it carries the run id); restore-keys picks the
+      # most recent entry.
+      - name: Restore results from main
+        uses: actions/cache/restore@v4
+        with:
+          path: perf-baseline
+          key: perf-scenarios-${{ steps.profile.outputs.name }}-main-${{ github.run_id }}
+          restore-keys: perf-scenarios-${{ steps.profile.outputs.name }}-main-
+
+      - name: Run scenarios
+        id: run
+        continue-on-error: true
+        env:
+          CHROME_PATH: ${{ steps.playwright.outputs.chromium-path }}
+        run: |
+          mkdir -p perf-results
+          node crates/agent-gui/perf/run.mjs ${{ steps.profile.outputs.args }} --out=perf-results/results.json
+
+      - name: Write report
+        if: always()
+        run: >
+          node scripts/report-perf-scenarios.mjs
+          --current perf-results/results.json
+          --baseline perf-baseline/results.json
+          --title "Transcript performance scenarios (${{ steps.profile.outputs.name }} profile, report only)"
+
+      - name: Keep results as the main baseline
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.run.outcome == 'success'
+        run: |
+          rm -rf perf-baseline
+          mkdir -p perf-baseline
+          cp perf-results/results.json perf-baseline/results.json
+
+      - name: Save main baseline
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.run.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: perf-baseline
+          key: perf-scenarios-${{ steps.profile.outputs.name }}-main-${{ github.run_id }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-scenarios-${{ steps.profile.outputs.name }}-${{ github.run_id }}
+          path: perf-results/
+          if-no-files-found: ignore
+          retention-days: 14
