@@ -255,7 +255,7 @@ test("restart guard visually prioritizes the safe action", () => {
   );
   assert.match(
     confirmDialogSource,
-    /variant=\{preferCancel \? "ghost" : "destructive"\}/,
+    /variant=\{preferCancel \? "ghost" : tone === "default" \? "default" : "destructive"\}/,
   );
   assert.match(
     confirmDialogSource,
