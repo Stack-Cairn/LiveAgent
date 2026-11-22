@@ -37,7 +37,7 @@ export const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
   sandboxOffline: "chat.safety.sandboxOffline",
 };
 
-export const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
+const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.askDesc",
   auto: "chat.safety.autoDesc",
   autoEdit: "chat.safety.autoEditDesc",

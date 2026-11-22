@@ -3,7 +3,7 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
 import { ProcessDisclosureProvider } from "@liveagent/ui/components/chat/processDisclosure";
-import { DiagnosticsExportHost } from "@liveagent/ui/components/diagnostics/DiagnosticsExportDialog";
+import { DiagnosticsExportHost } from "@liveagent/ui/components/diagnostics/DiagnosticsExportHost";
 import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";

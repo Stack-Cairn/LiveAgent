@@ -78,7 +78,7 @@ import {
   resolveCloseContextTarget,
   resolveTerminalToggle,
 } from "@liveagent/ui/lib/chat/workbenchCommands";
-import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/bundle";
+import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/exportRequests";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";

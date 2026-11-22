@@ -1,5 +1,5 @@
 import { $, browser, expect } from "@wdio/globals";
-import { TIMEOUTS, byTestId, insertText, primaryModifier, waitForAppReady } from "../support/app.mjs";
+import { TIMEOUTS, byTestId, insertText, openCommandPalette, waitForAppReady } from "../support/app.mjs";
 import { target } from "../support/env.mjs";
 
 // The harness keeps the first-run guide on for this file only (see
@@ -36,8 +36,7 @@ describe("first-run guide", function () {
   });
 
   it("opens from the command palette and can be skipped", async () => {
-    await browser.keys([await primaryModifier(), "k"]);
-    await $(palette).waitForDisplayed({ timeout: TIMEOUTS.ui, timeoutMsg: "palette did not open" });
+    await openCommandPalette();
     const input = `${palette} [role="combobox"]`;
     await $(input).waitForDisplayed({ timeout: TIMEOUTS.ui });
     await insertText(input, "onboarding");

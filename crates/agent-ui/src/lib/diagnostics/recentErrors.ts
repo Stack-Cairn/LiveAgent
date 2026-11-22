@@ -44,7 +44,7 @@ function stringifyArgument(value: unknown, counts: RedactionCounts): string {
   }
 }
 
-export function formatConsoleArguments(
+function formatConsoleArguments(
   args: readonly unknown[],
   counts: RedactionCounts = emptyRedactionCounts(),
 ): string {

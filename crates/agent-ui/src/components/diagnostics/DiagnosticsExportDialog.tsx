@@ -29,14 +29,13 @@ import {
   type ClipboardWriter,
   copyDiagnosticsSummary,
   type DiagnosticsBundle,
-  subscribeDiagnosticsExportRequests,
 } from "@liveagent/ui/lib/diagnostics/bundle";
 import { getDiagnosticsCapture } from "@liveagent/ui/lib/diagnostics/recentErrors";
 import { REDACTION_CATEGORIES, totalRedactions } from "@liveagent/ui/lib/diagnostics/redact";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 
-export function formatDiagnosticsSize(bytes: number): string {
+function formatDiagnosticsSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -300,12 +299,4 @@ export function DiagnosticsExportDialog(props: DiagnosticsExportDialogProps) {
       </DialogContent>
     </Dialog>
   );
-}
-
-/** Mounted once per host; opens the dialog on `requestDiagnosticsExport()`. */
-export function DiagnosticsExportHost(props: { settings: AppSettings }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => subscribeDiagnosticsExportRequests(() => setOpen(true)), []);
-  if (!open) return null;
-  return <DiagnosticsExportDialog open={open} onOpenChange={setOpen} settings={props.settings} />;
 }

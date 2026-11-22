@@ -56,7 +56,7 @@ export function onboardingSteps(
   return ONBOARDING_STEPS.filter((step) => step !== "notifications" || env.notificationsSupported);
 }
 
-export function isStepSatisfied(step: OnboardingStep, env: OnboardingEnvironment): boolean {
+function isStepSatisfied(step: OnboardingStep, env: OnboardingEnvironment): boolean {
   switch (step) {
     case "provider":
       return env.providerCount > 0;

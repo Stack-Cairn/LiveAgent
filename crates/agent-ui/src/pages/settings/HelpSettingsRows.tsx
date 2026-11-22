@@ -2,7 +2,7 @@ import { Archive, Sparkles } from "@liveagent/ui/components/IconSet";
 import { SettingsRow } from "@liveagent/ui/components/settings/SettingsLayout";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/bundle";
+import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/exportRequests";
 import { requestOnboarding } from "@liveagent/ui/lib/onboarding/onboardingState";
 
 /** Settings-search target; hosts write it as a literal so the index test can find it. */
