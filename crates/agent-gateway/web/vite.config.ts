@@ -3,6 +3,7 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import Icons from "unplugin-icons/vite";
+import { lazyDiffHighlightGrammars } from "../../agent-ui/build/lazyDiffGrammars";
 
 const DEFAULT_PROXY_API = "http://localhost:8080";
 
@@ -15,7 +16,10 @@ function resolveProxyTarget() {
 }
 
 export default defineConfig(() => ({
-  plugins: [react(), Icons({ compiler: "jsx", jsx: "react" })],
+  // The chat transcript computes edit diffs with the diff engine, whose
+  // highlighter registers every highlight.js grammar at load; keep the
+  // grammars in a lazy chunk (see agent-ui/build/lazyDiffGrammars.ts).
+  plugins: [react(), Icons({ compiler: "jsx", jsx: "react" }), lazyDiffHighlightGrammars()],
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
