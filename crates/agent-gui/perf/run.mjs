@@ -426,6 +426,35 @@ const SCENARIOS = {
       })()`),
     );
     const domNodes = await client.evaluate("window.__perf.domNodes()");
+    // Expanding a collapsed diff (when the build has the control), then
+    // scrolling through it.
+    const expand = await client.evaluate(`(async () => {
+      const button = document.querySelector("[data-diff-expand]");
+      if (!button) return null;
+      const started = performance.now();
+      button.click();
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      const expandMs = performance.now() - started;
+      const viewport = document.querySelector("[data-scroll-viewport]");
+      const frames = [];
+      let last = performance.now();
+      let peak = 0;
+      while (viewport.scrollTop + viewport.clientHeight < viewport.scrollHeight - 2) {
+        viewport.scrollTop += 600;
+        await new Promise((r) => requestAnimationFrame(r));
+        const now = performance.now();
+        frames.push(now - last);
+        last = now;
+        peak = Math.max(peak, document.getElementsByTagName("*").length);
+      }
+      frames.sort((a, b) => a - b);
+      return {
+        expandMs,
+        expandedNodes: peak,
+        scrollStepP95: frames[Math.floor(frames.length * 0.95)] ?? 0,
+        scrollSteps: frames.length,
+      };
+    })()`);
     await open(client, baseUrl, "editdiff");
     const stream = await measured(client, throttle, () =>
       client.evaluate("window.__perf.streamDiff(2000, 200, 16)"),
@@ -433,10 +462,54 @@ const SCENARIOS = {
     return {
       mountMs: Math.round(mount.firstFrameMs),
       domNodes20k: domNodes,
+      ...(expand
+        ? {
+            expandMs: Math.round(expand.expandMs),
+            expandedPeakNodes: expand.expandedNodes,
+            expandedScrollP95: Number(expand.scrollStepP95.toFixed(1)),
+            expandedScrollSteps: expand.scrollSteps,
+          }
+        : {}),
       streamSyncMsPerTick: Number(stream.syncMsPerTick.toFixed(1)),
       streamTaskMs: stream.taskMs,
       streamWallMs: Math.round(stream.wallMs),
     };
+  },
+
+  // Screenshots for review (--shots=dir): a long edit diff collapsed and
+  // expanded, and the live sparkle while a reply streams.
+  async screens(client, baseUrl) {
+    const dir = args.shots ?? path.join(here, "shots");
+    const capture = async (name, selector) => {
+      const clip = await client.evaluate(`(() => {
+        const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+        const pad = 12;
+        return { x: Math.max(0, rect.x - pad), y: Math.max(0, rect.y - pad),
+          width: rect.width + pad * 2, height: Math.min(innerHeight, rect.height + pad * 2), scale: 2 };
+      })()`);
+      const result = await client.request("Page.captureScreenshot", { format: "png", clip });
+      writeFileSync(path.join(dir, name), Buffer.from(result.data, "base64"));
+    };
+    await client.request("Emulation.setDeviceMetricsOverride", { width: 760, height: 640, deviceScaleFactor: 2, mobile: false });
+    await open(client, baseUrl, "editdiff");
+    await client.evaluate("window.__perf.mountDiff(420)");
+    await delay(500);
+    await client.evaluate(`document.querySelector("[data-diff-expand]").scrollIntoView({ block: "end" })`);
+    await delay(300);
+    await capture("edit-diff-collapsed.png", "[data-scroll-viewport]");
+    await client.evaluate(`document.querySelector("[data-diff-expand]").click()`);
+    await delay(300);
+    await client.evaluate(`document.querySelector("[data-diff-expand]").scrollIntoView({ block: "end" })`);
+    await delay(600);
+    await capture("edit-diff-expanded.png", "[data-scroll-viewport]");
+    await open(client, baseUrl, "transcript");
+    await client.evaluate("window.__perf.load(4, 400)");
+    await delay(800);
+    await client.evaluate("window.__perf.startStream({ chars: 4000, chunk: 4, intervalMs: 40 })");
+    await delay(2500);
+    await capture("live-sparkle-streaming.png", "[data-scroll-viewport]");
+    await client.request("Emulation.clearDeviceMetricsOverride");
+    return { dir };
   },
 
   // Git review: 60 files x 120 lines, scrolled top to bottom.
