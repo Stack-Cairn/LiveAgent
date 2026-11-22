@@ -9,7 +9,9 @@ import {
   useState,
 } from "react";
 import { Button } from "../../components/ui/button";
+import { type ConfirmDialogOptions, useConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Input } from "../../components/ui/input";
+import { useLocale } from "../../i18n";
 import type {
   ImageConnection,
   ImageStudioClient,
@@ -46,9 +48,10 @@ export interface ImageSettingsProps {
   /** Replace client identity whenever owner/backend changes. */
   client: ImageStudioClient;
   onDirtyChange?: (dirty: boolean) => void;
-  /** Host navigation calls this guard before switching settings tabs/routes;
-   * return a cleanup that unregisters this specific guard. */
-  registerLeaveGuard?: (guard: () => boolean) => () => void;
+  /** Host navigation calls this guard before switching settings tabs/routes and
+   * leaves only once it resolves to true (it asks through an in-app dialog when
+   * there are unsaved edits); return a cleanup that unregisters this guard. */
+  registerLeaveGuard?: (guard: () => boolean | Promise<boolean>) => () => void;
 }
 const clientKeys = new WeakMap<ImageStudioClient, number>();
 let clientSequence = 0;
@@ -115,6 +118,19 @@ function ImageSettingsScope({
   const [status, setStatus] = useState("");
   const [secretDirty, setSecretDirty] = useState(false);
   const [purpose, setPurpose] = useState<ImageSecretPurpose>("apiKey");
+  const { t } = useLocale();
+  const { confirm, dialog } = useConfirmDialog();
+  const ask = (options: Omit<ConfirmDialogOptions, "cancelLabel"> & { cancelLabel?: string }) =>
+    confirm({ cancelLabel: t("confirmDialog.cancel"), ...options });
+  // The leave guard is registered once; it reads the current locale through this ref.
+  const confirmLeaveRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
+  confirmLeaveRef.current = () =>
+    ask({
+      title: t("imageSettings.confirm.leaveTitle"),
+      description: t("imageSettings.confirm.leaveDescription"),
+      confirmLabel: t("imageSettings.confirm.leave"),
+      cancelLabel: t("confirmDialog.keepEditing"),
+    });
   const secretInput = useRef<HTMLInputElement>(null);
   const bindSecretInput = useCallback((node: HTMLInputElement | null) => {
     if (secretInput.current && secretInput.current !== node) secretInput.current.value = "";
@@ -131,9 +147,9 @@ function ImageSettingsScope({
   const targetEnableBlock = !target
     ? ""
     : unfinishedImageAdapters.includes(target.adapter)
-      ? "后端暂未支持这种图像协议，目标保存后不能启用。"
+      ? t("imageSettings.enableBlock.unsupportedProtocol")
       : draft?.connections.some((c) => c.id === target.connectionId && !c.enabled)
-        ? "所用连接已停用，启用连接后才能启用目标。"
+        ? t("imageSettings.enableBlock.connectionDisabled")
         : "";
   const secretPurposes = draft ? imageSecretPurposes(draft, connectionId) : ["apiKey" as const];
   const selectedPurpose = secretPurposes.includes(purpose) ? purpose : secretPurposes[0];
@@ -193,12 +209,8 @@ function ImageSettingsScope({
       }
     };
     window.addEventListener("beforeunload", beforeUnload);
-    const unregister = registerLeaveGuard?.(
-      () =>
-        !dirtyRef.current ||
-        window.confirm(
-          "图像设置有未保存的修改或正在等待的操作。离开将丢弃本页草稿；已发出的请求可能仍会完成。确定离开？",
-        ),
+    const unregister = registerLeaveGuard?.(() =>
+      dirtyRef.current ? confirmLeaveRef.current() : true,
     );
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
@@ -219,8 +231,16 @@ function ImageSettingsScope({
     });
     setStatus("");
   }
-  function selectConnection(id: string) {
-    if (secretDirty && !window.confirm("切换连接将清空尚未写入的凭据。确定继续？")) return;
+  async function selectConnection(id: string) {
+    if (
+      secretDirty &&
+      !(await ask({
+        title: t("imageSettings.confirm.switchConnectionTitle"),
+        description: t("imageSettings.confirm.switchConnectionDescription"),
+        confirmLabel: t("imageSettings.confirm.switchConnection"),
+      }))
+    )
+      return;
     clearSecret();
     setConnectionId(id);
     setPurpose("apiKey");
@@ -244,7 +264,7 @@ function ImageSettingsScope({
         }),
       };
     } catch {
-      setError("高级配置无效。请检查参数类型、枚举、默认值及工作流节点字段；草稿已保留。");
+      setError(t("imageSettings.error.invalidAdvanced"));
       return null;
     }
   }
@@ -260,10 +280,10 @@ function ImageSettingsScope({
       if (publicDirty || reviewRequired) {
         setRemote(latest);
         setReviewRequired(true);
-        setStatus("已读取最新设置。请比较并处理草稿后再保存。");
+        setStatus(t("imageSettings.status.loadedReview"));
       } else {
         accept(latest);
-        setStatus("已读取最新设置。");
+        setStatus(t("imageSettings.status.loaded"));
       }
     } catch (reason) {
       if (token === generation.current) setError(imageSettingsError(reason));
@@ -308,7 +328,7 @@ function ImageSettingsScope({
       const response = await client.saveSettings(settingsUpdate(next));
       if (token === generation.current) {
         accept(response);
-        setStatus("图像设置已保存。");
+        setStatus(t("imageSettings.status.saved"));
       }
     } catch (reason) {
       await handleFailure(reason, token);
@@ -341,7 +361,7 @@ function ImageSettingsScope({
         (next) => {
           if (current()) {
             setDraft(next);
-            setStatus("凭据已写入，正在保存引用绑定。");
+            setStatus(t("imageSettings.status.secretWritten"));
           }
         },
       );
@@ -349,13 +369,10 @@ function ImageSettingsScope({
       const response = await request;
       if (current() && response) {
         accept(response);
-        setStatus("凭据已写入并绑定到连接；输入已清空。");
+        setStatus(t("imageSettings.status.secretBound"));
       }
     } catch (reason) {
-      if (current())
-        setStatus(
-          "凭据输入已清空。写入可能已完成；若引用绑定失败，公开引用草稿已保留。请读取最新设置后合并并保存，或重新写入同一用途的凭据。",
-        );
+      if (current()) setStatus(t("imageSettings.status.secretUncertain"));
       await handleFailure(reason, token);
     } finally {
       value = "";
@@ -373,11 +390,21 @@ function ImageSettingsScope({
     clearSecret();
     if (wasMutation) setReviewRequired(true);
     setStatus(
-      wasMutation ? "已停止等待。请求可能已完成；请读取最新设置后再操作。" : "已停止读取。",
+      wasMutation
+        ? t("imageSettings.status.stoppedMutation")
+        : t("imageSettings.status.stoppedLoad"),
     );
   }
-  function cancelEdits() {
-    if (dirty && !window.confirm("确定放弃未保存的图像设置和凭据输入？")) return;
+  async function cancelEdits() {
+    if (
+      dirty &&
+      !(await ask({
+        title: t("imageSettings.confirm.cancelEditsTitle"),
+        description: t("imageSettings.confirm.cancelEditsDescription"),
+        confirmLabel: t("imageSettings.confirm.cancelEdits"),
+      }))
+    )
+      return;
     clearSecret();
     setAdvanced({});
     setDraft(saved);
@@ -390,19 +417,26 @@ function ImageSettingsScope({
       saved?.targets.some((t) => t.id === current) ? current : (saved?.targets[0]?.id ?? ""),
     );
     setError("");
-    setStatus("已放弃本地修改。");
+    setStatus(t("imageSettings.status.discarded"));
     // An ambiguous write still requires a fresh read, even after local discard.
   }
-  function resolveConflict(prefer: "local" | "remote") {
+  async function resolveConflict(prefer: "local" | "remote") {
     if (!saved || !remote) return;
     const local = advancedSettings();
     if (!local) return;
     const result = mergeImageSettings(saved, local, remote, prefer);
     if (
       result.conflicts.length &&
-      !window.confirm(
-        `有 ${result.conflicts.length} 个连接或目标被同时修改。冲突项将使用${prefer === "local" ? "我的草稿" : "服务器版本"}，其余远端修改会保留。确定继续？`,
-      )
+      !(await ask({
+        title: t("imageSettings.confirm.mergeTitle"),
+        description: t(
+          prefer === "local"
+            ? "imageSettings.confirm.mergeDescriptionLocal"
+            : "imageSettings.confirm.mergeDescriptionRemote",
+        ).replace("{count}", String(result.conflicts.length)),
+        confirmLabel: t("imageSettings.confirm.merge"),
+        tone: "default",
+      }))
     )
       return;
     setSaved(remote);
@@ -412,7 +446,7 @@ function ImageSettingsScope({
     setAdvanced({});
     clearSecret();
     setError("");
-    setStatus("已合并到最新版本。请检查内容并保存。");
+    setStatus(t("imageSettings.status.merged"));
   }
   const dependencies = draft && connection ? connectionDependents(draft, connection.id) : [];
   const conflicts =
@@ -426,14 +460,18 @@ function ImageSettingsScope({
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-1">
       <div>
         <h2 className="text-base font-semibold">
-          {panel === "connections" ? "图像服务" : panel === "targets" ? "目标设置" : "图像设置"}
+          {panel === "connections"
+            ? t("imageSettings.title.connections")
+            : panel === "targets"
+              ? t("imageSettings.title.targets")
+              : t("imageSettings.title.all")}
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
           {panel === "connections"
-            ? "配置图像供应商的地址、认证和凭据。模型与工作流请在创作输入区的目标设置中管理。"
+            ? t("imageSettings.description.connections")
             : panel === "targets"
-              ? "选择已有图像连接，配置生成模型或工作流。连接和凭据由后端配置管理。"
-              : "供应商里标为生图的模型会直接出现在图像工作台。这里只用来配置需要单独连接的图像服务，例如 RunningHub 模型 API、火山方舟；公开配置保存后，再写入连接凭据。"}
+              ? t("imageSettings.description.targets")
+              : t("imageSettings.description.all")}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -441,22 +479,28 @@ function ImageSettingsScope({
           disabled={!!busy || !draft || !publicDirty || reviewRequired || secretDirty}
           onClick={() => void save()}
         >
-          保存设置
+          {t("imageSettings.save")}
         </Button>
         <Button variant="outline" disabled={!!busy} onClick={() => void refresh()}>
-          读取最新设置
+          {t("imageSettings.reload")}
         </Button>
-        <Button variant="ghost" disabled={!!busy || !dirty} onClick={cancelEdits}>
-          取消编辑
+        <Button variant="ghost" disabled={!!busy || !dirty} onClick={() => void cancelEdits()}>
+          {t("imageSettings.cancelEdits")}
         </Button>
         {busy && (
           <Button variant="ghost" onClick={stopWaiting}>
-            停止等待
+            {t("imageSettings.stopWaiting")}
           </Button>
         )}
         <span className="text-xs text-muted-foreground">
-          {busy ? "正在处理…" : dirty ? "有未保存的修改" : "已与服务器同步"}
-          {saved ? ` · 版本 ${saved.revision}` : ""}
+          {busy
+            ? t("imageSettings.state.busy")
+            : dirty
+              ? t("imageSettings.state.dirty")
+              : t("imageSettings.state.synced")}
+          {saved
+            ? t("imageSettings.state.revision").replace("{revision}", String(saved.revision))
+            : ""}
         </span>
       </div>
       {error && (
@@ -472,18 +516,20 @@ function ImageSettingsScope({
       {reviewRequired && (
         <section
           className="space-y-2 rounded-xl border border-border p-4"
-          aria-label="设置版本冲突"
+          aria-label={t("imageSettings.conflict.label")}
         >
           <p className="text-sm">
-            草稿已保留。
+            {t("imageSettings.conflict.draftKept")}
             {remote
-              ? `服务器版本 ${remote.revision}，同时修改的项目 ${conflicts.length} 个。`
-              : "请先读取最新设置，核对上次操作是否完成。"}
+              ? t("imageSettings.conflict.summary")
+                  .replace("{revision}", String(remote.revision))
+                  .replace("{count}", String(conflicts.length))
+              : t("imageSettings.conflict.readFirst")}
           </p>
           {remote && (
             <>
               <p className="text-xs text-muted-foreground">
-                合并保留服务器新加入的连接和目标。冲突按连接或目标逐项识别；选择后仍需保存。
+                {t("imageSettings.conflict.mergeHint")}
               </p>
               {conflicts.length > 0 && (
                 <ul className="list-inside list-disc text-sm">
@@ -502,30 +548,35 @@ function ImageSettingsScope({
                 <Button
                   variant="outline"
                   disabled={!!busy}
-                  onClick={() => resolveConflict("local")}
+                  onClick={() => void resolveConflict("local")}
                 >
-                  合并，冲突用我的草稿
+                  {t("imageSettings.conflict.mergeLocal")}
                 </Button>
                 <Button
                   variant="outline"
                   disabled={!!busy}
-                  onClick={() => resolveConflict("remote")}
+                  onClick={() => void resolveConflict("remote")}
                 >
-                  合并，冲突用服务器版本
+                  {t("imageSettings.conflict.mergeRemote")}
                 </Button>
                 <Button
                   variant="ghost"
                   disabled={!!busy}
-                  onClick={() => {
-                    if (window.confirm("确定丢弃本地草稿并采用服务器全部设置？")) {
+                  onClick={async () => {
+                    const confirmed = await ask({
+                      title: t("imageSettings.confirm.adoptRemoteTitle"),
+                      description: t("imageSettings.confirm.adoptRemoteDescription"),
+                      confirmLabel: t("imageSettings.confirm.adoptRemote"),
+                    });
+                    if (confirmed) {
                       accept(remote);
                       clearSecret();
                       setError("");
-                      setStatus("已采用服务器设置。");
+                      setStatus(t("imageSettings.status.adoptedRemote"));
                     }
                   }}
                 >
-                  采用服务器全部设置
+                  {t("imageSettings.conflict.adoptRemote")}
                 </Button>
               </div>
             </>
@@ -537,11 +588,18 @@ function ImageSettingsScope({
           {panel !== "targets" && (
             <section className="space-y-3 rounded-xl bg-settings-tile p-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">连接</h3>
+                <h3 className="text-sm font-semibold">{t("imageSettings.connections")}</h3>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (secretDirty && !window.confirm("新增连接将清空尚未写入的凭据。确定继续？"))
+                  onClick={async () => {
+                    if (
+                      secretDirty &&
+                      !(await ask({
+                        title: t("imageSettings.confirm.addConnectionTitle"),
+                        description: t("imageSettings.confirm.addConnectionDescription"),
+                        confirmLabel: t("imageSettings.confirm.addConnection"),
+                      }))
+                    )
                       return;
                     clearSecret();
                     const next = newImageConnection(
@@ -551,17 +609,17 @@ function ImageSettingsScope({
                     setConnectionId(next.id);
                   }}
                 >
-                  新增连接
+                  {t("imageSettings.addConnection")}
                 </Button>
               </div>
-              <Field label="选择连接">
+              <Field label={t("imageSettings.selectConnection")}>
                 <select
                   className={selectClass}
                   value={connection?.id ?? ""}
-                  onChange={(e) => selectConnection(e.target.value)}
+                  onChange={(e) => void selectConnection(e.target.value)}
                 >
                   <option value="" disabled>
-                    请选择连接
+                    {t("imageSettings.selectConnectionPlaceholder")}
                   </option>
                   {draft.connections.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -571,25 +629,25 @@ function ImageSettingsScope({
                 </select>
               </Field>
               {!draft.connections.length && (
-                <p className="text-sm text-muted-foreground">先添加一个连接，再配置图像目标。</p>
+                <p className="text-sm text-muted-foreground">{t("imageSettings.noConnections")}</p>
               )}
               {connection && (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="连接名称">
+                    <Field label={t("imageSettings.connectionName")}>
                       <Input
                         value={connection.name}
                         onChange={(e) => updateConnection({ name: e.target.value })}
                       />
                     </Field>
-                    <Field label="供应商">
+                    <Field label={t("imageSettings.vendor")}>
                       <Input
                         value={connection.vendor}
-                        placeholder="例如 openai、google、runninghub"
+                        placeholder={t("imageSettings.vendorPlaceholder")}
                         onChange={(e) => updateConnection({ vendor: e.target.value })}
                       />
                     </Field>
-                    <Field label="凭据来源">
+                    <Field label={t("imageSettings.credentialSource")}>
                       <select
                         className={selectClass}
                         value={connection.binding.kind}
@@ -608,14 +666,18 @@ function ImageSettingsScope({
                           });
                         }}
                       >
-                        <option value="independent">独立图像连接</option>
-                        {/* 供应商里的生图模型已直接出现在工作台；只为旧连接保留这一项。 */}
+                        <option value="independent">
+                          {t("imageSettings.credentialSource.independent")}
+                        </option>
+                        {/* Provider image models already appear in the workbench; this option only remains for older connections. */}
                         {connection.binding.kind === "provider_ref" && (
-                          <option value="provider_ref">复用已有供应商</option>
+                          <option value="provider_ref">
+                            {t("imageSettings.credentialSource.providerRef")}
+                          </option>
                         )}
                       </select>
                     </Field>
-                    <Field label="最大并发任务">
+                    <Field label={t("imageSettings.maxConcurrent")}>
                       <Input
                         type="number"
                         min={1}
@@ -629,10 +691,10 @@ function ImageSettingsScope({
                   </div>
                   {connection.binding.kind === "provider_ref" ? (
                     <>
-                      <Field label="已有供应商 ID">
+                      <Field label={t("imageSettings.providerId")}>
                         <Input
                           value={connection.binding.providerId}
-                          placeholder="填写聊天供应商设置中的 ID"
+                          placeholder={t("imageSettings.providerIdPlaceholder")}
                           onChange={(e) =>
                             updateConnection({
                               binding: { kind: "provider_ref", providerId: e.target.value },
@@ -641,12 +703,12 @@ function ImageSettingsScope({
                         />
                       </Field>
                       <p className="text-xs text-muted-foreground">
-                        只复用网络和凭据。图像协议与模型在下方单独配置；保存时由后端检查供应商是否存在。
+                        {t("imageSettings.providerRefHint")}
                       </p>
                     </>
                   ) : (
                     <>
-                      <Field label="服务地址">
+                      <Field label={t("imageSettings.baseUrl")}>
                         <Input
                           type="url"
                           value={connection.binding.baseUrl}
@@ -659,7 +721,7 @@ function ImageSettingsScope({
                           }}
                         />
                       </Field>
-                      <Field label="认证方式">
+                      <Field label={t("imageSettings.authKind")}>
                         <select
                           className={selectClass}
                           value={connection.binding.authKind}
@@ -677,12 +739,16 @@ function ImageSettingsScope({
                           }}
                         >
                           <option value="bearer">Bearer token</option>
-                          <option value="api_key_header">API key 请求头</option>
-                          <option value="signed_request">签名认证（AK / SK）</option>
+                          <option value="api_key_header">
+                            {t("imageSettings.authKind.apiKeyHeader")}
+                          </option>
+                          <option value="signed_request">
+                            {t("imageSettings.authKind.signedRequest")}
+                          </option>
                         </select>
                       </Field>
                       <Toggle
-                        label="使用系统代理"
+                        label={t("imageSettings.useSystemProxy")}
                         checked={!!connection.binding.useSystemProxy}
                         onChange={(checked) => {
                           if (connection.binding.kind === "independent")
@@ -693,14 +759,16 @@ function ImageSettingsScope({
                       />
                       <div className="space-y-3 rounded-lg border border-border p-3">
                         <p className="text-sm">
-                          凭据：{connection.credentialConfigured ? "已配置" : "尚未配置"}
+                          {connection.credentialConfigured
+                            ? t("imageSettings.credential.configured")
+                            : t("imageSettings.credential.missing")}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {canWriteSecret
-                            ? "选择凭据用途并写入。相同用途会替换原凭据；签名认证需分别写入 Access Key 和 Secret Key，临时凭据还需 Security Token。"
-                            : "先保存公开设置，处理版本冲突后再写入凭据。"}
+                            ? t("imageSettings.credential.hint")
+                            : t("imageSettings.credential.saveFirst")}
                         </p>
-                        <Field label="凭据用途（purpose）">
+                        <Field label={t("imageSettings.credential.purpose")}>
                           <select
                             className={selectClass}
                             disabled={!canWriteSecret}
@@ -717,7 +785,7 @@ function ImageSettingsScope({
                             ))}
                           </select>
                         </Field>
-                        <Field label="新凭据">
+                        <Field label={t("imageSettings.credential.new")}>
                           <Input
                             key={connection.id}
                             ref={bindSecretInput}
@@ -734,50 +802,62 @@ function ImageSettingsScope({
                             disabled={!canWriteSecret || !secretDirty}
                             onClick={() => void saveSecret()}
                           >
-                            写入并绑定凭据
+                            {t("imageSettings.credential.write")}
                           </Button>
                           <Button variant="ghost" disabled={!secretDirty} onClick={clearSecret}>
-                            清空输入
+                            {t("imageSettings.credential.clear")}
                           </Button>
                         </div>
                       </div>
                     </>
                   )}
                   <Toggle
-                    label="启用连接"
+                    label={t("imageSettings.enableConnection")}
                     checked={connection.enabled}
                     onChange={(enabled) => updateConnection({ enabled })}
                   />
                   {dependencies.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      使用此连接的目标：{dependencies.map((t) => t.name).join("、")}
-                      。删除连接前请先移除目标或更换其连接。
+                      {t("imageSettings.dependents").replace(
+                        "{targets}",
+                        dependencies
+                          .map((item) => item.name)
+                          .join(t("imageSettings.listSeparator")),
+                      )}
                     </p>
                   )}
                   <Button
                     variant="destructive"
                     disabled={dependencies.length > 0}
-                    onClick={() => {
-                      if (window.confirm(`确定删除连接“${connection.name}”？保存设置后生效。`)) {
+                    onClick={async () => {
+                      const confirmed = await ask({
+                        title: t("imageSettings.confirm.deleteConnectionTitle").replace(
+                          "{name}",
+                          connection.name,
+                        ),
+                        description: t("imageSettings.confirm.deleteDescription"),
+                        confirmLabel: t("imageSettings.confirm.delete"),
+                      });
+                      if (confirmed) {
                         setDraft(removeImageConnection(draft, connection.id));
                         clearSecret();
                         setConnectionId("");
                       }
                     }}
                   >
-                    删除连接
+                    {t("imageSettings.deleteConnection")}
                   </Button>
                 </>
               )}
             </section>
           )}
           {panel === "targets" && draft.connections.length === 0 && (
-            <p role="status">当前没有可用的图像连接，请先配置后端图像连接。</p>
+            <p role="status">{t("imageSettings.noBackendConnections")}</p>
           )}
           {panel !== "connections" && (
             <section className="space-y-3 rounded-xl bg-settings-tile p-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">图像目标</h3>
+                <h3 className="text-sm font-semibold">{t("imageSettings.targets")}</h3>
                 <Button
                   variant="outline"
                   disabled={!draft.connections.length}
@@ -790,22 +870,22 @@ function ImageSettingsScope({
                     setTargetId(next.id);
                   }}
                 >
-                  新增目标
+                  {t("imageSettings.addTarget")}
                 </Button>
               </div>
-              <Field label="选择目标">
+              <Field label={t("imageSettings.selectTarget")}>
                 <select
                   className={selectClass}
                   value={target?.id ?? ""}
                   onChange={(e) => setTargetId(e.target.value)}
                 >
                   <option value="" disabled>
-                    请选择目标
+                    {t("imageSettings.selectTargetPlaceholder")}
                   </option>
-                  {draft.targets.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.enabled ? "" : "（禁用）"}
+                  {draft.targets.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.enabled ? "" : t("imageSettings.targetDisabledSuffix")}
                     </option>
                   ))}
                 </select>
@@ -813,13 +893,13 @@ function ImageSettingsScope({
               {target && (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="目标名称">
+                    <Field label={t("imageSettings.targetName")}>
                       <Input
                         value={target.name}
                         onChange={(e) => updateTarget({ name: e.target.value })}
                       />
                     </Field>
-                    <Field label="使用连接">
+                    <Field label={t("imageSettings.targetConnection")}>
                       <select
                         className={selectClass}
                         value={target.connectionId}
@@ -832,7 +912,7 @@ function ImageSettingsScope({
                         ))}
                       </select>
                     </Field>
-                    <Field label="图像协议">
+                    <Field label={t("imageSettings.protocol")}>
                       <select
                         className={selectClass}
                         value={target.adapter}
@@ -854,7 +934,9 @@ function ImageSettingsScope({
                         }}
                       >
                         {!imageProtocols.some((p) => p.id === target.adapter) && (
-                          <option value={target.adapter}>当前协议（需后端支持）</option>
+                          <option value={target.adapter}>
+                            {t("imageSettings.protocolCurrent")}
+                          </option>
                         )}
                         {imageProtocols.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -863,13 +945,13 @@ function ImageSettingsScope({
                         ))}
                       </select>
                     </Field>
-                    <Field label="协议适配器版本">
+                    <Field label={t("imageSettings.adapterVersion")}>
                       <Input
                         value={target.adapterVersion}
                         onChange={(e) => updateTarget({ adapterVersion: e.target.value })}
                       />
                     </Field>
-                    <Field label="目标类型">
+                    <Field label={t("imageSettings.kind")}>
                       <select
                         className={selectClass}
                         disabled={target.adapter === "runninghub-workflow"}
@@ -884,52 +966,54 @@ function ImageSettingsScope({
                           })
                         }
                       >
-                        <option value="model">模型</option>
-                        <option value="workflow">工作流</option>
+                        <option value="model">{t("imageSettings.kind.model")}</option>
+                        <option value="workflow">{t("imageSettings.kind.workflow")}</option>
                       </select>
                     </Field>
                     <Field
                       label={
                         target.kind === "workflow"
-                          ? "远端工作流 ID（remoteId）"
-                          : "远端模型 ID（remoteId）"
+                          ? t("imageSettings.remoteId.workflow")
+                          : t("imageSettings.remoteId.model")
                       }
                     >
                       <Input
                         value={target.remoteId}
-                        placeholder={target.kind === "workflow" ? "工作流 ID" : "模型 ID"}
+                        placeholder={
+                          target.kind === "workflow"
+                            ? t("imageSettings.remoteIdPlaceholder.workflow")
+                            : t("imageSettings.remoteIdPlaceholder.model")
+                        }
                         onChange={(e) => updateTarget({ remoteId: e.target.value })}
                       />
                     </Field>
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      声明目标能力（以供应商和后端实际验证为准）
+                      {t("imageSettings.capabilitiesHint")}
                     </p>
                     <div className="flex flex-wrap gap-4">
-                      {(Object.entries(imageOperationLabels) as [Operation, string][]).map(
-                        ([op, label]) => (
-                          <Toggle
-                            key={op}
-                            label={label}
-                            checked={target.capabilities.operations.includes(op)}
-                            onChange={(checked) =>
-                              updateTarget({
-                                capabilities: {
-                                  ...target.capabilities,
-                                  operations: checked
-                                    ? [...target.capabilities.operations, op]
-                                    : target.capabilities.operations.filter((v) => v !== op),
-                                },
-                              })
-                            }
-                          />
-                        ),
-                      )}
+                      {(Object.keys(imageOperationLabels) as Operation[]).map((op) => (
+                        <Toggle
+                          key={op}
+                          label={t(`imageSettings.operation.${op}`)}
+                          checked={target.capabilities.operations.includes(op)}
+                          onChange={(checked) =>
+                            updateTarget({
+                              capabilities: {
+                                ...target.capabilities,
+                                operations: checked
+                                  ? [...target.capabilities.operations, op]
+                                  : target.capabilities.operations.filter((v) => v !== op),
+                              },
+                            })
+                          }
+                        />
+                      ))}
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="最多输入图片">
+                    <Field label={t("imageSettings.maxInputs")}>
                       <Input
                         type="number"
                         min={0}
@@ -945,7 +1029,7 @@ function ImageSettingsScope({
                         }
                       />
                     </Field>
-                    <Field label="每次最多输出图片">
+                    <Field label={t("imageSettings.maxCount")}>
                       <Input
                         type="number"
                         min={1}
@@ -965,15 +1049,15 @@ function ImageSettingsScope({
                   <div className="flex flex-wrap gap-4">
                     {(
                       [
-                        ["supportsCancel", "可取消"],
-                        ["supportsReconcile", "可核对结果"],
-                        ["supportsContinuation", "可继续编辑"],
-                        ["supportsPreview", "可预览"],
+                        ["supportsCancel", "capability.cancel"],
+                        ["supportsReconcile", "capability.reconcile"],
+                        ["supportsContinuation", "capability.continuation"],
+                        ["supportsPreview", "capability.preview"],
                       ] as const
                     ).map(([key, label]) => (
                       <Toggle
                         key={key}
-                        label={label}
+                        label={t(`imageSettings.${label}`)}
                         checked={target.capabilities[key]}
                         onChange={(checked) =>
                           updateTarget({ capabilities: { ...target.capabilities, [key]: checked } })
@@ -1002,13 +1086,12 @@ function ImageSettingsScope({
                   </div>
                   <details className="space-y-3 rounded-lg border border-border p-3">
                     <summary className="cursor-pointer text-sm">
-                      高级：参数 schema 与工作流映射
+                      {t("imageSettings.advanced.summary")}
                     </summary>
                     <p className="text-xs text-muted-foreground">
-                      参数数组使用 key、label、type、required，可声明
-                      enum、minimum、maximum、default、unit。仅填写公开参数，凭据请使用上方专用输入。
+                      {t("imageSettings.advanced.parametersHint")}
                     </p>
-                    <Field label="参数 schema（JSON）">
+                    <Field label={t("imageSettings.advanced.parameters")}>
                       <textarea
                         className="min-h-40 w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
                         value={
@@ -1035,7 +1118,7 @@ function ImageSettingsScope({
                               [
                                 {
                                   key: "quality",
-                                  label: "质量",
+                                  label: t("imageSettings.advanced.exampleQuality"),
                                   type: "string",
                                   required: false,
                                   enum: ["standard", "high"],
@@ -1049,15 +1132,14 @@ function ImageSettingsScope({
                         }))
                       }
                     >
-                      填入参数示例
+                      {t("imageSettings.advanced.fillExample")}
                     </Button>
                     {target.kind === "workflow" && (
                       <>
                         <p className="text-xs text-muted-foreground">
-                          RunningHub 映射使用 revision、inputs 和 outputs。每个参数须映射
-                          parameterKey → nodeId / inputName，输出声明 nodeId / outputName。
+                          {t("imageSettings.advanced.workflowHint")}
                         </p>
-                        <Field label="工作流字段映射（JSON）">
+                        <Field label={t("imageSettings.advanced.workflow")}>
                           <textarea
                             className="min-h-40 w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
                             value={
@@ -1081,9 +1163,9 @@ function ImageSettingsScope({
                     )}
                   </details>
                   <Toggle
-                    label="启用目标"
+                    label={t("imageSettings.enableTarget")}
                     checked={target.enabled}
-                    // 已启用的仍可关闭；未完成的适配器或停用的连接下不能再打开。
+                    // An enabled target can always be turned off; it cannot be turned on for an unfinished adapter or a disabled connection.
                     disabled={!target.enabled && targetEnableBlock !== ""}
                     onChange={(enabled) => updateTarget({ enabled })}
                   />
@@ -1092,8 +1174,16 @@ function ImageSettingsScope({
                   )}
                   <Button
                     variant="destructive"
-                    onClick={() => {
-                      if (window.confirm(`确定删除目标“${target.name}”？保存设置后生效。`)) {
+                    onClick={async () => {
+                      const confirmed = await ask({
+                        title: t("imageSettings.confirm.deleteTargetTitle").replace(
+                          "{name}",
+                          target.name,
+                        ),
+                        description: t("imageSettings.confirm.deleteDescription"),
+                        confirmLabel: t("imageSettings.confirm.delete"),
+                      });
+                      if (confirmed) {
                         setDraft({
                           ...draft,
                           targets: draft.targets.filter((t) => t.id !== target.id),
@@ -1107,7 +1197,7 @@ function ImageSettingsScope({
                       }
                     }}
                   >
-                    删除目标
+                    {t("imageSettings.deleteTarget")}
                   </Button>
                 </>
               )}
@@ -1115,6 +1205,7 @@ function ImageSettingsScope({
           )}
         </fieldset>
       )}
+      {dialog}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   SettingsSelectTrigger,
 } from "@liveagent/ui/components/settings/SettingsSelect";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Select, SelectItem, SelectValue } from "@liveagent/ui/components/ui/select";
 import { useLocale } from "@liveagent/ui/i18n";
@@ -62,6 +63,7 @@ function format(template: string, values: Record<string, string>): string {
  */
 export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
   const { t } = useLocale();
+  const { confirm, dialog } = useConfirmDialog();
   const fieldId = useId();
   const [settings, setSettings] = useState<KBrainWebSearchSettings | null>(null);
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -420,8 +422,15 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
           size="sm"
           variant="outline"
           disabled={!!busy}
-          onClick={() => {
-            if (!dirty || window.confirm(t("settings.webSearch.discard"))) void refresh();
+          onClick={async () => {
+            const confirmed =
+              !dirty ||
+              (await confirm({
+                title: t("settings.webSearch.discard"),
+                confirmLabel: t("confirmDialog.discardAndReload"),
+                cancelLabel: t("confirmDialog.cancel"),
+              }));
+            if (confirmed) void refresh();
           }}
         >
           {t("settings.webSearch.reload")}
@@ -441,6 +450,7 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
           {error}
         </p>
       )}
+      {dialog}
     </SettingsSection>
   );
 }

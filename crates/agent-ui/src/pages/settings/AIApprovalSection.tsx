@@ -8,6 +8,7 @@ import {
   SettingsToggleGroupItem,
 } from "@liveagent/ui/components/settings/SettingsToggleGroup";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useLocale } from "@liveagent/ui/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -34,6 +35,7 @@ function connectionScope(kbrain: KBrainSettingsAdapter): string {
 
 export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
   const { t } = useLocale();
+  const { confirm, dialog } = useConfirmDialog();
   const [document, setDocument] = useState<KBrainSettingsDocument | null>(null);
   const [draft, setDraft] = useState<AIApprovalConfig>({ mode: "off" });
   const [busy, setBusy] = useState<"load" | "save" | null>("load");
@@ -232,8 +234,15 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
           size="sm"
           variant="outline"
           disabled={!!busy}
-          onClick={() => {
-            if (!dirty || window.confirm(t("settings.aiApproval.discard"))) void refresh();
+          onClick={async () => {
+            const confirmed =
+              !dirty ||
+              (await confirm({
+                title: t("settings.aiApproval.discard"),
+                confirmLabel: t("confirmDialog.discardAndReload"),
+                cancelLabel: t("confirmDialog.cancel"),
+              }));
+            if (confirmed) void refresh();
           }}
         >
           {t("settings.aiApproval.reload")}
@@ -253,6 +262,7 @@ export function AIApprovalSection({ kbrain }: { kbrain: KBrainSettingsAdapter })
           {error}
         </p>
       )}
+      {dialog}
     </SettingsSection>
   );
 }

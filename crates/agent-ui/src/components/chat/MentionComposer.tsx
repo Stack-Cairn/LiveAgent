@@ -212,7 +212,7 @@ export const MentionComposer = memo(
     }: MentionComposerProps,
     ref,
   ) {
-    const { locale, t } = useLocale();
+    const { t } = useLocale();
     const editorRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const commandOwnerRef = useRef(currentConversationId);
@@ -1440,20 +1440,12 @@ export const MentionComposer = memo(
       [],
     );
 
-    const contextMenuLabels =
-      locale === "en-US"
-        ? {
-            cut: "Cut",
-            copy: "Copy",
-            paste: "Paste",
-            selectAll: "Select all",
-          }
-        : {
-            cut: "剪切",
-            copy: "复制",
-            paste: "粘贴",
-            selectAll: "全选",
-          };
+    const contextMenuLabels = {
+      cut: t("workspaceEditor.context.cut"),
+      copy: t("workspaceEditor.context.copy"),
+      paste: t("workspaceEditor.context.paste"),
+      selectAll: t("workspaceEditor.context.selectAll"),
+    };
     const contextMenuHasSelection = Boolean(composerContextMenu?.selectedText.length);
     const contextMenuCanMutate = !disabled;
 

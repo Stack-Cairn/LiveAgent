@@ -124,13 +124,13 @@ test("CC Switch and Cherry imports retain the original setSettings persistence c
     const ccButton = [...document.querySelectorAll("button")].find((node) => node.textContent.includes("CC Switch"));
     await env.act(async () => ccButton.click());
     await env.act(async () => document.querySelector('input[type="checkbox"]').click());
-    await click("导入 1 项");
+    await click("providerImport.ccs.import");
     await env.act(async () => Promise.all(saves));
     const imported = current.customProviders.find((provider) => provider.id === "ccswitch-cc-1");
     assert.equal(imported.apiKey, "cc-import-secret");
     assert.ok(imported.models.some((model) => model.id === "cc-model"));
     assert.ok(imported.models.some((model) => model.id === "discovered"));
-    await click("关闭");
+    await click("settings.close");
     await click("settings.importProviders");
     const cherryButton = [...document.querySelectorAll("button")].find((node) => node.textContent.includes("Cherry Studio"));
     await env.act(async () => cherryButton.click());

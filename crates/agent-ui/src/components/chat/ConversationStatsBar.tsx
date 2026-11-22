@@ -270,7 +270,7 @@ export function ConversationStatsBar(props: {
     prefix +
     groups
       .map((group) => group.metrics.map((m) => `${m.label} ${m.value}`).join(" · "))
-      .join(" ｜ ");
+      .join(t("format.groupSeparator"));
 
   // tooltip 是状态栏的「完整版」：单行受容器分档只露出高优先级分组，且用的是
   // 工程缩写；这里改用仪表盘式的「分区小标题 + 逐指标一行」，每条都是

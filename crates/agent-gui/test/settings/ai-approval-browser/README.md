@@ -14,6 +14,6 @@ node test/settings/ai-approval-browser/check.cjs
 
 `PLAYWRIGHT_MODULE` can point to an external Playwright installation.
 The test covers all three modes, model search, desktop and mobile layouts,
-Chinese and English, draft-discard confirmation, save/load failures and retry,
+Chinese and English, the in-app draft-discard confirmation (focus, Esc, confirm), save/load failures and retry,
 unavailable models, WebUI notices, and the computer-settings page sharing the
 backend document. Screenshots are written to `/tmp/la-ai-approval-*.png`.

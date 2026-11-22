@@ -13,6 +13,7 @@ pnpm exec vite --config test/image-studio/browser/vite.config.ts
 - Strict local port: http://127.0.0.1:18473/
 - Workbench: `/`
 - Settings: `/?settings`
+- Add `locale=en-US` (e.g. `/?settings&locale=en-US`) to render in English; the default is zh-CN.
 - Navigation between these routes reloads and resets fixture state. The settings route is an isolated test surface; there is no workbench target-settings overlay.
 - Draft storage is an in-memory Map.
 - Browser fixture audit: `window.__fixture.audit`. It records request paths, methods, idempotency keys, Last-Event-ID, request bodies, and upload metadata. Secret write values are redacted and not retained in the audit.

@@ -1,0 +1,144 @@
+{
+  "$comment": "CJK string literals allowed in UI .tsx sources (checked by no-cjk-ui-literals.test.mjs). UI text belongs in i18n modules; list only intentional locale-specific literals here, each with a reason. Entries under deferred are temporary.",
+  "intentional": [
+    {
+      "file": "crates/agent-ui/src/components/settings/TimeZonePicker.tsx",
+      "reason": "Chinese city aliases; ZH_CITIES is only used for labels and search when the locale is zh-CN.",
+      "literals": [
+        "上海 北京",
+        "乌鲁木齐",
+        "香港",
+        "澳门",
+        "台北",
+        "东京",
+        "首尔",
+        "新加坡",
+        "吉隆坡",
+        "曼谷",
+        "胡志明市",
+        "雅加达",
+        "马尼拉",
+        "加尔各答 新德里 孟买",
+        "迪拜",
+        "利雅得",
+        "耶路撒冷 特拉维夫",
+        "伊斯坦布尔",
+        "莫斯科",
+        "伦敦",
+        "都柏林",
+        "巴黎",
+        "柏林",
+        "阿姆斯特丹",
+        "马德里",
+        "罗马",
+        "苏黎世",
+        "斯德哥尔摩",
+        "纽约",
+        "多伦多",
+        "芝加哥",
+        "丹佛",
+        "凤凰城",
+        "洛杉矶 旧金山",
+        "温哥华",
+        "墨西哥城",
+        "圣保罗",
+        "布宜诺斯艾利斯",
+        "悉尼",
+        "墨尔本",
+        "珀斯",
+        "奥克兰",
+        "檀香山",
+        "开罗",
+        "约翰内斯堡"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/settings/SystemSettingsForm.tsx",
+      "reason": "The language picker names each language in its own script.",
+      "literals": [
+        "🇨🇳  简体中文"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/chat/TranscriptMessageActions.tsx",
+      "reason": "Date parts inside the zh-CN-only formatting branch; other locales use Intl.",
+      "literals": [
+        "月",
+        "日",
+        "年"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/chat/ConversationSearchDialog.tsx",
+      "reason": "Date parts of the zh-only formatChineseUpdatedAt helper.",
+      "literals": [
+        "月",
+        "日"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/chat/assistant-bubble/ToolTraceGroup.tsx",
+      "reason": "Full-width separator used only in the zh-CN branch.",
+      "literals": [
+        "｜"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/planning/PlanningToolbar.tsx",
+      "reason": "Chinese lunar-calendar day name, shown only when the lunar calendar is enabled.",
+      "literals": [
+        "初一"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/chat/MentionComposerInternals.tsx",
+      "reason": "Fixed code-mention chip format (file：line～line) shared with mentionReferences.ts; not prose.",
+      "literals": [
+        "："
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/chat/userMessageContent.tsx",
+      "reason": "Fixed code-mention chip format (file：line～line) shared with mentionReferences.ts; not prose.",
+      "literals": [
+        "："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/agent-ui-adapters/providerSettings.tsx",
+      "reason": "Provider-name suffix persisted into settings and matched by the import identity regex; data, not a UI label.",
+      "literals": [
+        "（ccswitch）",
+        "（Cherry Studio）",
+        "（Cherry Studio ·",
+        "）"
+      ]
+    }
+  ],
+  "deferred": [
+    {
+      "file": "crates/agent-ui/src/pages/chat/transcript/FloorNavRail.tsx",
+      "reason": "owned by parallel work; migrate after merge",
+      "literals": [
+        "楼层导航",
+        "收藏",
+        "取消收藏"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/transcript/RowActions.tsx",
+      "reason": "owned by parallel work; migrate after merge",
+      "literals": [
+        "旧历史缺少稳定消息标识，无法重试",
+        "旧历史缺少稳定消息标识，无法编辑重发"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/workspace/useProjectTerminals.tsx",
+      "reason": "owned by parallel work; migrate after merge",
+      "literals": [
+        "退出 LiveAgent 失败"
+      ]
+    }
+  ]
+}

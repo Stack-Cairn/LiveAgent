@@ -8,6 +8,7 @@ function settings(config = { mode: "off" }, models = [{ provider: "p", id: "smal
 
 async function fixture(task, initial = settings()) {
   const env = await createDomTestEnv({ mocks: {
+    "@liveagent/ui/components/IconSet": new Proxy({}, { get: () => () => null }),
     "@liveagent/ui/components/ui/button": { Button: ({children, size, variant, ...props}) => env.React.createElement("button", props, children) },
     "@liveagent/ui/components/settings/SettingsToggleGroup": {
       SettingsToggleGroup: ({children, value, onValueChange, disabled, ...props}) => env.React.createElement("div", props,
@@ -90,13 +91,16 @@ test("AI approval failed saves retain drafts and retry without a false saved sta
 });
 
 test("AI approval reload confirms draft discard and handles unavailable backend capability", async () => {
-  await fixture(async ({ host, button, click, choose, setValue }) => {
+  await fixture(async ({ env, host, button, click, choose, setValue }) => {
     await choose("risk_only");
-    window.confirm = () => false;
     await click(button("重新加载"));
+    const alert = () => document.querySelector('[role="alertdialog"]');
+    assert.match(alert().textContent, /放弃未保存的审批设置并重新加载？/);
+    await click([...alert().querySelectorAll("button")].find((item) => item.textContent === "取消"));
     assert.equal(button("仅风险提示").getAttribute("aria-pressed"), "true");
-    window.confirm = () => true;
     await click(button("重新加载"));
+    await click([...alert().querySelectorAll("button")].find((item) => item.textContent === "放弃并重新加载"));
+    await env.act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     assert.equal(button("关闭").getAttribute("aria-pressed"), "true");
     // Explicit undefined is different from the fixture helper's default argument.
     setValue({ ...settings(), aiApproval: undefined });

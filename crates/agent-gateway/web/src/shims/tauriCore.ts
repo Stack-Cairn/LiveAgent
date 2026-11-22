@@ -1,5 +1,7 @@
+import { t } from "../i18n/config";
 import { getGatewayWebSocketClient } from "../lib/gatewaySocket";
 import { loadToken } from "../lib/storage";
+import { loadWebLocale } from "../lib/webLocale";
 import { promptPathInBrowser } from "./browserPathPrompt";
 
 type GatewayRuntimeStatus = {
@@ -66,20 +68,22 @@ async function invokeGatewayMemory<T>(command: string, args?: Record<string, unk
 }
 
 async function pickWorkdirInBrowser(): Promise<string | null> {
+  const locale = loadWebLocale();
   return promptPathInBrowser({
-    title: "选择工作目录",
-    description: "浏览器无法直接打开远程目录选择器。请输入桌面端 Agent 可访问的绝对工作目录路径。",
-    label: "工作目录路径",
+    title: t("gatewayWeb.pathPrompt.workdirTitle", locale),
+    description: t("gatewayWeb.pathPrompt.workdirDescription", locale),
+    label: t("gatewayWeb.pathPrompt.workdirLabel", locale),
     placeholder: "/Users/name/project",
     inputId: "gateway-browser-workdir-path",
   });
 }
 
 async function pickFilePathInBrowser(): Promise<string | null> {
+  const locale = loadWebLocale();
   return promptPathInBrowser({
-    title: "选择配置文件",
-    description: "浏览器无法直接打开远程文件选择器。请输入桌面端 Agent 可访问的配置文件绝对路径。",
-    label: "配置文件路径",
+    title: t("gatewayWeb.pathPrompt.fileTitle", locale),
+    description: t("gatewayWeb.pathPrompt.fileDescription", locale),
+    label: t("gatewayWeb.pathPrompt.fileLabel", locale),
     placeholder: "~/.mcp.json",
     inputId: "gateway-browser-file-path",
   });

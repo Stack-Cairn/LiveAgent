@@ -8,22 +8,23 @@ import { ImageSettings } from "../../pages/settings/ImageSettings";
 export function ImageTargetSettings({ client }: { client: ImageStudioClient }) {
   const [open, setOpen] = useState(false);
   const { t } = useLocale();
-  const guard = useRef<(() => boolean) | undefined>(undefined);
-  const register = useCallback((next: () => boolean) => {
+  const guard = useRef<(() => boolean | Promise<boolean>) | undefined>(undefined);
+  const register = useCallback((next: () => boolean | Promise<boolean>) => {
     guard.current = next;
     return () => {
       if (guard.current === next) guard.current = undefined;
     };
   }, []);
-  const close = () => {
-    if (!guard.current || guard.current()) setOpen(false);
+  // The guard may ask through an in-app dialog, so closing waits for its answer.
+  const close = async () => {
+    if (!guard.current || (await guard.current())) setOpen(false);
   };
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         if (next) setOpen(true);
-        else close();
+        else void close();
       }}
     >
       <DialogTrigger render={<Button type="button" size="sm" variant="outline" />}>
@@ -35,7 +36,7 @@ export function ImageTargetSettings({ client }: { client: ImageStudioClient }) {
       >
         <header className="flex items-center justify-between gap-3">
           <DialogTitle>{t("imageStudio.targetSettings.title")}</DialogTitle>
-          <Button type="button" variant="ghost" onClick={close}>
+          <Button type="button" variant="ghost" onClick={() => void close()}>
             {t("imageStudio.targetSettings.close")}
           </Button>
         </header>

@@ -25,6 +25,11 @@ export type ConfirmDialogOptions = {
   hideCancel?: boolean;
   /** Give the safe cancel action primary emphasis and render confirmation as destructive text. */
   preferCancel?: boolean;
+  /**
+   * "destructive" (default) paints the confirm button red; "default" is for
+   * confirmations that do not delete or discard anything irreversible.
+   */
+  tone?: "destructive" | "default";
 };
 
 type PendingConfirmDialog = ConfirmDialogOptions & {
@@ -44,6 +49,7 @@ function ConfirmDialog(
     closeLabel = cancelLabel,
     hideCancel = false,
     preferCancel = false,
+    tone = "destructive",
     onCancel,
     onConfirm,
   } = props;
@@ -99,6 +105,7 @@ function ConfirmDialog(
                     variant={preferCancel ? "default" : "outline"}
                     className="h-8"
                     autoFocus
+                    data-confirm-dialog-action="cancel"
                   />
                 }
               >
@@ -107,11 +114,18 @@ function ConfirmDialog(
             )}
             <Button
               type="button"
-              variant={preferCancel ? "ghost" : "destructive"}
+              variant={preferCancel ? "ghost" : tone === "default" ? "default" : "destructive"}
               onClick={onConfirm}
+              // Without a cancel button the only action takes focus; otherwise
+              // focus starts on the safe choice so Enter never confirms by accident.
+              autoFocus={hideCancel}
+              data-confirm-dialog-action="confirm"
+              data-tone={tone}
               className={cn(
                 "h-8",
-                preferCancel && "text-destructive hover:bg-destructive/10 hover:text-destructive",
+                preferCancel &&
+                  tone === "destructive" &&
+                  "text-destructive hover:bg-destructive/10 hover:text-destructive",
               )}
             >
               {confirmLabel}
@@ -161,6 +175,7 @@ export function useConfirmDialog() {
       closeLabel={pending.closeLabel}
       hideCancel={pending.hideCancel}
       preferCancel={pending.preferCancel}
+      tone={pending.tone}
       onCancel={() => close(false)}
       onConfirm={() => close(true)}
     />

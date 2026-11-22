@@ -1158,8 +1158,12 @@ export function ProvidersSection(
             </span>
             <span className="opacity-80">
               {rejectedLegacyProviders
-                .map((provider) => `${provider.name}（${provider.id.slice(0, 8)}）`)
-                .join("、")}
+                .map((provider) =>
+                  t("settings.legacyProviderEntry")
+                    .replace("{name}", provider.name)
+                    .replace("{id}", provider.id.slice(0, 8)),
+                )
+                .join(t("format.listSeparator"))}
             </span>
             <span className="opacity-80">{t("settings.legacyProviderImportFailedHint")}</span>
             {onRetryRejectedLegacyProviders ? (

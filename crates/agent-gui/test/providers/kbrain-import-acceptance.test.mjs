@@ -123,8 +123,8 @@ test("CC Switch and Cherry original import controls save, reload, discover and s
   const waitFor = async (count) => { const deadline = Date.now() + 10000; while (saves < count) { if (saveError) throw saveError; assert.ok(Date.now() < deadline); await env.act(async () => new Promise((resolve) => setTimeout(resolve, 20))); } await pending; };
   const click = async (text, contains = false) => { const node = [...domDocument.querySelectorAll("button")].find((item) => contains ? item.textContent.includes(text) : item.textContent.trim() === text || item.getAttribute("aria-label") === text); assert.ok(node && !node.disabled, `missing button ${text}`); await env.act(async () => node.click()); };
   await env.act(async () => render());
-  await click("settings.importProviders"); await click("CC Switch", true); await env.act(async () => domDocument.querySelector('input[type="checkbox"]').click()); await click("导入 1 项"); await waitFor(2);
-  await click("关闭"); await click("settings.importProviders"); await click("Cherry Studio", true); await click("全选可用项"); await click("同步 1 个"); await waitFor(4);
+  await click("settings.importProviders"); await click("CC Switch", true); await env.act(async () => domDocument.querySelector('input[type="checkbox"]').click()); await click("providerImport.ccs.import"); await waitFor(2);
+  await click("settings.close"); await click("settings.importProviders"); await click("Cherry Studio", true); await click("providerImport.cherry.selectAvailable"); await click("providerImport.cherry.sync"); await waitFor(4);
   assert.deepEqual(nativeCommands, ["settings_list_ccswitch_providers", "settings_list_cherry_studio_providers"]);
   const importedProviders = current.customProviders.filter((provider) => provider.id.startsWith("ccswitch-") || provider.id.startsWith("cherry-studio-"));
   assert.equal(importedProviders.length, 2);

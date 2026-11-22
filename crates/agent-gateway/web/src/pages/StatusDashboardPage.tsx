@@ -26,6 +26,13 @@ import {
   Zap,
 } from "@liveagent/ui/components/IconSet";
 import { Button, RefreshButton } from "@liveagent/ui/components/ui/button";
+import {
+  type Locale,
+  LocaleContext,
+  normalizeLocale,
+  useLocale,
+  useLocaleContextValue,
+} from "@liveagent/ui/i18n/index";
 import { useAutomation } from "@liveagent/ui/lib/automation/index";
 import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
 import { cachedDateTimeFormat, cachedNumberFormat } from "@liveagent/ui/lib/shared/intlFormatters";
@@ -48,6 +55,7 @@ import type {
   HistoryWorkdirSummary,
 } from "@/lib/gatewayTypes";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
+import { loadWebLocale } from "@/lib/webLocale";
 import { StatusPanel, statusPanelSurfaceClass } from "../components/StatusPanel";
 import { StatusHeading, StatusLabel, StatusSectionHeader } from "../components/StatusTypography";
 import { LoginPage } from "./LoginPage";
@@ -206,11 +214,11 @@ function formatDuration(ms: number) {
   return `${days} d ${hours % 24} h`;
 }
 
-function formatClock(ms: number) {
+function formatClock(locale: Locale, ms: number) {
   if (!ms) {
     return "--:--:--";
   }
-  return cachedDateTimeFormat("zh-CN", "status-dashboard-clock", {
+  return cachedDateTimeFormat(locale, "status-dashboard-clock", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -218,8 +226,8 @@ function formatClock(ms: number) {
   }).format(new Date(ms));
 }
 
-function compactNumber(value: number) {
-  return cachedNumberFormat("zh-CN", "status-dashboard-compact", {
+function compactNumber(locale: Locale, value: number) {
+  return cachedNumberFormat(locale, "status-dashboard-compact", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(Math.max(0, value));
@@ -257,10 +265,10 @@ function truncateMiddle(value: string, maxLength = 34) {
   return `${text.slice(0, head)}…${text.slice(-tail)}`;
 }
 
-function basename(path: string) {
+function basename(path: string, untitled: string) {
   const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
   if (!normalized) {
-    return "未命名项目";
+    return untitled;
   }
   return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
@@ -270,7 +278,10 @@ function getConversationTitle(conversation: ConversationSummary | undefined, fal
   return title || fallback;
 }
 
-function buildRunningConversations(history: HistoryList | null) {
+function buildRunningConversations(
+  history: HistoryList | null,
+  fallbackTitle: (id: string) => string,
+) {
   if (!history) {
     return [];
   }
@@ -280,7 +291,7 @@ function buildRunningConversations(history: HistoryList | null) {
     const conversation = byId.get(id);
     return {
       id,
-      title: getConversationTitle(conversation, `会话 ${truncateMiddle(id, 12)}`),
+      title: getConversationTitle(conversation, fallbackTitle(truncateMiddle(id, 12))),
       cwd: runtime?.cwd?.trim() || conversation?.cwd?.trim() || "",
       updatedAt: normalizeEpochMs(runtime?.updated_at || conversation?.updated_at),
       messageCount: conversation?.message_count ?? 0,
@@ -463,7 +474,9 @@ function runSnapshotRequest<T>(promise: Promise<T>) {
   );
 }
 
-function useDashboardAuth() {
+function useDashboardAuth(t: (key: string) => string) {
+  const tRef = useRef(t);
+  tRef.current = t;
   const initialTokenRef = useRef(readDashboardTokenSeed());
   const [token, setToken] = useState("");
   const [loginToken, setLoginToken] = useState(initialTokenRef.current);
@@ -495,7 +508,7 @@ function useDashboardAuth() {
         }
         clearToken();
         stripDashboardTokenFromUrl();
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, tRef.current("statusDashboard.tokenVerifyFailed")));
       })
       .finally(() => {
         if (!cancelled) {
@@ -517,7 +530,7 @@ function useDashboardAuth() {
         setLoginToken(verifiedToken);
       })
       .catch((error) => {
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, tRef.current("statusDashboard.tokenVerifyFailed")));
       })
       .finally(() => setAuthSubmitting(false));
   };
@@ -544,6 +557,21 @@ function useDashboardAuth() {
 }
 
 export function StatusDashboardPage() {
+  // The dashboard renders outside the app shell: start from the saved WebUI locale and follow
+  // the desktop settings once they load.
+  const [locale, setLocale] = useState(loadWebLocale);
+  const localeContextValue = useLocaleContextValue(locale);
+  return (
+    <LocaleContext.Provider value={localeContextValue}>
+      <StatusDashboardContent onLocaleChange={setLocale} />
+    </LocaleContext.Provider>
+  );
+}
+
+function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: Locale) => void }) {
+  const { locale, t } = useLocale();
+  const tRef = useRef(t);
+  tRef.current = t;
   const {
     token,
     loginToken,
@@ -553,7 +581,7 @@ export function StatusDashboardPage() {
     setAuthError,
     submit,
     logout,
-  } = useDashboardAuth();
+  } = useDashboardAuth(t);
   const now = useNow(token !== "");
   const api = useMemo(() => (token ? getGatewayWebSocketClient(token) : null), [token]);
   const pendingEventsRef = useRef<DashboardEvent[]>([]);
@@ -567,6 +595,10 @@ export function StatusDashboardPage() {
   const [providers, setProviders] = useState<GatewayProviderSummary[]>([]);
   const [settingsSnapshot, setSettingsSnapshot] =
     useState<Partial<GatewaySettingsSyncPayload> | null>(null);
+  const settingsLocale = settingsSnapshot?.locale;
+  useEffect(() => {
+    if (settingsLocale) onLocaleChange(normalizeLocale(settingsLocale));
+  }, [settingsLocale, onLocaleChange]);
   const [recentEvents, setRecentEvents] = useState<DashboardEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>(() => initialCounters());
   const [snapshot, setSnapshot] = useState<SnapshotState>({
@@ -676,32 +708,44 @@ export function StatusDashboardPage() {
         setStatus(statusResult.value);
         setStatusError(null);
       } else {
-        errors.push(asErrorMessage(statusResult.error, "状态读取失败"));
+        errors.push(
+          asErrorMessage(statusResult.error, tRef.current("statusDashboard.error.status")),
+        );
       }
       if (historyResult.ok) {
         setHistory(historyResult.value);
       } else {
-        errors.push(asErrorMessage(historyResult.error, "历史读取失败"));
+        errors.push(
+          asErrorMessage(historyResult.error, tRef.current("statusDashboard.error.history")),
+        );
       }
       if (workdirsResult.ok) {
         setWorkdirs(workdirsResult.value.workdirs);
       } else {
-        errors.push(asErrorMessage(workdirsResult.error, "项目活动读取失败"));
+        errors.push(
+          asErrorMessage(workdirsResult.error, tRef.current("statusDashboard.error.workdirs")),
+        );
       }
       if (terminalsResult.ok) {
         setTerminals(terminalsResult.value);
       } else {
-        errors.push(asErrorMessage(terminalsResult.error, "终端读取失败"));
+        errors.push(
+          asErrorMessage(terminalsResult.error, tRef.current("statusDashboard.error.terminals")),
+        );
       }
       if (providersResult.ok) {
         setProviders(providersResult.value);
       } else {
-        errors.push(asErrorMessage(providersResult.error, "模型源读取失败"));
+        errors.push(
+          asErrorMessage(providersResult.error, tRef.current("statusDashboard.error.providers")),
+        );
       }
       if (settingsResult.ok) {
         setSettingsSnapshot(settingsResult.value);
       } else {
-        errors.push(asErrorMessage(settingsResult.error, "设置读取失败"));
+        errors.push(
+          asErrorMessage(settingsResult.error, tRef.current("statusDashboard.error.settings")),
+        );
       }
       setSnapshot({
         loading: false,
@@ -718,7 +762,14 @@ export function StatusDashboardPage() {
     };
   }, [api, refreshVersion]);
 
-  const runningConversations = useMemo(() => buildRunningConversations(history), [history]);
+  const runningConversations = useMemo(
+    () =>
+      buildRunningConversations(history, (id) =>
+        t("statusDashboard.conversation").replace("{id}", id),
+      ),
+    [history, t],
+  );
+  const projectName = (path: string) => basename(path, t("statusDashboard.untitledProject"));
   const tunnels = useMemo(() => tunnelState?.tunnels ?? [], [tunnelState]);
   const activeTunnels = useMemo(
     () => tunnels.filter((item) => !item.expiresAt || item.expiresAt > now / 1000),
@@ -797,12 +848,12 @@ export function StatusDashboardPage() {
   const latestTerminal = runningTerminals[0] ?? terminals[0];
   const activeWorkspaceName =
     activeWorkspaceProject?.name?.trim() ||
-    (activeWorkspaceProject?.path ? basename(activeWorkspaceProject.path) : "--");
+    (activeWorkspaceProject?.path ? projectName(activeWorkspaceProject.path) : "--");
   const activeWorkspaceHint = activeWorkspaceProject?.path
     ? truncateMiddle(activeWorkspaceProject.path, 48)
     : settingsSnapshot
-      ? "未配置工作区"
-      : "等待 settings.get";
+      ? t("statusDashboard.noWorkspace")
+      : t("statusDashboard.waitingSettings");
   const loadedConversationRows = history?.conversations.length ?? 0;
   const maxWorkdirCount = Math.max(1, ...workdirs.map((item) => item.conversationCount || 0));
   const activeSubsystemCount =
@@ -916,11 +967,11 @@ export function StatusDashboardPage() {
     {
       label: "Context Window",
       value: selectedModelConfig?.contextWindow
-        ? compactNumber(selectedModelConfig.contextWindow)
+        ? compactNumber(locale, selectedModelConfig.contextWindow)
         : "--",
       unit: "tokens",
       note: selectedModelConfig?.maxOutputToken
-        ? `${compactNumber(selectedModelConfig.maxOutputToken)} max output tokens`
+        ? `${compactNumber(locale, selectedModelConfig.maxOutputToken)} max output tokens`
         : "model config",
     },
     {
@@ -976,16 +1027,16 @@ export function StatusDashboardPage() {
     },
     {
       label: "Text Output",
-      value: compactNumber(liveCounters.tokenChars),
+      value: compactNumber(locale, liveCounters.tokenChars),
       unit: "chars",
-      note: `${compactNumber(liveCounters.tokenChunks)} token chunks`,
+      note: `${compactNumber(locale, liveCounters.tokenChunks)} token chunks`,
       tone: "violet",
     },
     {
       label: "Tool Traffic",
-      value: compactNumber(liveCounters.toolCalls + liveCounters.toolResults),
+      value: compactNumber(locale, liveCounters.toolCalls + liveCounters.toolResults),
       unit: "events",
-      note: `${compactNumber(liveCounters.errors)} error events`,
+      note: `${compactNumber(locale, liveCounters.errors)} error events`,
       tone: liveCounters.errors > 0 ? "rose" : "amber",
     },
   ];
@@ -1011,9 +1062,9 @@ export function StatusDashboardPage() {
     },
     {
       label: "History Index",
-      value: compactNumber(history?.total_count ?? 0),
+      value: compactNumber(locale, history?.total_count ?? 0),
       unit: "conversations",
-      detail: `loaded ${loadedConversationRows} rows · today sample ${todayConversationCount} · ${compactNumber(messageSampleCount)} msgs in loaded rows`,
+      detail: `loaded ${loadedConversationRows} rows · today sample ${todayConversationCount} · ${compactNumber(locale, messageSampleCount)} msgs in loaded rows`,
       tone: "cyan",
       icon: History,
     },
@@ -1029,7 +1080,7 @@ export function StatusDashboardPage() {
       label: "Web Terminals",
       value: String(runningTerminals.length),
       unit: "running sessions",
-      detail: `${terminals.length} total sessions · ${latestTerminal ? basename(latestTerminal.cwd) : "no cwd"}`,
+      detail: `${terminals.length} total sessions · ${latestTerminal ? projectName(latestTerminal.cwd) : "no cwd"}`,
       tone: runningTerminals.length > 0 ? "emerald" : "slate",
       icon: Terminal,
     },
@@ -1127,7 +1178,7 @@ export function StatusDashboardPage() {
                 LiveAgent Nexus
               </p>
               <h1 className="m-0 text-foreground tracking-minus-0p035em overflow-hidden max-w-360px text-2xl text-ellipsis whitespace-nowrap">
-                实时遥测指挥舱
+                {t("statusDashboard.title")}
               </h1>
             </div>
           </div>
@@ -1136,7 +1187,7 @@ export function StatusDashboardPage() {
               1912×948 Telemetry Surface
             </span>
             <strong className="text-foreground text-2xl tracking-0p05em leading-none">
-              {formatClock(now)}
+              {formatClock(locale, now)}
             </strong>
             <em className="text-muted-foreground text-tiny not-italic tracking-0p2em uppercase">
               {snapshot.lastRefreshAt
@@ -1164,7 +1215,7 @@ export function StatusDashboardPage() {
               )}
               Sync
             </RefreshButton>
-            <a className={statusActionClass} href="./" title="回到 Gateway 控制台">
+            <a className={statusActionClass} href="./" title={t("statusDashboard.backToConsole")}>
               Console
               <ExternalLink size={14} />
             </a>
@@ -1194,7 +1245,7 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Core Reactor</StatusLabel>
-                  <StatusHeading>运行中枢</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.core")}</StatusHeading>
                 </div>
                 <Shield size={18} />
               </StatusSectionHeader>
@@ -1224,10 +1275,12 @@ export function StatusDashboardPage() {
                     Runtime: {runtimeState}
                   </span>
                   <strong className="block overflow-hidden my-7px mx-0 text-foreground text-lg text-ellipsis whitespace-nowrap">
-                    {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "等待 Agent 接入"}
+                    {status?.agent_id
+                      ? truncateMiddle(status.agent_id, 24)
+                      : t("statusDashboard.waitingAgent")}
                   </strong>
                   <em className="text-muted-foreground text-tiny not-italic tracking-0p12em uppercase">
-                    我在监听 Gateway 心跳：
+                    {t("statusDashboard.heartbeat")}
                     {status?.last_heartbeat
                       ? `${formatDuration(heartbeatAgeMs)} ago`
                       : "no heartbeat"}
@@ -1241,7 +1294,7 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Gateway Fabric</StatusLabel>
-                  <StatusHeading>能力矩阵</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.fabric")}</StatusHeading>
                 </div>
                 <Server size={18} />
               </StatusSectionHeader>
@@ -1289,7 +1342,7 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Live Telemetry</StatusLabel>
-                  <StatusHeading>系统数据雷达</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.telemetry")}</StatusHeading>
                 </div>
                 <span>{eventsPerMinute.toFixed(1)} events/min</span>
               </StatusSectionHeader>
@@ -1344,7 +1397,7 @@ export function StatusDashboardPage() {
                       Stream Load
                     </span>
                     <strong className="text-foreground text-lg">
-                      {compactNumber(liveCounters.events)} events
+                      {compactNumber(locale, liveCounters.events)} events
                     </strong>
                   </div>
                   {throughputSegments.map((segment) => (
@@ -1365,7 +1418,7 @@ export function StatusDashboardPage() {
                         />
                       </div>
                       <em className="text-muted-foreground text-xs not-italic text-right">
-                        {compactNumber(segment.value)} {segment.unit}
+                        {compactNumber(locale, segment.value)} {segment.unit}
                       </em>
                     </div>
                   ))}
@@ -1378,15 +1431,13 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Event Stream</StatusLabel>
-                  <StatusHeading>实时事件流</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.events")}</StatusHeading>
                 </div>
                 <MessageSquareText size={18} />
               </StatusSectionHeader>
               <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {recentEvents.length === 0 ? (
-                  <EmptyState>
-                    我还没收到实时事件；当 token、thinking 或 tool_call 抵达时，这里会亮起来。
-                  </EmptyState>
+                  <EmptyState>{t("statusDashboard.noEvents")}</EmptyState>
                 ) : (
                   recentEvents.slice(0, 6).map((event) => (
                     <article
@@ -1404,7 +1455,7 @@ export function StatusDashboardPage() {
                             {event.title}
                           </strong>
                           <time className="text-muted-foreground text-tiny not-italic leading-1p25">
-                            {formatClock(event.at)}
+                            {formatClock(locale, event.at)}
                           </time>
                         </div>
                         <p
@@ -1423,7 +1474,7 @@ export function StatusDashboardPage() {
                             )}
                           >
                             {event.workdir
-                              ? basename(event.workdir)
+                              ? projectName(event.workdir)
                               : truncateMiddle(event.conversationId ?? "", 18)}
                           </span>
                         )}
@@ -1440,14 +1491,14 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Model Route</StatusLabel>
-                  <StatusHeading>模型与任务</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.models")}</StatusHeading>
                 </div>
                 <Radio size={18} />
               </StatusSectionHeader>
               <FactList items={modelFacts} />
               <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {runningConversations.length === 0 ? (
-                  <EmptyState>暂无运行中会话。</EmptyState>
+                  <EmptyState>{t("statusDashboard.noRunning")}</EmptyState>
                 ) : (
                   runningConversations.slice(0, 4).map((item) => (
                     <article
@@ -1463,8 +1514,8 @@ export function StatusDashboardPage() {
                           {truncateMiddle(item.title, 34)}
                         </strong>
                         <span className="text-muted-foreground text-tiny not-italic leading-1p25">
-                          {item.cwd ? basename(item.cwd) : "默认空间"} · {item.messageCount}{" "}
-                          messages · {formatDuration(now - item.updatedAt)} ago
+                          {item.cwd ? projectName(item.cwd) : t("statusDashboard.defaultSpace")} ·{" "}
+                          {item.messageCount} messages · {formatDuration(now - item.updatedAt)} ago
                         </span>
                       </div>
                     </article>
@@ -1477,7 +1528,7 @@ export function StatusDashboardPage() {
               <StatusSectionHeader>
                 <div>
                   <StatusLabel>Workspace Heat</StatusLabel>
-                  <StatusHeading>项目热力图</StatusHeading>
+                  <StatusHeading>{t("statusDashboard.heading.workspaceHeat")}</StatusHeading>
                 </div>
                 <HardDrive size={18} />
               </StatusSectionHeader>
@@ -1510,7 +1561,7 @@ export function StatusDashboardPage() {
               </div>
               <div className="flex min-h-0 flex-auto flex-col gap-7px overflow-hidden">
                 {workdirs.length === 0 ? (
-                  <EmptyState>暂无项目维度历史。</EmptyState>
+                  <EmptyState>{t("statusDashboard.noProjectHistory")}</EmptyState>
                 ) : (
                   workdirs.slice(0, 6).map((item) => (
                     <article
@@ -1522,7 +1573,7 @@ export function StatusDashboardPage() {
                     >
                       <div>
                         <strong className="block overflow-hidden text-foreground text-xs text-ellipsis whitespace-nowrap">
-                          {basename(item.path)}
+                          {projectName(item.path)}
                         </strong>
                         <span className="text-muted-foreground text-tiny not-italic leading-1p25">
                           {truncateMiddle(item.path, 46)}
@@ -1570,7 +1621,8 @@ export function StatusDashboardPage() {
           </span>
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <Wrench size={14} />
-            Tool stream {compactNumber(liveCounters.toolCalls + liveCounters.toolResults)} events
+            Tool stream {compactNumber(locale, liveCounters.toolCalls + liveCounters.toolResults)}{" "}
+            events
           </span>
           <span className="inline-flex min-w-0 items-center gap-7px overflow-hidden text-ellipsis whitespace-nowrap">
             <Zap size={14} />
