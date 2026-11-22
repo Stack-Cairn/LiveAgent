@@ -259,6 +259,7 @@ export function PermissionRulesSection({
 
   return (
     <SettingsSection
+      data-settings-anchor="permission-rules"
       title={t("settings.permissions.title")}
       description={t("settings.permissions.description")}
       data-testid="permission-rules-settings"

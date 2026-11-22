@@ -121,6 +121,7 @@ export function CronSection(props: SettingsSectionProps) {
   return (
     <div className="space-y-5">
       <SettingsSection
+        data-settings-anchor="cron-tasks"
         description={t("settings.cronDesc")}
         actions={
           tasks.length > 0 ? (

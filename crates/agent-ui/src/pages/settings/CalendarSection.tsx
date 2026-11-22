@@ -86,6 +86,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
     <div className="mx-auto w-full max-w-920px space-y-8">
       <SettingsGroup title={t("planner.settings.entry")}>
         <SettingsRow
+          data-settings-anchor="planner-sidebar"
           title={t("planner.settings.showInSidebar")}
           description={t("planner.settings.showInSidebarHint")}
           control={
@@ -109,6 +110,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
 
       <SettingsGroup title={t("planner.display.title")}>
         <SettingsRow
+          data-settings-anchor="planner-week-start"
           title={t("planner.display.weekStart")}
           description={t("planner.settings.displayLocalHint")}
           control={
@@ -129,7 +131,11 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
             </SettingsToggleGroup>
           }
         />
-        <SettingsRow title={t("planner.display.weekNumbers")} control={toggle("showWeekNumbers")} />
+        <SettingsRow
+          data-settings-anchor="planner-week-numbers"
+          title={t("planner.display.weekNumbers")}
+          control={toggle("showWeekNumbers")}
+        />
         {planningLunarAvailable(locale) && (
           <SettingsRow title={t("planner.display.lunar")} control={toggle("showLunar")} />
         )}
@@ -146,6 +152,7 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
         />
         {preferences.workHoursOnly && (
           <SettingsRow
+            data-settings-anchor="planner-work-hours"
             title={t("planner.settings.workHours")}
             control={
               <div className="flex items-center gap-2">
@@ -260,7 +267,10 @@ export function CalendarSection({ settings, setSettings }: SettingsSectionProps)
         />
       </SettingsGroup>
 
-      <SettingsGroup title={t("planner.subscription.title")}>
+      <SettingsGroup
+        data-settings-anchor="planner-subscriptions"
+        title={t("planner.subscription.title")}
+      >
         {snapshot?.calendars
           .filter((calendar) => calendar.sourceKind === "subscription")
           .map((calendar) => {

@@ -645,6 +645,7 @@ function ProviderActionGroup(props: {
       aria-label={t("settings.providerActionGroup")}
     >
       <Button
+        data-settings-anchor="add-provider"
         type="button"
         variant="ghost"
         size="sm"
@@ -665,6 +666,7 @@ function ProviderActionGroup(props: {
         triggerClassName={PROVIDER_ACTION_CLASS}
       />
       <Button
+        data-settings-anchor="provider-preferences"
         type="button"
         variant="ghost"
         size="sm"

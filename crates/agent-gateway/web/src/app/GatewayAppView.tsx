@@ -136,6 +136,7 @@ import {
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
 import { settingsHostAdapter } from "../agent-ui-adapters/settingsExtension";
+import { webSettingsSearch } from "../agent-ui-adapters/settingsSearch";
 import { AgentSelector } from "./AgentSelector";
 import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
@@ -1383,6 +1384,7 @@ export function GatewayAppView({
         ...SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter((section) => section.id !== "remote"),
         { id: "shortcuts", labelKey: "settings.navShortcuts" },
       ],
+      settingsSearch: { host: webSettingsSearch, hiddenSections: ["remote"] },
       sidebar: { open: sidebarOpen, onToggle: () => setSidebarOpen((open) => !open) },
       theme: {
         current: settings.theme,

@@ -143,6 +143,7 @@ import {
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { kbrainSettingsAdapter } from "../agent-ui-adapters/kbrainSettings";
+import { desktopSettingsSearch } from "../agent-ui-adapters/settingsSearch";
 import { createTauriTrajectoryHost } from "../agent-ui-adapters/trajectory";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
 import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
@@ -4391,6 +4392,7 @@ function ChatPageContent(props: ChatPageProps) {
         { id: "shortcuts", labelKey: "settings.navShortcuts" },
         { id: "about", labelKey: "settings.navAbout" },
       ],
+      settingsSearch: { host: desktopSettingsSearch },
       sidebar: { open: sidebarOpen, onToggle: handleToggleSidebar },
       theme: { current: settings.theme, onToggle: onToggleTheme },
       projectTools: projectToolsAvailable

@@ -1,0 +1,113 @@
+import type { SettingsSearchExtension } from "@liveagent/ui/lib/settings/settingsSearchIndex";
+
+/** Settings rows only the desktop app renders, for settings search and the palette. */
+export const desktopSettingsSearch: SettingsSearchExtension = {
+  sectionLabelKeys: {
+    backup: "settings.navBackup",
+    "data-dir": "settings.navDataDir",
+    about: "settings.navAbout",
+  },
+  entries: [
+    {
+      section: "system",
+      anchor: "run-notifications",
+      labelKey: "settings.runNotifications",
+      descriptionKey: "settings.runNotificationsDesc",
+      keywords: ["notification", "alert", "finished", "done"],
+    },
+    {
+      section: "system",
+      anchor: "close-window",
+      labelKey: "settings.defaultCloseWindowBehavior",
+      keywords: ["close", "quit", "minimize", "tray"],
+    },
+    {
+      section: "system",
+      anchor: "tray-titles",
+      labelKey: "settings.trayShowTitles",
+      descriptionKey: "settings.trayShowTitlesDesc",
+      keywords: ["tray", "menu bar"],
+    },
+    {
+      section: "system",
+      anchor: "tray-badge",
+      labelKey: "settings.trayRunningBadge",
+      descriptionKey: "settings.trayRunningBadgeDesc",
+      keywords: ["tray", "badge", "running"],
+    },
+    {
+      section: "system",
+      anchor: "preferred-editor",
+      labelKey: "settings.preferredEditor",
+      keywords: ["editor", "open in", "ide"],
+    },
+    {
+      section: "shortcuts",
+      anchor: "shortcuts-desktop",
+      labelKey: "settings.shortcutDesktopTitle",
+      descriptionKey: "settings.globalShortcutsDesc",
+      keywords: ["global shortcut", "hotkey", "send", "enter"],
+    },
+    {
+      section: "backup",
+      anchor: "backup-export",
+      labelKey: "settings.backupExport",
+      descriptionKey: "settings.backupExportHint",
+      keywords: ["backup", "export", "archive"],
+    },
+    {
+      section: "backup",
+      anchor: "backup-import",
+      labelKey: "settings.backupImport",
+      keywords: ["backup", "import", "restore"],
+    },
+    {
+      section: "backup",
+      anchor: "backup-sync",
+      labelKey: "settings.backupSyncTitle",
+      keywords: ["sync", "webdav", "cloud", "backup"],
+    },
+    {
+      section: "backup",
+      anchor: "backup-scope",
+      labelKey: "settings.backupScopeSummaryTitle",
+      descriptionKey: "settings.backupScopeSummary",
+      keywords: ["backup", "scope", "included"],
+    },
+    {
+      section: "data-dir",
+      anchor: "data-dir",
+      labelKey: "settings.dataDirCurrent",
+      descriptionKey: "settings.dataDirDesc",
+      keywords: ["data", "folder", "directory", "storage"],
+    },
+    {
+      section: "about",
+      anchor: "about-update",
+      labelKey: "settings.aboutSoftwareUpdate",
+      descriptionKey: "settings.aboutSoftwareUpdateDesc",
+      keywords: ["update", "version", "upgrade"],
+    },
+    {
+      section: "about",
+      anchor: "about-prerelease",
+      labelKey: "settings.aboutPrereleaseTitle",
+      descriptionKey: "settings.aboutPrereleaseDesc",
+      keywords: ["beta", "prerelease", "update channel"],
+    },
+    {
+      section: "about",
+      anchor: "about-debug",
+      labelKey: "settings.aboutDebugMode",
+      descriptionKey: "settings.aboutDebugModeDesc",
+      keywords: ["debug", "logs", "developer"],
+    },
+    {
+      section: "about",
+      anchor: "about-kbrain",
+      labelKey: "settings.aboutKbrain",
+      descriptionKey: "settings.aboutKbrainDesc",
+      keywords: ["backend", "engine", "health"],
+    },
+  ],
+};

@@ -1402,6 +1402,7 @@ export function SshSection(props: SettingsSectionProps) {
     <>
       <div className="settings-ssh-section space-y-5">
         <SettingsSection
+          data-settings-anchor="ssh-hosts"
           description={t("settings.sshDesc")}
           actions={
             hosts.length > 0 ? (

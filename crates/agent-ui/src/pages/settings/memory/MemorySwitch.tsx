@@ -84,6 +84,7 @@ export function MemorySwitch({ kbrain }: { kbrain: KBrainSettingsAdapter }) {
   if (enabled === null) return null;
   return (
     <SettingsRow
+      data-settings-anchor="memory-switch"
       data-testid="memory-master-switch"
       aria-busy={saving}
       title={t("settings.memorySwitchTitle")}

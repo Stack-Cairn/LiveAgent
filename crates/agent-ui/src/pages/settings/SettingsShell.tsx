@@ -1,9 +1,26 @@
 import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { KbdShortcut } from "../../components/ui/kbd";
 import { ZoneFontScaleContext } from "../../components/ui/zone-font-scale";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
+import {
+  SETTINGS_SEARCH_INDEX,
+  type SettingsSearchResult,
+  searchSettingsIndex,
+} from "../../lib/settings/settingsSearchIndex";
+import {
+  revealSettingsAnchor,
+  subscribeSettingsAnchor,
+  takeSettingsAnchor,
+} from "../../lib/settings/settingsSearchNavigation";
 import { useSettingsEscapeToClose } from "../../lib/settings/useSettingsEscapeToClose";
 import { cn } from "../../lib/shared/utils";
 
@@ -18,6 +35,12 @@ const WEB_SETTINGS_CONTENT_RESPONSIVE_CLASS = cn(
   "web:max-520:[&_.settings-section-actions>button:not([role=switch])]:flex-auto web:max-520:[&_.settings-section-actions>.settings-section-action]:flex-auto web:max-520:[&_.settings-card-row]:flex-wrap web:max-520:[&_.settings-card-row]:items-start web:max-520:[&_.settings-log-row]:grid web:max-520:[&_.settings-log-row]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] web:max-520:[&_.settings-log-row]:items-center web:max-520:[&_.settings-log-row]:gap-6px web:max-520:[&_.settings-log-row]:px-10px web:max-520:[&_.settings-log-row]:py-8px",
   "web:max-520:[&_.settings-log-row>span]:min-w-0 web:max-520:[&_.settings-log-row>span:first-of-type]:truncate web:max-520:[&_.settings-hooks-card-actions]:ml-auto web:max-520:[&_.settings-hooks-card-actions]:mt-0 web:max-520:[&_.settings-hooks-card-actions]:w-auto web:max-520:[&_.settings-hooks-card-actions]:basis-auto web:max-520:[&_.settings-hooks-card-actions]:justify-end web:max-520:[&_.settings-hooks-card-actions]:border-t-0 web:max-520:[&_.settings-hooks-card-actions]:pt-0 web:max-520:[&_.settings-hooks-stat]:min-w-0 web:max-520:[&_.settings-hooks-stat]:flex-[1_1_calc(50%-var(--spacing-4px))] web:max-520:[&_.settings-hooks-stat]:justify-center",
 );
+
+const SETTINGS_SEARCH_RESULT_LIMIT = 30;
+
+// Short outline on the row a search result jumped to.
+const SETTINGS_HIGHLIGHT_CLASS =
+  "[&_[data-settings-anchor]]:scroll-mt-6 [&_[data-settings-anchor]]:transition-[outline-color] [&_[data-settings-anchor]]:duration-500 [&_[data-settings-anchor]]:outline-2 [&_[data-settings-anchor]]:outline-offset-2 [&_[data-settings-anchor]]:outline-transparent [&_[data-settings-highlight]]:rounded-xl [&_[data-settings-highlight]]:outline-primary/60";
 
 type SettingsShellProps<Context> = {
   registry: UiExtensionRegistry<Context>;
@@ -74,6 +97,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
     setSection(initialSection);
   }
   const [navQuery, setNavQuery] = useState("");
+  // Row to reveal once its section renders; `key` re-runs the same anchor.
+  const [jump, setJump] = useState<{ anchor: string; key: number } | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const searchResultsRef = useRef<HTMLFieldSetElement | null>(null);
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const sections = useMemo(
     () =>
@@ -110,6 +137,82 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
       .filter(([, definitions]) => definitions.length > 0);
   }, [groups, navQuery, t]);
 
+  const web = registry.surface === "web";
+  const hostSearchEntries = registry.settingsSearch?.entries;
+  const searchEntries = useMemo(
+    () =>
+      hostSearchEntries ? [...SETTINGS_SEARCH_INDEX, ...hostSearchEntries] : SETTINGS_SEARCH_INDEX,
+    [hostSearchEntries],
+  );
+  const settingResults = useMemo<SettingsSearchResult[]>(
+    () =>
+      searchSettingsIndex(navQuery, {
+        t,
+        sections,
+        entries: searchEntries,
+        limit: SETTINGS_SEARCH_RESULT_LIMIT,
+      }),
+    [navQuery, searchEntries, sections, t],
+  );
+
+  // Requests from outside the shell (command palette) — on mount and later.
+  useEffect(() => {
+    const consume = () => {
+      const request = takeSettingsAnchor();
+      if (!request || !sections.some((definition) => definition.id === request.section)) return;
+      setSection(request.section);
+      setJump((previous) => ({ anchor: request.anchor, key: (previous?.key ?? 0) + 1 }));
+    };
+    consume();
+    return subscribeSettingsAnchor(consume);
+  }, [sections]);
+
+  // setSection and setJump land in one commit, so the target section is
+  // already rendered here; later section changes must not re-run the jump.
+  useEffect(() => {
+    if (!jump || !mainRef.current) return;
+    return revealSettingsAnchor(mainRef.current, jump.anchor);
+  }, [jump]);
+
+  const openSettingResult = (result: SettingsSearchResult) => {
+    if (result.entry.section !== section && !(canLeaveSection?.() ?? true)) return;
+    setSection(result.entry.section);
+    setJump((previous) => ({ anchor: result.entry.anchor, key: (previous?.key ?? 0) + 1 }));
+  };
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && settingResults[0]) {
+      event.preventDefault();
+      openSettingResult(settingResults[0]);
+    } else if (event.key === "ArrowDown") {
+      const first = searchResultsRef.current?.querySelector<HTMLButtonElement>("button");
+      if (first) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  const handleResultsKeyDown = (event: ReactKeyboardEvent<HTMLFieldSetElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const buttons = [
+      ...(searchResultsRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []),
+    ];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = index + (event.key === "ArrowDown" ? 1 : -1);
+    if (next < 0) {
+      (
+        event.currentTarget.ownerDocument.querySelector(
+          "[data-settings-search-input]",
+        ) as HTMLInputElement | null
+      )?.focus();
+      return;
+    }
+    buttons[Math.min(next, buttons.length - 1)]?.focus();
+  };
+
   useEffect(() => {
     if (!sections.some((definition) => definition.id === section)) {
       setSection(sections[0]?.id ?? "system");
@@ -122,7 +225,6 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   const activeSection = sections.find((definition) => definition.id === section) ?? sections[0];
   if (!activeSection) return null;
 
-  const web = registry.surface === "web";
   const fillContent = activeSection.contentMode === "fill";
   const saveIndicator = getSaveIndicator(saveState, t);
   const showSaveIndicator = activeSection.showSaveIndicator !== false;
@@ -196,6 +298,8 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                   type="search"
                   value={navQuery}
                   onChange={(event) => setNavQuery(event.currentTarget.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  data-settings-search-input=""
                   placeholder={t("settings.searchPlaceholder")}
                   aria-label={t("settings.searchPlaceholder")}
                   className={cn(
@@ -269,7 +373,44 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                   </div>
                 </div>
               ))}
-              {visibleGroups.length === 0 ? (
+              {settingResults.length > 0 ? (
+                <fieldset
+                  ref={searchResultsRef}
+                  aria-label={t("settings.search.settingsGroup")}
+                  data-settings-search-results=""
+                  onKeyDown={handleResultsKeyDown}
+                  className={cn(
+                    "m-0 min-w-0 border-0 p-0 web:max-820:hidden",
+                    visibleGroups.length > 0 && "mt-3.5",
+                  )}
+                >
+                  <div className="mb-1.5 px-2.5 text-xs font-medium text-muted-foreground/70">
+                    {t("settings.search.settingsGroup")}
+                  </div>
+                  <div className="space-y-px">
+                    {settingResults.map((result) => (
+                      <button
+                        key={result.entry.anchor}
+                        type="button"
+                        data-settings-search-result={result.entry.anchor}
+                        onClick={() => openSettingResult(result)}
+                        title={result.description || undefined}
+                        className={cn(
+                          "sidebar-list-row flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-left",
+                          "text-sm text-foreground/80 transition-colors duration-150",
+                          "hover:bg-settings-tile-hover hover:text-foreground focus-visible:bg-settings-tile-hover focus-visible:text-foreground focus-visible:outline-none",
+                        )}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{result.label}</span>
+                        <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">
+                          {result.sectionLabel}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
+              {visibleGroups.length === 0 && settingResults.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                   {t("settings.searchNoResults")}
                 </div>
@@ -289,7 +430,13 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
               </div>
             ) : null}
           </aside>
-          <main className="flex min-w-0 flex-1 flex-col web:min-w-0 web:max-820:min-h-0 web:max-820:flex-auto">
+          <main
+            ref={mainRef}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col web:min-w-0 web:max-820:min-h-0 web:max-820:flex-auto",
+              SETTINGS_HIGHLIGHT_CLASS,
+            )}
+          >
             {registry.slots.mainLeading}
             <header
               className={cn(

@@ -319,6 +319,7 @@ export function SettingsPage(props: SettingsPageProps) {
     services: EMPTY_SERVICES,
     slots: extension.slots,
     settingsSections: sections,
+    settingsSearch: extension.search,
   };
 
   return (

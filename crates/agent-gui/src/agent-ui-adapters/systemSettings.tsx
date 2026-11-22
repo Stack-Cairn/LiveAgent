@@ -58,6 +58,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
       {isTauriHost() && (
         <SettingsGroup title={t("settings.notificationsGroup")}>
           <SettingsRow
+            data-settings-anchor="run-notifications"
             title={t("settings.runNotifications")}
             description={t("settings.runNotificationsDesc")}
             control={
@@ -108,6 +109,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
       )}
       <SettingsGroup title={t("settings.closeWindowBehavior")}>
         <SettingsRow
+          data-settings-anchor="close-window"
           title={t("settings.defaultCloseWindowBehavior")}
           description={
             settings.closeWindowBehavior === "minimize"
@@ -149,6 +151,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
 
       <SettingsGroup title={t("settings.trayTitle")}>
         <SettingsRow
+          data-settings-anchor="tray-titles"
           title={t("settings.trayShowTitles")}
           description={t("settings.trayShowTitlesDesc")}
           control={
@@ -163,6 +166,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
         />
         {isMacPlatform ? (
           <SettingsRow
+            data-settings-anchor="tray-badge"
             title={t("settings.trayRunningBadge")}
             description={t("settings.trayRunningBadgeDesc")}
             control={
@@ -196,6 +200,7 @@ function PreferredEditorSettings() {
   return (
     <SettingsGroup title={t("settings.editorGroup")}>
       <SettingsRow
+        data-settings-anchor="preferred-editor"
         title={t("settings.preferredEditor")}
         description={
           !loaded || preferred

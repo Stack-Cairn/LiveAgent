@@ -23,6 +23,12 @@ import {
   Sun,
   Waypoints,
 } from "../../components/IconSet";
+import {
+  SETTINGS_SEARCH_INDEX,
+  SETTINGS_SEARCH_SECTION_LABEL_KEYS,
+  type SettingsSearchExtension,
+} from "../settings/settingsSearchIndex";
+import { requestSettingsAnchor } from "../settings/settingsSearchNavigation";
 import type { SidebarShortcutId } from "../settings/sidebarShortcuts";
 import { getNextTheme } from "../settings/themeAndMemory";
 import type { Theme } from "../settings/types";
@@ -79,6 +85,11 @@ export type BuildCommandPaletteActionsInput = {
   onOpenWorkspace?: () => void;
   onOpenSettings?: (section?: string) => void;
   settingsSections?: readonly CommandPaletteSettingsSection[];
+  /**
+   * Individual settings from the settings search index (typed queries only).
+   * Each opens its section and scrolls to the row.
+   */
+  settingsSearch?: { host?: SettingsSearchExtension; hiddenSections?: readonly string[] };
   sidebar?: { open: boolean; onToggle: () => void };
   theme?: { current: Theme; onToggle: () => void };
   /** Right-hand project tools dock (terminal / file tree / Git review). */
@@ -274,6 +285,34 @@ export function buildCommandPaletteActions(
         searchOnly: true,
         run: () => openSettings(section.id),
       });
+    }
+    if (input.settingsSearch) {
+      const { host, hiddenSections = [] } = input.settingsSearch;
+      const entryTemplate = t("chat.commandPalette.settingEntry");
+      const sectionLabelKeys = { ...SETTINGS_SEARCH_SECTION_LABEL_KEYS, ...host?.sectionLabelKeys };
+      for (const entry of [...SETTINGS_SEARCH_INDEX, ...(host?.entries ?? [])]) {
+        const sectionLabelKey = sectionLabelKeys[entry.section];
+        if (!sectionLabelKey || hiddenSections.includes(entry.section)) continue;
+        const section = t(sectionLabelKey);
+        actions.push({
+          id: `setting:${entry.anchor}`,
+          group: "settings",
+          label: format(entryTemplate, { section, setting: t(entry.labelKey) }),
+          keywords: [
+            "settings",
+            entry.section,
+            ...(entry.descriptionKey ? [t(entry.descriptionKey)] : []),
+            ...(entry.keywords ?? []),
+          ],
+          icon: Settings,
+          searchOnly: true,
+          run: () => {
+            // Recorded first: the settings shell consumes it when it mounts.
+            requestSettingsAnchor(entry.section, entry.anchor);
+            openSettings(entry.section);
+          },
+        });
+      }
     }
   }
 

@@ -429,7 +429,7 @@ export function GlobalShortcutsSection() {
         externalBindings={externalBindings}
         onRecordingChange={handleInAppRecordingChange}
       />
-      <section className="space-y-3">
+      <section className="space-y-3" data-settings-anchor="shortcuts-desktop">
         <div className="space-y-1">
           <h3 className="text-sm font-medium">{t("settings.shortcutDesktopTitle")}</h3>
           <p className="text-xs leading-relaxed text-muted-foreground">

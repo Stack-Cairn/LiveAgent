@@ -69,6 +69,7 @@ export function KBrainBackendRow({ loadHealth }: { loadHealth: () => Promise<KBr
 
   return (
     <SettingsRow
+      data-settings-anchor="about-kbrain"
       title={t("settings.aboutKbrain")}
       description={t("settings.aboutKbrainDesc")}
       control={

@@ -232,7 +232,10 @@ export function DevicesSection({
 
   return (
     <div className="space-y-5">
-      <div className="settings-section-heading-row flex items-center justify-between gap-4">
+      <div
+        data-settings-anchor="devices"
+        className="settings-section-heading-row flex items-center justify-between gap-4"
+      >
         <div className="settings-section-title-group flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-sky-500/10">
             <MonitorSmartphone className="size-18px text-sky-500" />

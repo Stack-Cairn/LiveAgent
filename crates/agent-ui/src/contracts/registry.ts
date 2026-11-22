@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { SettingsSearchExtension } from "../lib/settings/settingsSearchIndex";
 
 export type UiSurface = "desktop" | "web";
 
@@ -31,4 +32,6 @@ export type UiExtensionRegistry<Context> = {
   services: UiServices;
   slots: UiExtensionSlots;
   settingsSections: readonly SettingsSectionDefinition<Context>[];
+  /** Host-only rows for settings search (shared rows come from the shared index). */
+  settingsSearch?: SettingsSearchExtension;
 };

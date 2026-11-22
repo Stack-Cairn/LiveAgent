@@ -1,22 +1,26 @@
 import { Archive, HardDrive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
+import type { SettingsSearchExtension } from "@liveagent/ui/lib/settings/settingsSearchIndex";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
 import { DataDirectorySection } from "../pages/settings/DataDirectorySection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
 import type { SettingsPageProps } from "../pages/settings/types";
+import { desktopSettingsSearch } from "./settingsSearch";
 
 export function createSettingsExtension(props: SettingsPageProps): {
   surface: "desktop";
   iconClassName: string;
   slots: UiExtensionSlots;
   sections: SettingsSectionDefinition<void>[];
+  search: SettingsSearchExtension;
 } {
   const { settings, setSettings, appUpdate, releaseAnnouncement, reloadSettings } = props;
   return {
     surface: "desktop",
     iconClassName: "size-3.5",
+    search: desktopSettingsSearch,
     slots: {
       sidebarLeading: isMacOsTauri() ? (
         <div data-tauri-drag-region className="h-38px shrink-0" />
