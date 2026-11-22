@@ -421,3 +421,66 @@ test("find text stays the same when stripped results are reused or evicted", asy
     env.cleanup();
   }
 });
+
+test("find counts follow edits while finished rows reuse their stripped and folded text", async () => {
+  const env = await createEnv();
+  try {
+    const model = env.loadModule("@liveagent/ui/lib/transcript-find/transcriptFind.ts");
+    const { buildTranscriptFindEntries } = env.loadModule(
+      "src/pages/chat/transcript/transcriptFindEntries.ts",
+    );
+    const textRow = (key, text) => ({
+      kind: "assistant-unit",
+      key,
+      unit: { kind: "block", block: { kind: "text", key, text } },
+    });
+    const count = (entries, query) => model.buildTranscriptFindMatches(entries, query);
+
+    // A long history (well past any text-keyed cache) plus a streaming row.
+    const history = Array.from({ length: 3000 }, (_, index) =>
+      textRow(`h${index}`, `**Reply ${index}** mentions cache ${"filler ".repeat(300)}`),
+    );
+    const live = (text) => textRow("live", text);
+
+    let entries = buildTranscriptFindEntries([...history, live("No match yet")]);
+    assert.equal(count(entries, "cache").length, 3000);
+    const historyEntry = entries[0];
+
+    // Streamed deltas: the finished rows publish the same entry objects.
+    entries = buildTranscriptFindEntries([...history, live("The **cache** grows")]);
+    assert.equal(entries[0], historyEntry, "an unchanged row keeps its entry");
+    assert.equal(entries.at(-1).text, "The cache grows");
+    assert.equal(count(entries, "cache").length, 3001);
+    entries = buildTranscriptFindEntries([...history, live("The cache grows, cache again")]);
+    assert.equal(count(entries, "CACHE").length, 3002);
+    assert.deepEqual(
+      count(entries, "cache").filter((match) => match.rowKey === "live"),
+      [
+        { rowKey: "live", occurrence: 0 },
+        { rowKey: "live", occurrence: 1 },
+      ],
+    );
+
+    // An edited message (a new row with new text under the same key) is
+    // stripped and counted again; the old text no longer matches.
+    const edited = [...history];
+    edited[5] = textRow("h5", "rewritten without the word");
+    entries = buildTranscriptFindEntries(edited);
+    assert.equal(count(entries, "cache").length, 2999);
+    assert.equal(count(entries, "rewritten").length, 1);
+    assert.deepEqual(count(entries, "reply 5 mentions"), []);
+
+    // The same block object with changed text never serves a stale result.
+    const block = { kind: "text", key: "x", text: "alpha" };
+    assert.equal(model.stripMarkdownForFindOf(block, "**alpha**"), "alpha");
+    assert.equal(model.stripMarkdownForFindOf(block, "**beta**"), "beta");
+    // An entry object whose text changed is folded again.
+    const entry = { rowKey: "e", text: "One" };
+    assert.equal(model.buildTranscriptFindMatches([entry], "one").length, 1);
+    entry.text = "Two";
+    assert.equal(model.buildTranscriptFindMatches([entry], "one").length, 0);
+    assert.equal(model.buildTranscriptFindMatches([entry], "two").length, 1);
+  } finally {
+    env.cleanup();
+  }
+});

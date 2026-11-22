@@ -344,7 +344,8 @@ const SCENARIOS = {
   // Find bar open on 1500 x 2KB messages: cold query, then a short stream.
   async find(client, baseUrl, throttle) {
     await open(client, baseUrl, "transcript");
-    await client.evaluate("window.__perf.load(1500, 2048)");
+    // 1500 assistant replies of 2KB: more markdown than the old 4 MB strip cache held.
+    await client.evaluate(`window.__perf.load(${Number(args.findCount ?? 3000)}, 2048)`);
     await delay(2000);
     await client.evaluate(LONG_TASKS);
     await client.request("Emulation.setCPUThrottlingRate", { rate: throttle });
