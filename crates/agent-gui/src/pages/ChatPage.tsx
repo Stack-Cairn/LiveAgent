@@ -62,6 +62,7 @@ import type {
 } from "@liveagent/ui/lib/chat/composerCommands";
 import { searchMentionConversations } from "@liveagent/ui/lib/chat/conversationSearch";
 import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import { nextThinkingLevel } from "@liveagent/ui/lib/chat/thinkingLevels";
 import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
 import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
 import {
@@ -70,6 +71,12 @@ import {
   useInsertCodeReviewSkill,
 } from "@liveagent/ui/lib/chat/useComposerActions";
 import { useMentionApps } from "@liveagent/ui/lib/chat/useMentionApps";
+import {
+  activateRightDockTab,
+  isFocusInRightDock,
+  resolveCloseContextTarget,
+  resolveTerminalToggle,
+} from "@liveagent/ui/lib/chat/workbenchCommands";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
@@ -215,6 +222,7 @@ import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { loadKBrainSubagents } from "../lib/subagents/kbrainSubagentStore";
+import { useWebviewZoom } from "../lib/system/webviewZoom";
 import { toggleDesktopWindowPin } from "../lib/system/windowPin";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -3509,8 +3517,9 @@ function ChatPageContent(props: ChatPageProps) {
 
   // Keyboard equivalents for workbench pane commands, all on Meta/Ctrl+Alt:
   // Arrow focuses the adjacent pane, Shift+Arrow moves the focused pane there,
-  // W closes it, and =/+ equalizes its parent split. Every command needs at
-  // least two panes; with one pane the workbench has nothing to navigate.
+  // and =/+ equalizes its parent split. Every command needs at least two panes;
+  // with one pane the workbench has nothing to navigate. Closing the focused
+  // pane is the rebindable "close current view" shortcut command.
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3550,11 +3559,6 @@ function ChatPageContent(props: ChatPageProps) {
       }
 
       if (event.shiftKey) return;
-      if (event.key === "w" || event.key === "W") {
-        event.preventDefault();
-        requestWorkbenchClosePane(focusedPaneId);
-        return;
-      }
       if (event.key === "=" || event.key === "+") {
         const splitId = findParentSplitId(layout, focusedPaneId);
         if (!splitId) return;
@@ -3564,7 +3568,7 @@ function ChatPageContent(props: ChatPageProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleWorkbenchFocusPane, requestWorkbenchClosePane, workbench]);
+  }, [handleWorkbenchFocusPane, workbench]);
 
   // Background pane controllers (conversations visible in unfocused panes).
   const backgroundControllersRef = useRef(new Map<string, ConversationSurfaceController>());
@@ -4375,6 +4379,29 @@ function ChatPageContent(props: ChatPageProps) {
       </div>
     ) : null;
 
+  const webviewZoom = useWebviewZoom();
+  // "Close current view" (Mod+Alt+W by default): see resolveCloseContextTarget.
+  const closeActiveContextTarget = () =>
+    resolveCloseContextTarget({
+      activeView,
+      paneCount: sessionWorkbench.enabled
+        ? Object.keys(workbench.layoutRef.current.panes).length
+        : 1,
+      rightDockOpen: activeView === "chat" && rightDockOpen,
+      focusInDock: isFocusInRightDock(),
+    });
+  const closeActiveContext = () => {
+    const target = closeActiveContextTarget();
+    if (target === "hub") {
+      setActiveView("chat");
+    } else if (target === "dock") {
+      setRightDockOpen(false);
+    } else if (target === "pane") {
+      const focusedPaneId = workbench.layoutRef.current.focusedPaneId;
+      if (focusedPaneId) requestWorkbenchClosePane(focusedPaneId);
+    }
+  };
+
   // Back / forward through the conversations and full-page views the main
   // area showed. Unsent drafts are not recorded: there is nothing to return to.
   const navigationHistory = useNavigationHistory({
@@ -4474,6 +4501,55 @@ function ChatPageContent(props: ChatPageProps) {
       onStopRun: isSending ? () => stopSendingActionRef.current() : undefined,
       windowPin: isKBrainBrowserHost() ? undefined : { onToggle: toggleDesktopWindowPin },
       history: navigationHistory,
+      terminal: terminalDisabledMessage
+        ? undefined
+        : {
+            onToggle: () => {
+              const toggle = resolveTerminalToggle({
+                open: activeView === "chat" && rightDockOpen,
+                activeTabId: rightDockProjectState.activeTabId,
+                tabOrder: rightDockProjectState.tabOrder,
+                sessions: projectTerminalSessions,
+              });
+              if (toggle.kind === "close") {
+                setRightDockOpen(false);
+                return;
+              }
+              setActiveView("chat");
+              setRightDockOpen(true);
+              const { sessionId } = toggle;
+              if (sessionId) {
+                handleRightDockProjectStateChange((current) =>
+                  activateRightDockTab(current, sessionId),
+                );
+              }
+            },
+          },
+      thinking: nextThinkingLevel({
+        reasoningOptions: chatRuntimeReasoningOptions,
+        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        controls: chatRuntimeControlsForCurrentProvider,
+      })
+        ? {
+            onCycle: () => {
+              const next = nextThinkingLevel({
+                reasoningOptions: chatRuntimeReasoningOptions,
+                thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+                controls: chatRuntimeControlsForCurrentProvider,
+              });
+              if (next) handleChatRuntimeControlsChange(next.patch);
+            },
+          }
+        : undefined,
+      zoom: !isKBrainBrowserHost()
+        ? {
+            level: webviewZoom.level,
+            onZoomIn: webviewZoom.zoomIn,
+            onZoomOut: webviewZoom.zoomOut,
+            onReset: webviewZoom.reset,
+          }
+        : undefined,
+      closeContext: closeActiveContextTarget() ? { onClose: closeActiveContext } : undefined,
     });
   };
   const getCommandPaletteActions = useCallback(

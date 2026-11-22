@@ -10,6 +10,13 @@ const pickerSources = [
     "utf8",
   ),
 ];
+// The level -> controls patch is shared with the cycle-thinking shortcut.
+const thinkingLevelsSource = readFileSync(
+  new URL("../../../agent-ui/src/lib/chat/thinkingLevels.ts", import.meta.url),
+  "utf8",
+);
+assert.match(thinkingLevelsSource, /thinkingEnabled: true, reasoning: level/);
+assert.match(thinkingLevelsSource, /level === "off" \? \{ thinkingEnabled: false \}/);
 const headerSource = readFileSync(
   new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
   "utf8",
@@ -127,8 +134,7 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
     assert.match(source, /aria-label=\{t\("chat\.runtime\.controls"\)\}/);
     assert.match(source, /nativeWebSearchEnabled: checked/);
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
-    assert.match(source, /thinkingEnabled: true,\s+reasoning: level/);
-    assert.match(source, /thinkingEnabled: false/);
+    assert.match(source, /thinkingLevelPatch\(/);
     assert.match(source, /showView\("reasoning"\)/);
     assert.match(source, /type="radio"/);
     assert.match(source, /checked=\{selectedEffort === level\}/);

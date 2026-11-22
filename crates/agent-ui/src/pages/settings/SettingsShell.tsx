@@ -12,9 +12,9 @@ import { ZoneFontScaleContext } from "../../components/ui/zone-font-scale";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
 import {
-  SETTINGS_SEARCH_INDEX,
   type SettingsSearchResult,
   searchSettingsIndex,
+  settingsSearchEntriesFor,
 } from "../../lib/settings/settingsSearchIndex";
 import {
   revealSettingsAnchor,
@@ -138,12 +138,8 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
   }, [groups, navQuery, t]);
 
   const web = registry.surface === "web";
-  const hostSearchEntries = registry.settingsSearch?.entries;
-  const searchEntries = useMemo(
-    () =>
-      hostSearchEntries ? [...SETTINGS_SEARCH_INDEX, ...hostSearchEntries] : SETTINGS_SEARCH_INDEX,
-    [hostSearchEntries],
-  );
+  const hostSearch = registry.settingsSearch;
+  const searchEntries = useMemo(() => settingsSearchEntriesFor(hostSearch), [hostSearch]);
   const settingResults = useMemo<SettingsSearchResult[]>(
     () =>
       searchSettingsIndex(navQuery, {

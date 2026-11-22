@@ -125,8 +125,11 @@ const allSections = Object.entries(desktop.sectionLabelKeys).map(([id, labelKey]
 
 test("search ranks label hits first and honours the host's sections and rows", () => {
   const theme = searchSettingsIndex("theme", { t: en, sections: allSections });
-  assert.equal(theme[0].entry.anchor, "appearance", "keywords find the theme row");
-  assert.equal(theme[0].sectionLabel, en("settings.navSystem"));
+  // "Switch theme" (a shortcut command) is a label hit; the appearance row
+  // is found through its keywords right behind it.
+  const appearance = theme.findIndex((result) => result.entry.anchor === "appearance");
+  assert.ok(appearance >= 0 && appearance < 3, "keywords find the theme row");
+  assert.equal(theme[appearance].sectionLabel, en("settings.navSystem"));
 
   const proxy = searchSettingsIndex("proxy", { t: en, sections: allSections });
   assert.equal(proxy[0].entry.anchor, "system-proxy");

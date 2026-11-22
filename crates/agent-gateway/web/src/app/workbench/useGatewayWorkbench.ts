@@ -444,8 +444,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     });
   }, [enabled, terminalClient, workbench]);
 
-  // 与桌面端同口径的键盘命令,全部挂在 Meta/Ctrl+Alt:
-  // 方向键聚焦相邻 Pane,Shift+方向键把聚焦 Pane 挪到那边,W 关闭,=/+ 均分。
+  // Keyboard pane commands, same as the desktop, all on Meta/Ctrl+Alt: Arrow
+  // focuses the adjacent pane, Shift+Arrow moves the focused pane there, =/+
+  // equalizes its split. Closing the focused pane is the rebindable "close
+  // current view" shortcut command.
   useEffect(() => {
     if (!enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -483,11 +485,6 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       }
 
       if (event.shiftKey) return;
-      if (event.key === "w" || event.key === "W") {
-        event.preventDefault();
-        requestClosePane(focusedPaneId);
-        return;
-      }
       if (event.key === "=" || event.key === "+") {
         const splitId = findParentSplitId(layout, focusedPaneId);
         if (!splitId) return;
@@ -497,7 +494,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, handleFocusPane, requestClosePane, workbench]);
+  }, [enabled, handleFocusPane, workbench]);
 
   // 与桌面端 resolveWorkbenchAutoDockTarget 同口径：优先右侧（窄画布优先
   // 下方），两个方向都放不下时明确拒绝。

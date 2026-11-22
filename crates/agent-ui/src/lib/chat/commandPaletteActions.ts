@@ -12,24 +12,30 @@ import {
   FolderTree,
   GitBranch,
   ImageIcon,
+  Lightbulb,
   MessageSquare,
   MessageSquareText,
+  Minus,
   MonitorSmartphone,
   Moon,
   PanelLeft,
   PanelRightOpen,
   Pin,
+  Plus,
+  RotateCcw,
   Settings,
   Square,
   SquarePen,
   Sun,
+  Terminal,
   Waypoints,
+  X,
 } from "../../components/IconSet";
 import type { NavigationHistoryControls } from "../navigation/navigationHistory";
 import {
-  SETTINGS_SEARCH_INDEX,
   SETTINGS_SEARCH_SECTION_LABEL_KEYS,
   type SettingsSearchExtension,
+  settingsSearchEntriesFor,
 } from "../settings/settingsSearchIndex";
 import { requestSettingsAnchor } from "../settings/settingsSearchNavigation";
 import type { SidebarShortcutId } from "../settings/sidebarShortcuts";
@@ -119,6 +125,14 @@ export type BuildCommandPaletteActionsInput = {
   windowPin?: { pinned?: boolean; onToggle: () => void };
   /** Back / forward history; each action is listed only while it can move. */
   history?: Pick<NavigationHistoryControls, "canGoBack" | "canGoForward" | "goBack" | "goForward">;
+  /** Show / hide the terminal in the right dock (see resolveTerminalToggle). */
+  terminal?: { onToggle: () => void };
+  /** Next thinking level of the current model; omitted when it has none to cycle. */
+  thinking?: { onCycle: () => void };
+  /** Whole-window zoom (desktop only); `level` is the current factor. */
+  zoom?: { level: number; onZoomIn: () => void; onZoomOut: () => void; onReset: () => void };
+  /** Closes the current hub / pane / dock; omitted when nothing is closable. */
+  closeContext?: { onClose: () => void };
 };
 
 function format(template: string, values: Record<string, string>) {
@@ -255,6 +269,66 @@ export function buildCommandPaletteActions(
       );
     }
   }
+  if (input.terminal) {
+    actions.push({
+      id: "toggle-terminal",
+      group: "view",
+      label: t("shortcuts.command.toggleTerminal"),
+      keywords: ["terminal", "shell", "console", "panel"],
+      icon: Terminal,
+      run: input.terminal.onToggle,
+    });
+  }
+  if (input.closeContext) {
+    actions.push({
+      id: "close-active-context",
+      group: "view",
+      label: t("shortcuts.command.closeActiveContext"),
+      keywords: ["close", "pane", "split", "panel", "dock", "hub"],
+      icon: X,
+      run: input.closeContext.onClose,
+    });
+  }
+  if (input.thinking) {
+    actions.push({
+      id: "cycle-thinking-level",
+      group: "view",
+      label: t("shortcuts.command.cycleThinkingLevel"),
+      keywords: ["thinking", "reasoning", "effort", "level"],
+      icon: Lightbulb,
+      run: input.thinking.onCycle,
+    });
+  }
+  if (input.zoom) {
+    const { level, onZoomIn, onZoomOut, onReset } = input.zoom;
+    const percent = `${Math.round(level * 100)}%`;
+    actions.push(
+      {
+        id: "zoom-in",
+        group: "view",
+        label: t("shortcuts.command.zoomIn"),
+        keywords: ["zoom", "bigger", "larger", "scale", percent],
+        icon: Plus,
+        run: onZoomIn,
+      },
+      {
+        id: "zoom-out",
+        group: "view",
+        label: t("shortcuts.command.zoomOut"),
+        keywords: ["zoom", "smaller", "scale", percent],
+        icon: Minus,
+        run: onZoomOut,
+      },
+      {
+        id: "zoom-reset",
+        group: "view",
+        label: format(t("chat.commandPalette.zoomResetWithLevel"), { level: percent }),
+        keywords: ["zoom", "reset", "actual size", "100%"],
+        icon: RotateCcw,
+        run: onReset,
+      },
+    );
+  }
   if (input.conversationView) {
     const { active, onChange } = input.conversationView;
     const next: ConversationViewId = active === "conversation" ? "trajectory" : "conversation";
@@ -316,7 +390,7 @@ export function buildCommandPaletteActions(
       const { host, hiddenSections = [] } = input.settingsSearch;
       const entryTemplate = t("chat.commandPalette.settingEntry");
       const sectionLabelKeys = { ...SETTINGS_SEARCH_SECTION_LABEL_KEYS, ...host?.sectionLabelKeys };
-      for (const entry of [...SETTINGS_SEARCH_INDEX, ...(host?.entries ?? [])]) {
+      for (const entry of settingsSearchEntriesFor(host)) {
         const sectionLabelKey = sectionLabelKeys[entry.section];
         if (!sectionLabelKey || hiddenSections.includes(entry.section)) continue;
         const section = t(sectionLabelKey);

@@ -27,6 +27,8 @@ export type SettingsSearchEntry = {
 export type SettingsSearchExtension = {
   entries: readonly SettingsSearchEntry[];
   sectionLabelKeys: Readonly<Record<string, string>>;
+  /** Shared rows this host does not render (e.g. shortcut commands it lacks). */
+  hiddenAnchors?: readonly string[];
 };
 
 export const SETTINGS_ANCHOR_ATTRIBUTE = "data-settings-anchor";
@@ -394,4 +396,17 @@ export function searchSettingsIndex(
   }
   results.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
   return typeof options.limit === "number" ? results.slice(0, options.limit) : results;
+}
+
+/** The shared index plus a host's own rows, minus the shared rows it hides. */
+export function settingsSearchEntriesFor(
+  host: SettingsSearchExtension | undefined,
+): readonly SettingsSearchEntry[] {
+  if (!host) return SETTINGS_SEARCH_INDEX;
+  const hidden = new Set(host.hiddenAnchors ?? []);
+  const shared =
+    hidden.size > 0
+      ? SETTINGS_SEARCH_INDEX.filter((entry) => !hidden.has(entry.anchor))
+      : SETTINGS_SEARCH_INDEX;
+  return [...shared, ...host.entries];
 }

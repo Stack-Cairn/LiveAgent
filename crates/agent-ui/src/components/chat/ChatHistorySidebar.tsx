@@ -169,6 +169,15 @@ function isMobileSidebarLayout() {
   return window.matchMedia(MOBILE_SIDEBAR_MEDIA_QUERY).matches;
 }
 
+// Held-down chords that keep stepping (lists, history, zoom).
+const REPEATABLE_SHORTCUT_COMMANDS: ReadonlySet<ShortcutCommandId> = new Set([
+  "previousConversation",
+  "nextConversation",
+  "navigateBack",
+  "navigateForward",
+  "zoomIn",
+  "zoomOut",
+]);
 const SIDEBAR_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
   "newConversation",
   "openSettings",
@@ -178,6 +187,13 @@ const SIDEBAR_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
   "navigateBack",
   "navigateForward",
   "toggleRightPanel",
+  "toggleTerminal",
+  "cycleTheme",
+  "cycleThinkingLevel",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+  "closeActiveContext",
 ];
 const QUICK_OPEN_FILE_PALETTE_ACTION_ID = "quick-open-file";
 const SHORTCUT_DIALOG_SELECTOR = "[role=dialog], [role=alertdialog], [aria-modal=true]";
@@ -498,11 +514,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       // An open dialog (the palette itself, confirmations) owns the keyboard.
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(SHORTCUT_DIALOG_SELECTOR)) return;
-      const repeatable =
-        command === "previousConversation" ||
-        command === "nextConversation" ||
-        command === "navigateBack" ||
-        command === "navigateForward";
+      const repeatable = REPEATABLE_SHORTCUT_COMMANDS.has(command);
       if (event.repeat && !repeatable) {
         event.preventDefault();
         return;

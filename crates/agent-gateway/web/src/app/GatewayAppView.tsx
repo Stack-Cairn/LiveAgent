@@ -54,8 +54,15 @@ import {
 } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
 import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
+import { nextThinkingLevel } from "@liveagent/ui/lib/chat/thinkingLevels";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
+import {
+  activateRightDockTab,
+  isFocusInRightDock,
+  resolveCloseContextTarget,
+  resolveTerminalToggle,
+} from "@liveagent/ui/lib/chat/workbenchCommands";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import {
   isWorkbenchNavigationLocationOpenable,
@@ -1379,6 +1386,28 @@ export function GatewayAppView({
     [workbenchController.leasedDockSessionIds],
   );
 
+  // "Close current view" (Mod+Alt+W by default): see resolveCloseContextTarget.
+  const closeActiveContextTarget = () =>
+    resolveCloseContextTarget({
+      activeView,
+      paneCount: sessionWorkbench.enabled
+        ? Object.keys(workbenchController.workbench.layoutRef.current.panes).length
+        : 1,
+      rightDockOpen: activeView === "chat" && rightDockOpen,
+      focusInDock: isFocusInRightDock(),
+    });
+  const closeActiveContext = () => {
+    const target = closeActiveContextTarget();
+    if (target === "hub") {
+      setActiveView("chat");
+    } else if (target === "dock") {
+      setRightDockOpen(false);
+    } else if (target === "pane") {
+      const focusedPaneId = workbenchController.workbench.layoutRef.current.focusedPaneId;
+      if (focusedPaneId) workbenchController.requestClosePane(focusedPaneId);
+    }
+  };
+
   // Back / forward through the conversations and hubs the main area showed.
   const displayedConversationIdRef = useRef(displayedConversationId);
   displayedConversationIdRef.current = displayedConversationId;
@@ -1467,6 +1496,48 @@ export function GatewayAppView({
           : undefined,
       onStopRun: composerIsSending ? handlePrimaryComposerStop : undefined,
       history: navigationHistory,
+      terminal:
+        terminalClient && !terminalDisabledMessage
+          ? {
+              onToggle: () => {
+                const toggle = resolveTerminalToggle({
+                  open: activeView === "chat" && rightDockOpen,
+                  activeTabId: rightDockProjectState.activeTabId,
+                  tabOrder: rightDockProjectState.tabOrder,
+                  sessions: projectTerminalSessions,
+                });
+                if (toggle.kind === "close") {
+                  setRightDockOpen(false);
+                  return;
+                }
+                setActiveView("chat");
+                setRightDockOpen(true);
+                const { sessionId } = toggle;
+                if (sessionId) {
+                  handleRightDockProjectStateChange((current) =>
+                    activateRightDockTab(current, sessionId),
+                  );
+                }
+              },
+            }
+          : undefined,
+      thinking: nextThinkingLevel({
+        reasoningOptions: chatRuntimeReasoningOptions,
+        thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+        controls: chatRuntimeControlsForCurrentProvider,
+      })
+        ? {
+            onCycle: () => {
+              const next = nextThinkingLevel({
+                reasoningOptions: chatRuntimeReasoningOptions,
+                thinkingAlwaysOn: chatRuntimeThinkingAlwaysOn,
+                controls: chatRuntimeControlsForCurrentProvider,
+              });
+              if (next) handleChatRuntimeControlsChange(next.patch);
+            },
+          }
+        : undefined,
+      closeContext: closeActiveContextTarget() ? { onClose: closeActiveContext } : undefined,
     });
   const getCommandPaletteActions = useCallback(
     () => buildCommandPaletteActionsLatestRef.current(),

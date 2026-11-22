@@ -20,6 +20,7 @@ export const WORKBENCH_TRANSLATIONS = {
     "settings.search.entry.cronTasks": "定时任务",
     "settings.search.entry.sshHosts": "SSH 主机",
     "chat.commandPalette.settingEntry": "{section}：{setting}",
+    "chat.commandPalette.zoomResetWithLevel": "重置缩放（当前 {level}）",
   },
   "en-US": {
     "chat.commandPalette.scope.actions": "Commands",
@@ -40,5 +41,6 @@ export const WORKBENCH_TRANSLATIONS = {
     "settings.search.entry.cronTasks": "Scheduled tasks",
     "settings.search.entry.sshHosts": "SSH hosts",
     "chat.commandPalette.settingEntry": "{section}: {setting}",
+    "chat.commandPalette.zoomResetWithLevel": "Reset zoom (now {level})",
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

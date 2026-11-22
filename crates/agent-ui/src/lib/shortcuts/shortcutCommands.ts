@@ -30,6 +30,13 @@ export type ShortcutCommandId =
   | "openModelPicker"
   | "toggleSidebar"
   | "toggleRightPanel"
+  | "toggleTerminal"
+  | "cycleTheme"
+  | "cycleThinkingLevel"
+  | "zoomIn"
+  | "zoomOut"
+  | "zoomReset"
+  | "closeActiveContext"
   | "openSettings";
 
 export type ShortcutCommandGroup = "general" | "navigation" | "composer" | "view";
@@ -136,6 +143,14 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
     defaultBinding: "Mod+Slash",
   },
   {
+    // Steps through the current model's effort levels (or thinking on/off).
+    id: "cycleThinkingLevel",
+    group: "composer",
+    labelKey: "shortcuts.command.cycleThinkingLevel",
+    defaultBinding: "Mod+Alt+KeyT",
+    paletteActionId: "cycle-thinking-level",
+  },
+  {
     id: "toggleSidebar",
     group: "view",
     labelKey: "shortcuts.command.toggleSidebar",
@@ -148,6 +163,51 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
     labelKey: "shortcuts.command.toggleRightPanel",
     defaultBinding: "Mod+Alt+KeyB",
     paletteActionId: "toggle-project-tools",
+  },
+  {
+    id: "toggleTerminal",
+    group: "view",
+    labelKey: "shortcuts.command.toggleTerminal",
+    defaultBinding: "Mod+KeyJ",
+    paletteActionId: "toggle-terminal",
+  },
+  {
+    // Hub, dock-with-focus, split pane, then dock; see resolveCloseContextTarget.
+    id: "closeActiveContext",
+    group: "view",
+    labelKey: "shortcuts.command.closeActiveContext",
+    defaultBinding: "Mod+Alt+KeyW",
+    paletteActionId: "close-active-context",
+  },
+  {
+    // System → light → dark → system.
+    id: "cycleTheme",
+    group: "view",
+    labelKey: "shortcuts.command.cycleTheme",
+    defaultBinding: "Mod+Shift+KeyL",
+    paletteActionId: "toggle-theme",
+  },
+  {
+    // Desktop only: the WebUI leaves page zoom to the browser.
+    id: "zoomIn",
+    group: "view",
+    labelKey: "shortcuts.command.zoomIn",
+    defaultBinding: "Mod+Equal",
+    paletteActionId: "zoom-in",
+  },
+  {
+    id: "zoomOut",
+    group: "view",
+    labelKey: "shortcuts.command.zoomOut",
+    defaultBinding: "Mod+Minus",
+    paletteActionId: "zoom-out",
+  },
+  {
+    id: "zoomReset",
+    group: "view",
+    labelKey: "shortcuts.command.zoomReset",
+    defaultBinding: "Mod+Digit0",
+    paletteActionId: "zoom-reset",
   },
 ];
 
