@@ -45,9 +45,9 @@ test("command palette filter is case-insensitive, token based and keeps group or
     assert.deepEqual(ids("settings"), ["settings:providers", "open-settings"], "label prefix ranks first");
     assert.deepEqual(ids("nothing-matches"), []);
 
-    assert.deepEqual(parseCommandPaletteQuery("  > theme "), { actionsOnly: true, query: "theme" });
-    assert.deepEqual(parseCommandPaletteQuery(" theme "), { actionsOnly: false, query: "theme" });
-    assert.deepEqual(parseCommandPaletteQuery(">"), { actionsOnly: true, query: "" });
+    assert.deepEqual(parseCommandPaletteQuery("  > theme "), { scope: "actions", actionsOnly: true, query: "theme" });
+    assert.deepEqual(parseCommandPaletteQuery(" theme "), { scope: "all", actionsOnly: false, query: "theme" });
+    assert.deepEqual(parseCommandPaletteQuery(">"), { scope: "actions", actionsOnly: true, query: "" });
   } finally {
     env.cleanup();
   }

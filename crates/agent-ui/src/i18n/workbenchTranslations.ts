@@ -1,0 +1,32 @@
+// Command palette scopes, settings search, workbench shortcut commands,
+// navigation history and run completion sound.
+export const WORKBENCH_TRANSLATIONS = {
+  "zh-CN": {
+    "chat.commandPalette.scope.actions": "命令",
+    "chat.commandPalette.scope.files": "文件",
+    "chat.commandPalette.scope.conversations": "对话",
+    "chat.commandPalette.scopeHintsLabel": "输入前缀切换范围：",
+    "chat.commandPalette.files": "文件",
+    "chat.commandPalette.filesUnavailable": "打开项目文件夹后即可搜索其中的文件。",
+    "chat.commandPalette.filesLoading": "正在索引文件…",
+    "chat.commandPalette.filesFailed": "无法列出项目文件。",
+    "chat.commandPalette.noFiles": "没有匹配的文件",
+    "chat.commandPalette.filesTruncated": "项目较大，仅索引了部分文件。",
+    "chat.conversationSearchUpdatedAtZh": "{month}月{day}日 {hour}:{minute}",
+    "shortcuts.command.quickOpenFile": "转到文件",
+  },
+  "en-US": {
+    "chat.commandPalette.scope.actions": "Commands",
+    "chat.commandPalette.scope.files": "Files",
+    "chat.commandPalette.scope.conversations": "Conversations",
+    "chat.commandPalette.scopeHintsLabel": "Type a prefix to narrow:",
+    "chat.commandPalette.files": "Files",
+    "chat.commandPalette.filesUnavailable": "Open a project folder to search its files.",
+    "chat.commandPalette.filesLoading": "Indexing files…",
+    "chat.commandPalette.filesFailed": "Could not list the project files.",
+    "chat.commandPalette.noFiles": "No matching files",
+    "chat.commandPalette.filesTruncated": "Large project: only part of its files are indexed.",
+    "chat.conversationSearchUpdatedAtZh": "{month}/{day} {hour}:{minute}",
+    "shortcuts.command.quickOpenFile": "Go to file",
+  },
+} as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

@@ -18,6 +18,7 @@ import {
  */
 export type ShortcutCommandId =
   | "commandPalette"
+  | "quickOpenFile"
   | "searchConversations"
   | "findInConversation"
   | "newConversation"
@@ -54,6 +55,16 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommand[] = [
     group: "general",
     labelKey: "shortcuts.command.commandPalette",
     defaultBinding: "Mod+KeyK",
+  },
+  {
+    // Opens the palette in its `@` file scope. ⌘P / Ctrl+P is free in the app:
+    // the desktop webview cancels its print default, and browsers let pages
+    // take the chord.
+    id: "quickOpenFile",
+    group: "general",
+    labelKey: "shortcuts.command.quickOpenFile",
+    defaultBinding: "Mod+KeyP",
+    paletteActionId: "quick-open-file",
   },
   {
     id: "newConversation",

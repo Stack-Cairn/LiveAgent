@@ -49,6 +49,7 @@ import { setInAppBrowserLinkHandler } from "@liveagent/ui/lib/browser/inAppLinkR
 import { formatCheckpointRewoundNotification } from "@liveagent/ui/lib/chat/checkpointRewind";
 import {
   type CommandPaletteAction,
+  type CommandPaletteFileSourceProvider,
   isMacLikePlatform,
 } from "@liveagent/ui/lib/chat/commandPalette";
 import {
@@ -4442,6 +4443,20 @@ function ChatPageContent(props: ChatPageProps) {
     () => buildCommandPaletteActionsLatestRef.current(),
     [],
   );
+  // Palette `@` scope: files of the project the terminal / file tree use,
+  // opened through the same preview / editor flow as the file tree.
+  const commandPaletteFilesLatestRef = useRef<CommandPaletteFileSourceProvider>(() => null);
+  commandPaletteFilesLatestRef.current = () =>
+    terminalProjectPath
+      ? {
+          workdir: terminalProjectPath,
+          open: (path) => {
+            setActiveView("chat");
+            handleOpenWorkspaceFile(path);
+          },
+        }
+      : null;
+  const getCommandPaletteFiles = useCallback(() => commandPaletteFilesLatestRef.current(), []);
 
   return (
     <div
@@ -4550,6 +4565,7 @@ function ChatPageContent(props: ChatPageProps) {
           fontScale={settings.customSettings.fontScale.sidebar}
           conversationSearchRequestKey={conversationSearchRequestKey}
           getCommandPaletteActions={getCommandPaletteActions}
+          getCommandPaletteFiles={getCommandPaletteFiles}
           activeView={activeView}
           showProjects={isAgentMode}
           projects={workspaceProjects}

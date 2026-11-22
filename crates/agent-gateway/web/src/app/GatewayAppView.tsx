@@ -45,6 +45,7 @@ import {
 } from "@liveagent/ui/lib/chat/checkpointRewind";
 import {
   type CommandPaletteAction,
+  type CommandPaletteFileSourceProvider,
   isMacLikePlatform,
 } from "@liveagent/ui/lib/chat/commandPalette";
 import {
@@ -1432,6 +1433,19 @@ export function GatewayAppView({
     () => buildCommandPaletteActionsLatestRef.current(),
     [],
   );
+  // Palette `@` scope: files of the project the terminal / file tree use.
+  const commandPaletteFilesLatestRef = useRef<CommandPaletteFileSourceProvider>(() => null);
+  commandPaletteFilesLatestRef.current = () =>
+    terminalProjectPath
+      ? {
+          workdir: terminalProjectPath,
+          open: (path) => {
+            setActiveView("chat");
+            handleOpenWorkspaceFile(path);
+          },
+        }
+      : null;
+  const getCommandPaletteFiles = useCallback(() => commandPaletteFilesLatestRef.current(), []);
 
   // 拖拽幽灵:跟随指针的载荷标题,提交/取消后随 dragState 清空。
   const workbenchDragGhost =
@@ -1612,6 +1626,7 @@ export function GatewayAppView({
                 onOpenSettings={openSettings}
                 onOpenResourceHub={handleSidebarOpenResourceHub}
                 getCommandPaletteActions={getCommandPaletteActions}
+                getCommandPaletteFiles={getCommandPaletteFiles}
               />
 
               {shareConversation ? (

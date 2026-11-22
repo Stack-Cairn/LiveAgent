@@ -42,6 +42,7 @@ test("one table drives defaults: Mod resolves to Cmd on mac and Ctrl elsewhere",
   );
   assert.deepEqual(table, {
     commandPalette: "Mod+KeyK",
+    quickOpenFile: "Mod+KeyP",
     newConversation: "Mod+Shift+KeyO",
     openSettings: "Mod+Comma",
     searchConversations: null,
