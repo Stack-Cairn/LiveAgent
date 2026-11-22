@@ -53,6 +53,7 @@ import {
   SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS,
 } from "@liveagent/ui/lib/chat/commandPaletteActions";
 import type { ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
+import type { ComposerCommentInput } from "@liveagent/ui/lib/chat/composerComments";
 import { rememberSshHostNames } from "@liveagent/ui/lib/chat/sshManagerDisplay";
 import { nextThinkingLevel } from "@liveagent/ui/lib/chat/thinkingLevels";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -336,6 +337,7 @@ export function GatewayAppView({
     historyDetailLoadingTitle,
     historyShareToken,
     importFilesForConversation,
+    replacePendingUpload,
     isAgentDevExecutionMode,
     isAgentMode,
     isConversationBusy,
@@ -497,6 +499,10 @@ export function GatewayAppView({
     (text: string) => {
       composerRef.current?.insertQuote(text);
     },
+    [composerRef],
+  );
+  const handleCommentSelection = useCallback(
+    (comment: ComposerCommentInput) => composerRef.current?.upsertComment(comment) != null,
     [composerRef],
   );
   const trajectoryHost = useMemo(
@@ -823,6 +829,7 @@ export function GatewayAppView({
     subscribePendingUploads,
     updatePendingUploads: updatePendingUploadsForConversation,
     importFilesForConversation,
+    replacePendingUpload,
     getCachedComposerDraft,
     setCachedComposerDraft,
     notifyError: (message) => addNotify("error", message),
@@ -977,6 +984,8 @@ export function GatewayAppView({
         current.filter((file) => file.relativePath !== relativePath),
       );
     },
+    onReplacePendingUpload: (relativePath, replacement) =>
+      replacePendingUpload(relativePath, replacement),
     queuedTurns: queuedChatTurnsForDisplayedConversation,
     queuePaused,
     onRunQueuedTurnNow: runQueuedTurnNow,
@@ -2002,6 +2011,7 @@ export function GatewayAppView({
                                             branchPendingMessageId={branchPendingMessageId}
                                             onSuggestionSelect={handleEmptyStateSuggestion}
                                             onQuoteSelection={handleQuoteSelection}
+                                            onCommentSelection={handleCommentSelection}
                                           />
                                         </CheckpointRewindProvider>
                                       </ChangedFilesActionsProvider>
@@ -2284,6 +2294,9 @@ export function GatewayAppView({
                                         ),
                                     );
                                   }}
+                                  onReplacePendingUpload={(relativePath, replacement) =>
+                                    replacePendingUpload(relativePath, replacement)
+                                  }
                                   queuedTurns={queuedChatTurnsForDisplayedConversation}
                                   queuePaused={queuePaused}
                                   queueControlPending={queueControlPending}

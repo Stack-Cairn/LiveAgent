@@ -1,3 +1,4 @@
+import type { ComposerCommentInput } from "@liveagent/ui/lib/chat/composerComments";
 import { sendComposerCommandTurn } from "../sendComposerCommandTurn";
 import { createWebComposerCommandHost } from "../webComposerCommandHost";
 // 会话 Pane 的统一宿主——复刻桌面端 RestorableConversationPaneHost:
@@ -175,6 +176,11 @@ export type GatewayConversationPaneHostContext = {
     workdir: string,
     files: File[],
   ) => Promise<void>;
+  replacePendingUpload: (
+    relativePath: string,
+    replacement: File | PendingUploadedFile,
+    target?: { conversationId: string; workdir: string },
+  ) => Promise<PendingUploadedFile | null>;
   getCachedComposerDraft: (conversationId: string) => MentionComposerDraft | undefined;
   setCachedComposerDraft: (conversationId: string, draft: MentionComposerDraft) => void;
   notifyError: (message: string) => void;
@@ -198,6 +204,7 @@ export type GatewayConversationPrimarySurface = {
   loadHistoryPrompts: ChatComposerBarProps["loadHistoryPrompts"];
   pendingUploadedFiles: PendingUploadedFile[];
   onRemovePendingUpload: ChatComposerBarProps["onRemovePendingUpload"];
+  onReplacePendingUpload?: ChatComposerBarProps["onReplacePendingUpload"];
   queuedTurns: ChatQueueTurnPreview[];
   queuePaused?: boolean;
   onRunQueuedTurnNow: ChatComposerBarProps["onRunQueuedTurnNow"];
@@ -507,6 +514,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   const handleQuoteSelection = useCallback((text: string) => {
     composerRef.current?.insertQuote(text);
   }, []);
+  const handleCommentSelection = useCallback(
+    (comment: ComposerCommentInput) => composerRef.current?.upsertComment(comment) != null,
+    [],
+  );
   const sendInFlightRef = useRef(false);
   const workdir = context.workdirForConversation(conversationId);
   const workdirRef = useRef(workdir);
@@ -870,6 +881,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       }
       onSuggestionSelect={usePrimary ? primary?.onSuggestionSelect : () => onFocusPane()}
       onQuoteSelection={handleQuoteSelection}
+      onCommentSelection={handleCommentSelection}
     />
   );
 
@@ -1085,6 +1097,15 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                       current.filter((file) => file.relativePath !== relativePath),
                     );
                   }
+            }
+            onReplacePendingUpload={
+              usePrimary && primary
+                ? primary.onReplacePendingUpload
+                : (relativePath, replacement) =>
+                    context.replacePendingUpload(relativePath, replacement, {
+                      conversationId,
+                      workdir: workdirRef.current,
+                    })
             }
             queuedTurns={usePrimary && primary ? primary.queuedTurns : queuedTurns}
             queuePaused={usePrimary ? primary?.queuePaused : queuePaused}

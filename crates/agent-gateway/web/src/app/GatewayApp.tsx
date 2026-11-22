@@ -698,6 +698,7 @@ function useGatewayAppController() {
     handleFileDragOver: handlePendingFileDragOver,
     handleFileDragLeave,
     handleFileDrop: handlePendingFileDrop,
+    replacePendingUpload,
   } = usePendingUploads({
     token,
     resolveAgentID: resolveActiveAgentID,
@@ -2560,6 +2561,7 @@ function useGatewayAppController() {
     tunnelDisabledMessage,
     tunnelEnabled,
     updatePendingUploadsForConversation,
+    replacePendingUpload,
     verifyTerminalSessionAlive,
     userAvatarLabel,
     userMenuLabel,

@@ -1,3 +1,4 @@
+import type { TranscriptCommentHandler } from "@liveagent/ui/components/chat/TranscriptCommentContext";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -50,4 +51,7 @@ export type ChatTranscriptProps = {
   onSuggestionSelect?: (text: string) => void;
   /** Selected message text → composer blockquote. Omit to disable the quote button. */
   onQuoteSelection?: (text: string) => void;
+  /** Selected message text or an edit-diff line → pending composer comment.
+   *  Omit to disable commenting. */
+  onCommentSelection?: TranscriptCommentHandler;
 };

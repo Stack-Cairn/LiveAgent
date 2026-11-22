@@ -2,8 +2,10 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { ToastTone } from "@liveagent/ui/components/ui/toast-manager";
 import {
+  isPendingUploadedFile,
   mergePendingUploadedFilesWithStats,
   type PendingUploadedFile,
+  replacePendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import {
@@ -367,6 +369,66 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     [currentConversationIdRef, getPendingUploadsForConversation, setPendingUploadsForConversation],
   );
 
+  // Swap one pending attachment for another in place: a File (an annotated
+  // image) is staged into the workspace first; an already staged entry (the
+  // original, on revert) goes back directly. Not routed through
+  // runUploadTask: it never adds files, so the batch limit/merge rules and the
+  // single-flight import guard do not apply.
+  const replacePendingUpload = useCallback(
+    async (
+      relativePath: string,
+      replacement: File | PendingUploadedFile,
+      target?: ConversationUploadTarget,
+    ): Promise<PendingUploadedFile | null> => {
+      const targetConversationId = (
+        target?.conversationId ?? currentConversationIdRef.current
+      ).trim();
+      if (!targetConversationId) return null;
+      let next: PendingUploadedFile;
+      if (isPendingUploadedFile(replacement)) {
+        next = replacement;
+      } else {
+        const targetWorkdir = (target?.workdir ?? workdirRef.current).trim();
+        if (!isAgentModeRef.current || !targetWorkdir) return null;
+        const result = await invoke<SystemPickReadableFilesResponse>(
+          "system_import_uploaded_readable_files",
+          {
+            workdir: targetWorkdir,
+            files: [await fileToUploadInput(replacement)],
+            maxFiles: 1,
+          },
+        );
+        const staged = result.files[0];
+        if (!staged) {
+          if (result.skipped.length > 0) addNotify("warning", result.skipped.join("\n"));
+          return null;
+        }
+        const isTargetDisplayed = currentConversationIdRef.current.trim() === targetConversationId;
+        if (
+          !isAgentModeRef.current ||
+          (isTargetDisplayed && workdirRef.current !== targetWorkdir)
+        ) {
+          return null;
+        }
+        invalidateUploadedImagePreviewCache(targetWorkdir, staged);
+        next = staged;
+      }
+      const current = getPendingUploadsForConversation(targetConversationId);
+      if (!current.some((file) => file.relativePath === relativePath)) return null;
+      setPendingUploadsForConversation(
+        targetConversationId,
+        replacePendingUploadedFile(current, relativePath, next),
+      );
+      return next;
+    },
+    [
+      addNotify,
+      currentConversationIdRef,
+      getPendingUploadsForConversation,
+      setPendingUploadsForConversation,
+    ],
+  );
+
   return {
     isUploadingFiles,
     pendingUploadedFiles,
@@ -376,5 +438,6 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     importReadableFilePaths,
     importReadableFiles,
     removePendingUpload,
+    replacePendingUpload,
   };
 }

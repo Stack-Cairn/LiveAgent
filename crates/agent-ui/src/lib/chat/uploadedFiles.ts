@@ -96,6 +96,49 @@ export function mergePendingUploadedFilesWithStats(
   return { files: Array.from(merged.values()), duplicateCount };
 }
 
+/**
+ * Swap one pending attachment for another in place (annotating an image,
+ * reverting it to the original). Order is kept; any other entry that shares
+ * the replacement's dedupe key is dropped. Returns `current` unchanged when
+ * `relativePath` is not pending.
+ */
+export function replacePendingUploadedFile(
+  current: PendingUploadedFile[],
+  relativePath: string,
+  replacement: PendingUploadedFile,
+) {
+  const index = current.findIndex((file) => file.relativePath === relativePath);
+  if (index < 0) return current;
+  const replacementKey = pendingUploadedFileDedupeKey(replacement);
+  const next: PendingUploadedFile[] = [];
+  current.forEach((file, fileIndex) => {
+    if (fileIndex === index) next.push(replacement);
+    else if (pendingUploadedFileDedupeKey(file) !== replacementKey) next.push(file);
+  });
+  return next;
+}
+
+/**
+ * Host callback that replaces a pending attachment: a `File` is staged as a
+ * new upload first, a `PendingUploadedFile` (an already staged original) is
+ * swapped back in directly. Resolves to the entry now pending, or null when
+ * the replacement could not be staged or the attachment is gone.
+ */
+export type ReplacePendingUpload = (
+  relativePath: string,
+  replacement: File | PendingUploadedFile,
+) => Promise<PendingUploadedFile | null>;
+
+export function isPendingUploadedFile(value: unknown): value is PendingUploadedFile {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as PendingUploadedFile).relativePath === "string" &&
+    typeof (value as PendingUploadedFile).fileName === "string" &&
+    typeof (value as PendingUploadedFile).kind === "string"
+  );
+}
+
 function clonePendingUploadedFiles(files: PendingUploadedFile[]) {
   return files.map((file) => ({ ...file }));
 }

@@ -1012,6 +1012,7 @@ function ChatPageContent(props: ChatPageProps) {
     importReadableFilePaths,
     importReadableFiles,
     removePendingUpload,
+    replacePendingUpload,
   } = usePendingUploads({
     isAgentMode,
     workdir: displayedConversationWorkdir,
@@ -2298,7 +2299,9 @@ function ChatPageContent(props: ChatPageProps) {
       const pendingPlan = getPendingPlanForConversation(conversationId);
       if (pendingPlan) {
         const text = composerRef.current?.getText().trim() ?? "";
-        if (text && isPlanApprovalMessage(text)) {
+        // Pending comments make it a revision request, never a bare approval.
+        const hasComments = (composerRef.current?.getComments().length ?? 0) > 0;
+        if (text && !hasComments && isPlanApprovalMessage(text)) {
           const outcome = answerPlanDecision(
             pendingPlan.toolCallId,
             { decision: "approve" },
@@ -2629,6 +2632,7 @@ function ChatPageContent(props: ChatPageProps) {
           : undefined,
         clarifyContext: { workdir: displayedConversationWorkdir },
         onRemovePendingUpload: removePendingUpload,
+        onReplacePendingUpload: replacePendingUpload,
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,
         onEditQueuedTurn: editQueuedTurn,
@@ -2683,6 +2687,7 @@ function ChatPageContent(props: ChatPageProps) {
       pickReadableFiles,
       pickWorkspaceFolder,
       removePendingUpload,
+      replacePendingUpload,
       removeQueuedTurn,
       renderedConversationView,
       runQueuedTurnNow,
@@ -3900,6 +3905,11 @@ function ChatPageContent(props: ChatPageProps) {
         // 信息；会话无 cwd/workdir 时不传空串，避免系统提示词带噪音。
         clarifyContext: workspaceRoot ? { workdir: workspaceRoot } : undefined,
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
+        onReplacePendingUpload: (relativePath, replacement) =>
+          replacePendingUpload(relativePath, replacement, {
+            conversationId,
+            workdir: workspaceRoot ?? "",
+          }),
         onRunQueuedTurnNow: runQueuedTurnNow,
         onMoveQueuedTurnUp: moveQueuedTurnUp,
         onEditQueuedTurn: focusGuard(editQueuedTurn),

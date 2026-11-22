@@ -4,6 +4,10 @@ import type {
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
 } from "@liveagent/ui/components/chat/MentionComposer";
+import {
+  appendComposerCommentsBlock,
+  type ComposerComment,
+} from "@liveagent/ui/lib/chat/composerComments";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type ConversationMentionReference,
@@ -52,7 +56,10 @@ function formatComposerGitFileMention(file: MentionComposerGitFileMention) {
 }
 
 function formatComposerDraftSegment(
-  segment: Exclude<MentionComposerDraft["segments"][number], { type: "quote" }>,
+  segment: Exclude<
+    MentionComposerDraft["segments"][number],
+    { type: "quote" } | { type: "comment" }
+  >,
   pastedFileById?: Map<string, PendingUploadedFile>,
 ) {
   if (segment.type === "text") return segment.text;
@@ -74,13 +81,18 @@ export function buildTextFromComposerDraft(
   pastedFileById?: Map<string, PendingUploadedFile>,
 ) {
   let text = "";
+  const comments: ComposerComment[] = [];
   for (const segment of draft.segments) {
-    text +=
-      segment.type === "quote"
-        ? buildComposerQuoteInsertion(text, segment.text)
-        : formatComposerDraftSegment(segment, pastedFileById);
+    if (segment.type === "comment") comments.push(segment.comment);
+    else if (segment.type === "quote") text += buildComposerQuoteInsertion(text, segment.text);
+    else text += formatComposerDraftSegment(segment, pastedFileById);
   }
-  return normalizeLogicalLineEndings(text.replace(/\u00A0/g, " "));
+  // Comment snippets are quoted verbatim (code keeps its spacing), so the
+  // block joins after the non-breaking-space cleanup of the typed text.
+  return appendComposerCommentsBlock(
+    normalizeLogicalLineEndings(text.replace(/\u00A0/g, " ")),
+    comments,
+  );
 }
 
 export function mapImportedPastedTextFiles(

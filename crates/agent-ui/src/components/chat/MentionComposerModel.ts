@@ -1,4 +1,8 @@
 import type { ComposerCommand, ComposerCommandHost } from "@liveagent/ui/lib/chat/composerCommands";
+import type {
+  ComposerComment,
+  ComposerCommentInput,
+} from "@liveagent/ui/lib/chat/composerComments";
 import type { ConversationReferenceInsertResult } from "@liveagent/ui/lib/chat/conversationReferenceDrag";
 import type {
   CodeMentionReference,
@@ -149,6 +153,15 @@ export interface MentionComposerHandle {
    */
   insertQuote: (text: string) => boolean;
   /**
+   * Adds a pending comment chip (or replaces the one with the same id). The
+   * comments are sent with the next message as one block after the text.
+   * Returns the comment id, or null when the composer is disabled or the
+   * comment is invalid/blank.
+   */
+  upsertComment: (comment: ComposerCommentInput) => string | null;
+  removeComment: (id: string) => void;
+  getComments: () => ComposerComment[];
+  /**
    * Runs the draft as a registered action/prompt command instead of sending.
    * Returns false (send normally) when the draft is not a registered command.
    */
@@ -186,7 +199,9 @@ export type MentionComposerDraftSegment =
   | { type: "gitFileMention"; file: MentionComposerGitFileMention }
   | { type: "conversationMention"; conversation: MentionComposerConversationMention }
   | { type: "codeMention"; reference: CodeMentionReference }
-  | { type: "quote"; text: string };
+  | { type: "quote"; text: string }
+  /** Pending comment; always serialized after the rest of the draft. */
+  | { type: "comment"; comment: ComposerComment };
 
 export type MentionComposerDraft = {
   segments: MentionComposerDraftSegment[];
@@ -200,6 +215,8 @@ export type MentionComposerDraft = {
   /** Optional for backward compatibility with drafts persisted before conversation mentions. */
   conversationMentions?: MentionComposerConversationMention[];
   codeMentions: CodeMentionReference[];
+  /** Optional for backward compatibility with drafts persisted before comments. */
+  comments?: ComposerComment[];
   isEmpty: boolean;
 };
 

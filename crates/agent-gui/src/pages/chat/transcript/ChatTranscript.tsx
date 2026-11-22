@@ -1,5 +1,6 @@
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatFileLinkContextMenu";
+import { TranscriptCommentProvider } from "@liveagent/ui/components/chat/TranscriptCommentContext";
 import { TranscriptFindBar } from "@liveagent/ui/components/chat/TranscriptFindBar";
 import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
@@ -77,6 +78,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     onOpenSettings,
     onSuggestionSelect,
     onQuoteSelection,
+    onCommentSelection,
   } = props;
   const { t } = useLocale();
   const showNoModelsState = !hasModels;
@@ -281,7 +283,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   const resizeTranscriptLabel = t("chat.transcript.resizeWidth");
   const resetTranscriptWidthLabel = t("chat.transcript.resizeWidthReset");
 
-  return (
+  const transcriptView = (
     // biome-ignore lint/a11y/noStaticElementInteractions: The transcript surface exposes a pointer context menu; transcript content and menu items retain their own keyboard semantics.
     <div
       ref={transcriptRootRef}
@@ -429,11 +431,18 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           scopeKey={conversationId}
           enabled={!isTranscriptBusy}
           onQuote={onQuoteSelection}
+          onComment={onCommentSelection}
         />
       ) : null}
       <TranscriptFindBar find={find} />
       <ChatFileLinkContextMenuHost canOpenWithDefaultApp={isTauriHost()} />
       {isTranscriptBusy ? <HistorySwitchLoadingOverlay /> : null}
     </div>
+  );
+
+  return (
+    <TranscriptCommentProvider onComment={onCommentSelection}>
+      {transcriptView}
+    </TranscriptCommentProvider>
   );
 });
