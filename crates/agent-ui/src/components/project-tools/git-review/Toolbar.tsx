@@ -375,14 +375,14 @@ export function GitOperationNoticeToast({
           "pointer-events-auto flex w-80 max-w-full items-start gap-2.5 rounded-lg border",
           "px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
           isSuccess
-            ? "border-emerald-500/25 bg-emerald-50/95 text-emerald-900 dark:bg-emerald-950/85 dark:text-emerald-100"
-            : "border-red-500/30 bg-red-50/95 text-red-900 dark:bg-red-950/85 dark:text-red-100",
+            ? "border-success/25 bg-emerald-50/95 text-success dark:bg-emerald-950/85"
+            : "border-destructive/30 bg-red-50/95 text-destructive dark:bg-red-950/85",
         )}
       >
         {isSuccess ? (
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
         ) : (
-          <XCircle className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-300" />
+          <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
         )}
         <div className="min-w-0 flex-1">
           <div className="font-medium leading-5">{notice.title}</div>
@@ -390,9 +390,7 @@ export function GitOperationNoticeToast({
             <div
               className={cn(
                 "mt-0.5 max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs leading-5",
-                isSuccess
-                  ? "text-emerald-800/80 dark:text-emerald-100/75"
-                  : "text-red-800/80 dark:text-red-100/75",
+                isSuccess ? "text-success/80" : "text-destructive/80",
               )}
             >
               {notice.message}
@@ -437,8 +435,8 @@ export function GitBranchSwitchConflictModal(props: {
     >
       <AlertDialogContent className="max-w-md p-0">
         <AlertDialogHeader className="flex-row items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-            <AlertTriangle className="size-4 text-amber-500" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-warning/10">
+            <AlertTriangle className="size-4 text-warning" />
           </div>
           <div className="min-w-0 flex-1">
             <AlertDialogTitle className="text-sm leading-normal">
@@ -790,7 +788,7 @@ export function GitReviewToolbar(props: {
             className="flex size-7 shrink-0 items-center justify-center"
             title={t("projectTools.gitReview.switchBranch")}
           >
-            <GitBranch className="size-18px text-emerald-600 dark:text-emerald-300" />
+            <GitBranch className="size-18px text-success" />
           </div>
         )}
         <div
@@ -991,7 +989,7 @@ export function GitReviewToolbar(props: {
               {
                 count: state.ahead,
                 label: t("projectTools.gitReview.labelAhead"),
-                tone: "text-sky-600 dark:text-sky-400",
+                tone: "text-info",
               },
               {
                 count: state.behind,
@@ -1001,12 +999,12 @@ export function GitReviewToolbar(props: {
               {
                 count: state.dirtyCounts.staged,
                 label: t("projectTools.gitReview.labelStaged"),
-                tone: "text-emerald-600 dark:text-emerald-400",
+                tone: "text-success",
               },
               {
                 count: state.dirtyCounts.unstaged,
                 label: t("projectTools.gitReview.labelUnstaged"),
-                tone: "text-amber-600 dark:text-amber-400",
+                tone: "text-warning",
               },
               {
                 count: state.dirtyCounts.untracked,

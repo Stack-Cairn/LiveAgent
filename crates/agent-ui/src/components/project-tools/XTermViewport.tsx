@@ -702,7 +702,7 @@ export function XTermViewport({
             "pointer-events-none absolute inset-2 z-20 flex items-center justify-center",
             "rounded-lg border-2 border-dashed bg-background/90 text-xs font-medium backdrop-blur-sm",
             workspacePathDropState === "accept"
-              ? "border-emerald-500/70 text-emerald-600 dark:text-emerald-300"
+              ? "border-success/70 text-success"
               : "border-destructive/60 text-destructive",
           )}
         >

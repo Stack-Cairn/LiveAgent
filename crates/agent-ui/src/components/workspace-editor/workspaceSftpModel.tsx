@@ -54,10 +54,10 @@ export function transferProgress(transfer: SftpTransfer | null) {
 
 export function transferTone(transfer: SftpTransfer | null) {
   if (!transfer) return "bg-muted-foreground";
-  if (transfer.status === "completed") return "bg-emerald-500";
+  if (transfer.status === "completed") return "bg-success";
   if (transfer.status === "failed") return "bg-destructive";
   if (transfer.status === "cancelled") return "bg-muted-foreground";
-  return "bg-sky-500";
+  return "bg-info";
 }
 
 export function dragItems(payload: DragPayload): DragPayloadItem[] {

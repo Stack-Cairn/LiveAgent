@@ -1244,9 +1244,9 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
                 onClick={() => setActiveKey(tab.key)}
               >
                 {tab.status === "conflict" ? (
-                  <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                  <AlertTriangle className="size-3.5 shrink-0 text-warning" />
                 ) : tab.remote ? (
-                  <Cloud className="size-3.5 shrink-0 text-sky-500" />
+                  <Cloud className="size-3.5 shrink-0 text-info" />
                 ) : (
                   <FilePenLine className="size-3.5 shrink-0" />
                 )}
@@ -1276,7 +1276,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         <div
           className={cn(
             "flex shrink-0 items-center gap-2",
-            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+            "border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning",
           )}
         >
           <AlertTriangle className="size-4 shrink-0" />
@@ -1287,7 +1287,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
               size="sm"
               aria-busy={isOpening}
               type="button"
-              className="rounded border border-amber-500/30 px-2 py-1 text-xs font-medium hover:bg-amber-500/10"
+              className="rounded border border-warning/30 px-2 py-1 text-xs font-medium hover:bg-warning/10"
               onClick={() => requestReloadTab(activeTab.key)}
             >
               <RefreshCw data-refresh-icon className="size-3.5" />

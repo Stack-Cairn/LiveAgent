@@ -337,19 +337,19 @@ function BackgroundTaskRow(props: {
           aria-hidden="true"
           className={cn(
             "size-1.5 shrink-0 rounded-full",
-            process.running ? "bg-emerald-500" : "bg-muted-foreground/50",
+            process.running ? "bg-success" : "bg-muted-foreground/50",
           )}
         />
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
           {processDisplayName(process)}
         </span>
         {process.isolated ? (
-          <span className="shrink-0 rounded bg-amber-500/15 px-1 py-px text-tiny text-amber-600 dark:text-amber-400">
+          <span className="shrink-0 rounded bg-warning/15 px-1 py-px text-tiny text-warning">
             {t("projectTools.bgTaskIsolated")}
           </span>
         ) : null}
         {process.restored ? (
-          <span className="shrink-0 rounded bg-sky-500/15 px-1 py-px text-tiny text-sky-600 dark:text-sky-400">
+          <span className="shrink-0 rounded bg-info/15 px-1 py-px text-tiny text-info">
             {t("projectTools.bgTaskRestored")}
           </span>
         ) : null}
@@ -495,7 +495,7 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
             "border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground",
           )}
         >
-          <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+          <AlertTriangle className="size-3.5 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">{t("projectTools.bgTaskAgentOffline")}</span>
         </div>
       ) : null}

@@ -37,8 +37,8 @@ export function ProjectToolsPanelToggle(props: {
           <span
             className={cn(
               "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center",
-              "rounded-full bg-emerald-500 px-1",
-              "text-tiny font-semibold leading-none text-white",
+              "rounded-full bg-success px-1",
+              "text-tiny font-semibold leading-none text-success-foreground",
             )}
           >
             {sessionCount}

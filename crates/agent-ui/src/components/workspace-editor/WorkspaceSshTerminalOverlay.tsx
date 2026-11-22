@@ -86,8 +86,8 @@ function sessionEndpointLabel(session: TerminalSession) {
 
 function statusDotClassName(session: TerminalSession) {
   const status = sshSessionStatus(session);
-  if (status === "connected") return "bg-emerald-500";
-  if (status === "reconnecting") return "bg-amber-500";
+  if (status === "connected") return "bg-success";
+  if (status === "reconnecting") return "bg-warning";
   return "bg-destructive";
 }
 
@@ -372,8 +372,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
           className={cn(
             "flex size-8 shrink-0 items-center justify-center",
             "rounded-lg border border-transparent text-muted-foreground transition-colors",
-            "hover:border-border hover:bg-background hover:text-amber-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-            "dark:hover:text-amber-400",
+            "hover:border-border hover:bg-background hover:text-warning focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
           )}
           title={t("workspaceSshTerminal.reconnect")}
           aria-label={t("workspaceSshTerminal.reconnect")}
@@ -481,7 +480,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
         <div
           className={cn(
             "flex shrink-0 items-center gap-2",
-            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+            "border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning",
           )}
         >
           <AlertTriangle className="size-4 shrink-0" />

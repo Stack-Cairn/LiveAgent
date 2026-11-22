@@ -102,7 +102,7 @@ export function GitInitModal(props: {
               <div
                 className={cn(
                   "flex size-10 shrink-0 items-center justify-center",
-                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                  "rounded-2xl border border-success/20 bg-success/10 text-success",
                 )}
               >
                 <GitBranch className="size-5" />
@@ -540,7 +540,7 @@ export function BranchActionsModal(props: {
               <div
                 className={cn(
                   "flex size-10 shrink-0 items-center justify-center",
-                  "rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+                  "rounded-2xl border border-success/20 bg-success/10 text-success",
                 )}
               >
                 <GitBranch className="size-5" />

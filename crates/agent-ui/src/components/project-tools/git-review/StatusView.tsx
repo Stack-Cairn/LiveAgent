@@ -332,7 +332,7 @@ export function GitReviewStatusView(props: {
         className={cn(
           "select-none border-b border-l-2 border-border/60 border-l-transparent px-3 py-2 transition-colors",
           "hover:bg-muted/40",
-          selected && "border-l-emerald-500 bg-emerald-500/10",
+          selected && "border-l-success bg-success/10",
           contextMenuOpen && "border-l-primary bg-primary/10 ring-1 ring-inset ring-primary/35",
         )}
         onContextMenu={(event) => openChangeContextMenu(event, entry, section)}

@@ -16,6 +16,7 @@ import {
   Trash2,
   X,
 } from "@liveagent/ui/components/IconSet";
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
@@ -36,8 +37,10 @@ import {
   validateLocalHttpTarget,
 } from "../../lib/tunnels/constants";
 import { Button, RefreshButton } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { StatusDot } from "../ui/status-dot";
 
 export type { LocalTunnelClient } from "../../lib/tunnels/constants";
 
@@ -147,7 +150,7 @@ function HealthBadge({
         "inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
         "text-xs font-medium",
         status === "ok"
-          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          ? "border-success/20 bg-success/10 text-success"
           : status === "failed"
             ? "border-destructive/20 bg-destructive/10 text-destructive"
             : "border-border/60 bg-muted/50 text-muted-foreground",
@@ -157,7 +160,7 @@ function HealthBadge({
         className={cn(
           "size-1.5 shrink-0 rounded-full",
           status === "ok"
-            ? "bg-emerald-500"
+            ? "bg-success"
             : status === "failed"
               ? "bg-destructive"
               : "bg-muted-foreground/45",
@@ -331,21 +334,16 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
             "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
             "text-xs font-medium",
             offline
-              ? "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              ? "border-warning/20 bg-warning/10 text-warning"
               : expired
                 ? "border-border/60 bg-muted/70 text-muted-foreground"
-                : "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                : "border-success/20 bg-success/10 text-success",
           )}
         >
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              offline
-                ? "bg-amber-500"
-                : expired
-                  ? "bg-muted-foreground/50"
-                  : "animate-pulse bg-emerald-500 motion-reduce:animate-none",
-            )}
+          <StatusDot
+            tone={offline ? "warning" : expired ? "muted" : "success"}
+            pulse={!offline && !expired}
+            className="motion-reduce:animate-none"
           />
           {t(
             offline
@@ -379,7 +377,7 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
                 className={cn(TUNNEL_INPUT_CLASS, "font-mono")}
               />
               {editTargetValidationKey ? (
-                <div className="flex items-start gap-1 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                <div className="flex items-start gap-1 text-xs leading-relaxed text-warning">
                   <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                   <span className="min-w-0">{t(editTargetValidationKey)}</span>
                 </div>
@@ -482,7 +480,7 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
               {publicUrl}
             </span>
             {copied ? (
-              <Check className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <Check className="size-3.5 shrink-0 text-success" />
             ) : (
               <Copy className="size-3.5 shrink-0 text-muted-foreground/70" />
             )}
@@ -502,7 +500,7 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
                 "flex h-6 min-w-0 items-center gap-1 rounded-md border px-1.5",
                 "text-tiny font-medium",
                 localStatus === "ok"
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  ? "border-success/20 bg-success/10 text-success"
                   : localStatus === "failed"
                     ? "border-destructive/20 bg-destructive/10 text-destructive"
                     : "border-border/60 bg-muted/50 text-muted-foreground",
@@ -512,7 +510,7 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
                 className={cn(
                   "size-1.5 shrink-0 rounded-full",
                   localStatus === "ok"
-                    ? "bg-emerald-500"
+                    ? "bg-success"
                     : localStatus === "failed"
                       ? "bg-destructive"
                       : "bg-muted-foreground/45",
@@ -602,18 +600,15 @@ const TunnelRow = memo(function TunnelRow(props: TunnelRowProps) {
               >
                 <SquarePen className="size-3.5" />
               </Button>
-              <Button
+              <IconButton
                 type="button"
-                variant="ghost"
                 size="icon-xs"
-                className="rounded-lg text-muted-foreground hover:text-foreground"
                 disabled={!publicUrl || expired}
                 onClick={() => onOpenLink(tunnel)}
-                title={t("projectTools.tunnelOpenLink")}
-                aria-label={t("projectTools.tunnelOpenLink")}
+                label={t("projectTools.tunnelOpenLink")}
               >
                 <ExternalLink className="size-3.5" />
-              </Button>
+              </IconButton>
               <Button
                 type="button"
                 variant="ghost"
@@ -1053,9 +1048,8 @@ export function LocalTunnelPanel({
           <div
             className={cn(
               "mb-3 flex items-start gap-2",
-              "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5",
-              "text-xs leading-relaxed text-amber-700",
-              "dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300",
+              "rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5",
+              "text-xs leading-relaxed text-warning",
             )}
           >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -1067,9 +1061,8 @@ export function LocalTunnelPanel({
           <div
             className={cn(
               "mb-3 flex items-start gap-2",
-              "rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5",
-              "text-xs leading-relaxed text-amber-700",
-              "dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300",
+              "rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5",
+              "text-xs leading-relaxed text-warning",
             )}
           >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -1162,7 +1155,7 @@ export function LocalTunnelPanel({
                           className={cn(TUNNEL_INPUT_CLASS, "font-mono")}
                         />
                         {targetValidationKey ? (
-                          <div className="flex items-start gap-1 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                          <div className="flex items-start gap-1 text-xs leading-relaxed text-warning">
                             <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                             <span className="min-w-0">{t(targetValidationKey)}</span>
                           </div>
@@ -1232,9 +1225,9 @@ export function LocalTunnelPanel({
 
         <div>
           <div className="flex items-center justify-between px-1 pb-2">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <SectionHeader size="xs" render={<span />}>
               {t("projectTools.tunnelListSection")}
-            </span>
+            </SectionHeader>
             {sortedTunnels.length > 0 ? (
               <span className="rounded-full bg-muted/80 px-1.5 py-px text-xs tabular-nums text-muted-foreground">
                 {sortedTunnels.length}
@@ -1255,11 +1248,11 @@ export function LocalTunnelPanel({
             <div className="grid gap-2">
               <span className="sr-only">{t("projectTools.tunnelLoading")}</span>
               <Skeleton
-                className="relative h-24 animate-none overflow-hidden rounded-14px border border-hsl-border-35 bg-hsl-background-50 backdrop-blur-18px backdrop-saturate-170"
+                className="relative h-24 animate-none overflow-hidden rounded-xl border border-hsl-border-35 bg-hsl-background-50 backdrop-blur-18px backdrop-saturate-170"
                 aria-hidden
               />
               <Skeleton
-                className="relative h-24 animate-none overflow-hidden rounded-14px border border-hsl-border-35 bg-hsl-background-50 opacity-70 backdrop-blur-18px backdrop-saturate-170"
+                className="relative h-24 animate-none overflow-hidden rounded-xl border border-hsl-border-35 bg-hsl-background-50 opacity-70 backdrop-blur-18px backdrop-saturate-170"
                 aria-hidden
               />
             </div>

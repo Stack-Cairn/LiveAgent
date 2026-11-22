@@ -722,7 +722,7 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
         <div
           className={cn(
             "flex shrink-0 items-center gap-2",
-            "border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300",
+            "border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning",
           )}
         >
           <AlertTriangle className="size-4 shrink-0" />
