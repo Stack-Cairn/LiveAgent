@@ -66,7 +66,7 @@ export function CopyButton(props: {
         />
         <TooltipContent>
           <span className="flex items-center gap-1.5">
-            {copied ? <Check className="size-3.5 text-emerald-600" /> : null}
+            {copied ? <Check className="size-3.5 text-success" /> : null}
             <span>{activeLabel}</span>
           </span>
         </TooltipContent>

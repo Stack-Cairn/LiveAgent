@@ -549,7 +549,7 @@ export function GlobalShortcutsSection() {
           <div
             className={cn(
               "text-xs font-medium",
-              status.kind === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+              status.kind === "ok" ? "text-success" : "text-destructive",
             )}
           >
             {status.text}

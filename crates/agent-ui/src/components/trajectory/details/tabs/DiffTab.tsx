@@ -41,8 +41,7 @@ export function DiffTab(props: DetailTabProps) {
                   key={key}
                   className={cn(
                     "block whitespace-pre-wrap break-words",
-                    line.kind === "added" &&
-                      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    line.kind === "added" && "bg-success/10 text-success",
                     line.kind === "removed" && "bg-destructive/10 text-destructive",
                   )}
                 >

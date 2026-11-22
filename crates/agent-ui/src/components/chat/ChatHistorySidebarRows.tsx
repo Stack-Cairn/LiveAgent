@@ -980,8 +980,8 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               {!isSelectionMode && blockedBadgeLabel ? (
                 <span
                   className={cn(
-                    "inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-500/[0.14] px-2",
-                    "text-tiny font-medium leading-none text-emerald-700 dark:bg-emerald-400/[0.13] dark:text-emerald-300",
+                    "inline-flex h-5 shrink-0 items-center rounded-full bg-success/[0.14] px-2",
+                    "text-tiny font-medium leading-none text-success",
                   )}
                 >
                   {blockedBadgeLabel}
@@ -993,7 +993,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                   aria-label={t("chat.conversationUnread")}
                   title={t("chat.conversationUnread")}
                   data-sidebar-unread-dot=""
-                  className="size-2 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400"
+                  className="size-2 shrink-0 rounded-full bg-info"
                 />
               ) : null}
             </SidebarMenuButton>

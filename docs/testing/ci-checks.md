@@ -10,6 +10,7 @@ budget is always a deliberate commit with a reason in the message.
 | Bundle smoke (desktop + WebUI, Chromium + WebKit) | `pnpm smoke:bundle --app gui\|webui --browser all` | `ci.yml` → Frontend Bundles | yes | ~4-5 min for the job |
 | Bundle size budget | `pnpm check:bundle-size` | `ci.yml` → Frontend Bundles | yes | (in the job above, <1 s) |
 | Source file size limit | `pnpm check:file-size` | `ci.yml` → Code Rules | yes | ~2 min for the job |
+| Design tokens (no new hard-coded styles) | `pnpm check:design-tokens` | `ci.yml` → Code Rules | yes, new or grown counts only | (in the job above, <1 s) |
 | Unused code (knip) | `pnpm check:knip` | `ci.yml` → Code Rules | yes, new findings only | (in the job above, ~5 s) |
 | Micro-benchmark gate | `pnpm check:perf-micro` | `ci.yml` → Code Rules | yes | (in the job above, ~20 s) |
 | Transcript browser scenarios | `pnpm perf:scenarios` | `perf.yml` | no, report only | ~3 min (quick), ~6 min (full) |
@@ -102,6 +103,30 @@ pnpm check:file-size --update   # lowers counts / drops entries; never adds or r
 
 Adding an entry or raising a count is a manual edit of the allowlist and needs
 a justification in review.
+
+## Design tokens
+
+`scripts/check-design-tokens.mjs` scans tracked `.ts`, `.tsx` and `.css` files
+under `crates/agent-ui/src`, `crates/agent-gui/src` and
+`crates/agent-gateway/web/src` for styles that bypass the design tokens: color
+literals, raw Tailwind palette colors, arbitrary color values and arbitrary
+font size, radius, shadow, z-index or spacing values. Tests, `.d.ts`,
+generated files, the token files themselves and the brand logos are exempt;
+comments are ignored. The tokens and primitives to use instead are listed in
+[../design-system.md](../design-system.md).
+
+Files that already had such styles are recorded per rule in
+`scripts/budgets/design-token-baseline.json`. It works like the file size
+allowlist:
+
+- A new file with a hard-coded style fails.
+- A listed file whose count for a rule grows fails.
+- A listed file that got cleaner fails too, asking you to lock in the gain.
+
+```sh
+pnpm check:design-tokens
+pnpm check:design-tokens --update   # lowers counts / drops entries; never adds or raises
+```
 
 ## Unused code (knip)
 

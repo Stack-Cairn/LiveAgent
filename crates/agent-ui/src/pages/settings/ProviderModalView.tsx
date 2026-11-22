@@ -56,6 +56,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -345,7 +346,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         <Link2
                           className={cn(
                             "size-3.5",
-                            isFullUrl ? "text-sky-500" : "text-muted-foreground",
+                            isFullUrl ? "text-info" : "text-muted-foreground",
                           )}
                         />
                         <span
@@ -1437,17 +1438,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                     "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-[720px]:opacity-100",
                                   )}
                                 >
-                                  <Button
+                                  <IconButton
+                                    tone="destructive"
                                     type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                     onClick={() => removeCustomHeader(index)}
-                                    title={t("settings.removeCustomHeader")}
-                                    aria-label={t("settings.removeCustomHeader")}
+                                    label={t("settings.removeCustomHeader")}
                                   >
                                     <Trash2 className="size-3.5" />
-                                  </Button>
+                                  </IconButton>
                                 </div>
                               </div>
                             </div>
@@ -1622,9 +1620,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             {t("settings.providerUsageVariables")}
                           </div>
                           <div className="mt-2 flex min-w-0 items-center gap-2">
-                            <code className="shrink-0 font-mono text-emerald-600 dark:text-emerald-400">
-                              {"{{baseUrl}}"}
-                            </code>
+                            <code className="shrink-0 font-mono text-success">{"{{baseUrl}}"}</code>
                             <span className="text-muted-foreground/60">=</span>
                             {usageVariableBaseUrl ? (
                               <code className="break-all font-mono text-muted-foreground">
@@ -1637,9 +1633,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             )}
                           </div>
                           <div className="mt-1 flex min-w-0 items-center gap-2">
-                            <code className="shrink-0 font-mono text-emerald-600 dark:text-emerald-400">
-                              {"{{apiKey}}"}
-                            </code>
+                            <code className="shrink-0 font-mono text-success">{"{{apiKey}}"}</code>
                             <span className="text-muted-foreground/60">=</span>
                             {usageVariableApiKey ? (
                               <>

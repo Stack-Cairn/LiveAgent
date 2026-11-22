@@ -52,7 +52,7 @@ export function HistoryMigrationNoticeBanner({ onOpenSettings }: { onOpenSetting
         </Button>
         <button
           type="button"
-          className="absolute top-1.5 right-1.5 rounded p-1 opacity-70 has-hover:hover:bg-amber-500/10 has-hover:hover:opacity-100"
+          className="absolute top-1.5 right-1.5 rounded p-1 opacity-70 has-hover:hover:bg-warning/10 has-hover:hover:opacity-100"
           aria-label={t("historyImport.notice.dismiss")}
           title={t("historyImport.notice.dismiss")}
           onClick={() => void dismiss()}

@@ -32,7 +32,7 @@ export function SettingsCopyButton({
         className,
       )}
     >
-      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+      {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
     </button>
   );
 }

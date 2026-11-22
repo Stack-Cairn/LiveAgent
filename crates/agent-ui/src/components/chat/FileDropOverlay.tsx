@@ -93,7 +93,7 @@ export function FileDropOverlay(props: FileDropOverlayProps) {
           "text-center shadow-ui-filedropoverlay-6 backdrop-blur-2xl dark:bg-zinc-900/70 dark:shadow-ui-filedropoverlay-7",
           canDropUpload
             ? "border-black/[0.06] ring-1 ring-inset ring-white/40 dark:border-white/10 dark:ring-white/[0.04]"
-            : "border-destructive/20 ring-1 ring-inset ring-destructive/10 dark:border-destructive/30",
+            : "border-destructive/20 ring-1 ring-inset ring-destructive/10",
         )}
       >
         <div

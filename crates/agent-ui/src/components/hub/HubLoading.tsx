@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/shared/utils";
 import { Loader2 } from "../IconSet";
 
-const loadingSurfaceVariants = cva("relative overflow-hidden rounded-14px border", {
+const loadingSurfaceVariants = cva("relative overflow-hidden rounded-xl border", {
   variants: {
     variant: {
       hero: "border-hsl-border-55 bg-hub-frost-hero backdrop-blur-24px backdrop-saturate-180 shadow-hub-frost-hero dark:border-white/8 dark:bg-hub-frost-hero-dark dark:shadow-hub-frost-hero-dark",

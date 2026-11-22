@@ -8,7 +8,7 @@ import type {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { AlertCircle, Folder, FolderTree, Info, Lock, Plus, Trash2 } from "../../IconSet";
-import { Button } from "../../ui/button";
+import { IconButton } from "../../ui/icon-button";
 import { Input } from "../../ui/input";
 import { rootStateTone } from "./workspaceProjectSettingsUtils";
 
@@ -177,17 +177,17 @@ export function WorkspaceDirectorySettingsPanel(props: {
                   writeLabel={t("chat.workspaceSettingsDirectoryWrite")}
                   onChange={(access) => onAccessChange(root.id, access)}
                 />
-                <Button
+                <IconButton
+                  tone="destructive"
                   type="button"
-                  variant="ghost"
                   size="icon-xs"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  title={t("chat.workspaceSettingsRemoveDirectory")}
+                  className="shrink-0"
+                  label={t("chat.workspaceSettingsRemoveDirectory")}
                   disabled={!loaded}
                   onClick={() => onRemove(root.id)}
                 >
                   <Trash2 className="size-3.5" />
-                </Button>
+                </IconButton>
               </div>
             </div>
           ))

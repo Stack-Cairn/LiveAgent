@@ -149,7 +149,7 @@ test("branch selector reuses the model trigger visual language", () => {
   assert.match(branchSelectorSource, /COMPOSER_CONTROL_LABEL_CLASS/);
   assert.match(branchSelectorSource, /data-\[popup-open\]:bg-muted\/60/);
   assert.match(branchSelectorSource, /menuOpen && "rotate-180"/);
-  assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald/);
+  assert.doesNotMatch(branchSelectorSource, /border-emerald|bg-emerald|border-success|bg-success/);
 });
 
 test("compact composer controls remain equal-width centered icon buttons", () => {

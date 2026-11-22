@@ -182,7 +182,7 @@ function DiffPieces({ pieces }: { pieces: DiffPiece[] }) {
             key={piece.key}
             className={cn(
               "rounded-xs px-0.5 [box-decoration-break:clone] [-webkit-box-decoration-break:clone]",
-              added ? "bg-emerald-500/20" : "bg-red-500/20",
+              added ? "bg-success/20" : "bg-destructive/20",
             )}
           >
             {highlightCode(piece.text)}
@@ -461,19 +461,15 @@ const DiffRowView = memo(function DiffRowView({
   const deleted = row.type === "del";
   const gutterClassName = cn(
     "select-none text-center text-xs tabular-nums",
-    added
-      ? "text-emerald-700 dark:text-emerald-300"
-      : deleted
-        ? "text-red-700 dark:text-red-300"
-        : "text-muted-foreground",
+    added ? "text-success" : deleted ? "text-destructive" : "text-muted-foreground",
   );
   const commentable = commenting && row.lineNumber !== null;
   return (
     <div
       className={cn(
         "group/diffrow relative grid grid-cols-[var(--diff-gutter)_minmax(0,1fr)] items-start",
-        added && "bg-emerald-500/[0.09]",
-        deleted && "bg-red-500/[0.09]",
+        added && "bg-success/[0.09]",
+        deleted && "bg-destructive/[0.09]",
         commentable && commenting.activeKey === row.key && "ring-1 ring-inset ring-primary/50",
       )}
     >
@@ -482,7 +478,7 @@ const DiffRowView = memo(function DiffRowView({
           aria-hidden="true"
           className={cn(
             "absolute inset-y-0 left-0 w-3px",
-            added && "bg-emerald-600",
+            added && "bg-success",
             deleted && "bg-diff-deleted",
           )}
         />
@@ -623,8 +619,8 @@ export function EditDiffView(props: {
           <span className="truncate font-mono leading-none text-foreground">{displayPath}</span>
         </span>
         <span className="ml-auto inline-flex items-center gap-2 font-mono text-xs leading-none tabular-nums">
-          <span className="text-emerald-700 dark:text-emerald-300">+{diff.added}</span>
-          <span className="text-red-700 dark:text-red-300">-{diff.removed}</span>
+          <span className="text-success">+{diff.added}</span>
+          <span className="text-destructive">-{diff.removed}</span>
         </span>
       </figcaption>
 

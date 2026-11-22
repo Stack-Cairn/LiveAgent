@@ -925,7 +925,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
   if (!connected) {
     return (
       <EmptyState variant="workspace">
-        <AlertTriangle className="size-8 text-amber-500" />
+        <AlertTriangle className="size-8 text-warning" />
         <div className="font-medium text-foreground">{t("workspaceSftp.disconnected")}</div>
         <div className="max-w-md text-xs">{t("workspaceSftp.disconnectedHint")}</div>
       </EmptyState>
@@ -987,7 +987,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                   className={cn(
                     "relative flex min-h-0 min-w-0 flex-col overflow-hidden transition-colors",
                     dropMode && "bg-muted/20",
-                    dropActive && "bg-emerald-500/5",
+                    dropActive && "bg-success/5",
                   )}
                   onDragOver={(event) => handleDragOver(event, side, pane.path)}
                   onDragLeave={handleDragLeave}
@@ -1014,8 +1014,8 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                         type="button"
                         className={cn(
                           "inline-flex h-7 max-w-112px shrink-0 items-center",
-                          "rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2",
-                          "text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300",
+                          "rounded-full border border-success/20 bg-success/10 px-2",
+                          "text-xs font-medium text-success transition-colors hover:bg-success/15",
                         )}
                         title={t("workspaceSftp.clearSelection")}
                         onClick={(event) => {
@@ -1090,31 +1090,31 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                         className={cn(
                           "pointer-events-none absolute inset-2 z-20 flex items-center justify-center",
                           "rounded-lg bg-background/80 text-center opacity-75 shadow-inner backdrop-blur-1px transition-all",
-                          dropActive && "bg-emerald-500/10 opacity-100",
+                          dropActive && "bg-success/10 opacity-100",
                         )}
                       >
                         <span
                           className={cn(
                             "absolute left-0 top-0 size-14 rounded-tl-lg border-l-2 border-t-2",
-                            dropActive ? "border-emerald-600" : "border-foreground/65",
+                            dropActive ? "border-success" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
                             "absolute right-0 top-0 size-14 rounded-tr-lg border-r-2 border-t-2",
-                            dropActive ? "border-emerald-600" : "border-foreground/65",
+                            dropActive ? "border-success" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
                             "absolute bottom-0 left-0 size-14 rounded-bl-lg border-b-2 border-l-2",
-                            dropActive ? "border-emerald-600" : "border-foreground/65",
+                            dropActive ? "border-success" : "border-foreground/65",
                           )}
                         />
                         <span
                           className={cn(
                             "absolute bottom-0 right-0 size-14 rounded-br-lg border-b-2 border-r-2",
-                            dropActive ? "border-emerald-600" : "border-foreground/65",
+                            dropActive ? "border-success" : "border-foreground/65",
                           )}
                         />
                         <div className="flex max-w-[75%] flex-col items-center gap-3">
@@ -1122,7 +1122,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                             className={cn(
                               "flex size-14 items-center justify-center rounded-xl border-2 bg-background/90 shadow-sm",
                               dropActive
-                                ? "border-emerald-600 text-emerald-700 dark:text-emerald-300"
+                                ? "border-success text-success"
                                 : "border-foreground/70 text-foreground",
                             )}
                           >
@@ -1183,7 +1183,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 "px-2 py-1.5 text-left text-xs hover:bg-muted",
                                 !isMobileLayout && "touch-none",
                                 isSelected &&
-                                  "bg-emerald-500/10 text-foreground ring-1 ring-emerald-500/20",
+                                  "bg-success/10 text-foreground ring-1 ring-success/20",
                                 activeDragSource?.side === side &&
                                   dragItems(activeDragSource).some(
                                     (item) => item.path === entry.path,
@@ -1192,7 +1192,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 dropTarget?.side === side &&
                                   dropTarget.path === entry.path &&
                                   entry.kind === "directory" &&
-                                  "bg-emerald-500/10 text-foreground",
+                                  "bg-success/10 text-foreground",
                               )}
                               onClick={(event) => {
                                 if (suppressNextClickRef.current) {
@@ -1332,8 +1332,8 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
           {contextMenu.items.length > 1 ? (
             <div
               className={cn(
-                "mb-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1",
-                "text-xs font-medium text-emerald-700 dark:text-emerald-300",
+                "mb-1 flex items-center justify-between rounded-lg bg-success/10 px-2 py-1",
+                "text-xs font-medium text-success",
               )}
             >
               <span>

@@ -215,8 +215,8 @@ test("prompt templates expose global and project scopes with append or replace e
 
 test("global and project prompt cards share row and action layout", () => {
   const projectCards = sharedAgentsSection.slice(sharedAgentsSection.indexOf("{projects.map"));
-  const previewButton = projectCards.indexOf('title={t("settings.agentsShowPrompt")}');
-  const editButton = projectCards.indexOf('title={t("settings.agentsProjectEdit")}');
+  const previewButton = projectCards.indexOf('label={t("settings.agentsShowPrompt")}');
+  const editButton = projectCards.indexOf('label={t("settings.agentsProjectEdit")}');
 
   assert.match(projectCards, /settings-card-row flex items-center gap-3 px-4 py-3/);
   assert.match(projectCards, /settings-card-actions flex items-center gap-1\.5/);
@@ -225,7 +225,7 @@ test("global and project prompt cards share row and action layout", () => {
   assert.match(projectCards, /disabled=\{!configured\}/);
   assert.match(
     projectCards,
-    /size="icon-sm"[\s\S]*title=\{t\("settings\.agentsProjectEdit"\)\}/,
+    /<IconButton[\s\S]*label=\{t\("settings\.agentsProjectEdit"\)\}/,
   );
   assert.doesNotMatch(
     projectCards,

@@ -1,3 +1,4 @@
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import {
   TRAJECTORY_PROMPT_SECTION_SLOTS,
   TRAJECTORY_SECTION_SLOTS,
@@ -26,9 +27,7 @@ export function SystemPromptTab(props: DetailTabProps) {
     <div className="space-y-4">
       {visible.map(({ slot, index }) => (
         <section key={slot} className="space-y-1">
-          <p className="text-tiny font-medium uppercase tracking-wide text-muted-foreground">
-            {props.t(`trajectory.details.slot.${slot}`)}
-          </p>
+          <SectionHeader render={<p />}>{props.t(`trajectory.details.slot.${slot}`)}</SectionHeader>
           <TextBlock value={sectionContentAt(props.header, index, props.sectionById)} t={props.t} />
         </section>
       ))}

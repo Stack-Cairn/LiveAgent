@@ -1,3 +1,4 @@
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type { TrajectorySourceBlock } from "../../../lib/trajectory/types";
@@ -71,11 +72,11 @@ export function SourceBlocks(props: {
     <div className="space-y-3">
       {props.blocks.map((block, index) => (
         <section key={`${block.type}:${block.callId ?? index}`} className="space-y-1">
-          <p className="text-tiny font-medium uppercase tracking-wide text-muted-foreground">
+          <SectionHeader render={<p />}>
             {block.type}
             {block.toolName ? ` · ${block.toolName}` : ""}
             {block.callId ? ` · ${block.callId}` : ""}
-          </p>
+          </SectionHeader>
           {block.filePath && block.fileSource && props.onOpenFileLink ? (
             <button
               type="button"

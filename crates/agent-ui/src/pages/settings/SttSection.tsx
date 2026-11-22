@@ -30,6 +30,7 @@ import {
   DialogTrigger,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { StatusDot } from "@liveagent/ui/components/ui/status-dot";
 import { Switch } from "@liveagent/ui/components/ui/switch";
 import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -479,15 +480,10 @@ export function SttSection({
                 <span
                   className={cn(
                     "inline-flex items-center gap-1",
-                    provider.configured && "text-emerald-600 dark:text-emerald-400",
+                    provider.configured && "text-success",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      provider.configured ? "bg-emerald-500" : "bg-muted-foreground/40",
-                    )}
-                  />
+                  <StatusDot tone={provider.configured ? "success" : "muted"} />
                   {provider.configured
                     ? t("settings.stt.configured")
                     : t("settings.stt.notConfigured")}
@@ -545,8 +541,8 @@ export function SttSection({
                                   {configured ? (
                                     <>
                                       <span aria-hidden="true">·</span>
-                                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                                      <span className="inline-flex items-center gap-1 text-success">
+                                        <StatusDot tone="success" />
                                         {t("settings.stt.configured")}
                                       </span>
                                     </>

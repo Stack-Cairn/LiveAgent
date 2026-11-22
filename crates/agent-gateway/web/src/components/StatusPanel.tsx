@@ -10,7 +10,7 @@ export function StatusPanel({ className, ...props }: ComponentProps<"section">) 
       {...props}
       className={cn(
         statusPanelSurfaceClass,
-        "flex min-h-0 flex-col rounded-22px p-14px status-compact:p-10px",
+        "flex min-h-0 flex-col rounded-3xl p-14px status-compact:p-10px",
         className,
       )}
     />

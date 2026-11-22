@@ -338,7 +338,7 @@ function CcsImportModal(props: {
                   </div>
                   {item.apiKey.trim() ? <Key className="size-3.5" /> : null}
                   {alreadyImported ? (
-                    <span className="text-xs text-emerald-600">
+                    <span className="text-xs text-success">
                       {t("providerImport.alreadyImported")}
                     </span>
                   ) : null}
@@ -352,7 +352,7 @@ function CcsImportModal(props: {
           )}
         </DialogBody>
         {result ? (
-          <div className="flex items-start gap-2 border-t px-6 py-3 text-xs text-emerald-600">
+          <div className="flex items-start gap-2 border-t px-6 py-3 text-xs text-success">
             <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
             <span>{result}</span>
           </div>

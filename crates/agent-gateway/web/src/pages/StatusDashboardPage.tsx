@@ -378,7 +378,7 @@ function MetricTile({ metric }: { metric: MetricCard }) {
       className={cn(
         statusPanelSurfaceClass,
         "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden",
-        "rounded-14px border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
+        "rounded-xl border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
         dashboardToneClass[metric.tone],
       )}
     >
@@ -414,7 +414,7 @@ function EmptyState({ children }: { children: string }) {
     <div
       className={cn(
         statusEntrySurfaceClass,
-        "rounded-14px px-9px py-8px text-tiny leading-1p25 text-muted-foreground not-italic",
+        "rounded-xl px-9px py-8px text-tiny leading-1p25 text-muted-foreground not-italic",
       )}
     >
       {children}
@@ -1168,7 +1168,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
             <div
               className={cn(
                 "flex size-38px flex-col place-items-center items-start gap-2px",
-                "rounded-14px border border-[rgba(var(--status-cyan),0.3)] bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
+                "rounded-xl border border-[rgba(var(--status-cyan),0.3)] bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
               )}
             >
               <Sparkles size={19} strokeWidth={2.4} />
@@ -1302,7 +1302,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
               <div
                 className={cn(
                   "mt-10px grid grid-cols-2 gap-8px",
-                  "[&>div]:min-w-0 [&>div]:rounded-14px [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]",
+                  "[&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]",
                 )}
               >
                 <div>
@@ -1444,7 +1444,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                       key={event.id}
                       className={cn(
                         statusEntrySurfaceClass,
-                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:191,210,232]",
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-xl px-9px py-8px [--status-board-tone:191,210,232]",
                         dashboardToneClass[event.tone],
                       )}
                     >
@@ -1505,7 +1505,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                       key={item.id}
                       className={cn(
                         statusEntrySurfaceClass,
-                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-14px px-9px py-8px [--status-board-tone:var(--status-violet)]",
+                        "grid grid-cols-[auto_minmax(0,1fr)] gap-9px rounded-xl px-9px py-8px [--status-board-tone:var(--status-violet)]",
                       )}
                     >
                       <div className="mt-5px size-8px flex-none rounded-full bg-status-board-tone shadow-status-board-event-dot" />
@@ -1535,7 +1535,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
               <div
                 className={cn(
                   statusEntrySurfaceClass,
-                  "mb-8px flex-none rounded-14px px-9px py-8px [--status-board-tone:var(--status-cyan)]",
+                  "mb-8px flex-none rounded-xl px-9px py-8px [--status-board-tone:var(--status-cyan)]",
                 )}
               >
                 <span className="block text-muted-foreground text-tiny tracking-0p12em uppercase">
@@ -1568,7 +1568,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                       key={item.path}
                       className={cn(
                         statusEntrySurfaceClass,
-                        "grid grid-cols-[minmax(0,1fr)_var(--spacing-86px)_var(--spacing-82px)] items-center gap-9px rounded-14px px-9px py-8px",
+                        "grid grid-cols-[minmax(0,1fr)_var(--spacing-86px)_var(--spacing-82px)] items-center gap-9px rounded-xl px-9px py-8px",
                       )}
                     >
                       <div>
@@ -1606,7 +1606,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
         <footer
           className={cn(
             "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
-            "rounded-14px border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
+            "rounded-xl border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
             "text-tiny text-muted-foreground backdrop-blur-16px",
           )}
         >

@@ -49,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
+import { IconButton } from "../../components/ui/icon-button";
 import { Input } from "../../components/ui/input";
 import { Select, SelectItem, SelectValue } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
@@ -323,7 +324,7 @@ function SshHostModal(props: {
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-success/10 text-success">
             <Key className="size-5" />
           </div>
           <div className="flex-1">
@@ -339,7 +340,7 @@ function SshHostModal(props: {
             <FormField density="compact">
               <FormFieldLabel htmlFor="ssh-name" size="compact">
                 {t("settings.sshName")}
-                <span className="ml-0.5 text-red-500">*</span>
+                <span className="ml-0.5 text-destructive">*</span>
               </FormFieldLabel>
               <Input
                 variant="plain"
@@ -351,7 +352,7 @@ function SshHostModal(props: {
             <FormField density="compact">
               <FormFieldLabel htmlFor="ssh-host" size="compact">
                 {t("settings.sshHost")}
-                <span className="ml-0.5 text-red-500">*</span>
+                <span className="ml-0.5 text-destructive">*</span>
               </FormFieldLabel>
               <Input
                 variant="plain"
@@ -875,37 +876,22 @@ function SshHostCard(props: {
         onConfirm={onResetKnownHost}
       >
         {(open) => (
-          <Button
-            variant="ghost"
+          <IconButton
             size="icon-xs"
-            className="text-muted-foreground hover:text-foreground"
             onClick={open}
-            title={t("settings.sshKnownHostReset")}
-            aria-label={t("settings.sshKnownHostReset")}
+            label={t("settings.sshKnownHostReset")}
             disabled={resettingKnownHost}
           >
             <Shield className="size-3.5" />
-          </Button>
+          </IconButton>
         )}
       </ConfirmActionPopover>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={onEdit}
-        title={t("settings.edit")}
-      >
+      <IconButton size="icon-xs" onClick={onEdit} label={t("settings.edit")}>
         <SquarePen className="size-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        className="text-muted-foreground hover:text-destructive"
-        onClick={onDelete}
-        title={t("settings.delete")}
-      >
+      </IconButton>
+      <IconButton tone="destructive" size="icon-xs" onClick={onDelete} label={t("settings.delete")}>
         <Trash2 className="size-3.5" />
-      </Button>
+      </IconButton>
     </div>
   );
 

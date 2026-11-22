@@ -117,7 +117,7 @@ const FloorMarker = memo(function FloorMarker(props: FloorMarkerProps) {
                 "transition-[width,background-color,opacity] duration-150 ease-out",
                 "after:absolute after:-inset-x-2 after:-inset-y-1 after:content-[''] motion-reduce:transition-none",
                 isBookmarked
-                  ? "bg-amber-500/90"
+                  ? "bg-warning/90"
                   : isHovered
                     ? "bg-foreground/90"
                     : isActive
@@ -157,7 +157,7 @@ const FloorMarker = memo(function FloorMarker(props: FloorMarkerProps) {
                   "mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg outline-none",
                   "transition-colors focus-visible:ring-1 focus-visible:ring-ring",
                   isBookmarked
-                    ? "text-amber-500 hover:bg-amber-500/10"
+                    ? "text-warning hover:bg-warning/10"
                     : "text-muted-foreground/50 hover:bg-foreground/[0.05] hover:text-foreground",
                 )}
               >
@@ -389,7 +389,7 @@ export function FloorNavRail(props: {
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-md transition-all",
             isBookmarked
-              ? "text-amber-500 hover:text-amber-600"
+              ? "text-warning hover:text-warning"
               : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
             // 触屏没有 hover 显隐，收藏按钮常显。
             isCoarsePointer && "opacity-100",
@@ -427,11 +427,11 @@ export function FloorNavRail(props: {
           >
             <div className="min-h-0 overflow-y-auto overscroll-contain p-1.5">
               {bookmarkedFloors.length > 0 ? (
-                <div className="mb-1.5 rounded-lg bg-amber-500/[0.07] p-1 ring-1 ring-amber-500/20">
+                <div className="mb-1.5 rounded-lg bg-warning/[0.07] p-1 ring-1 ring-warning/20">
                   <div
                     className={cn(
                       "flex items-center gap-1.5 px-1.5 pb-1 pt-0.5",
-                      "text-tiny font-medium text-amber-600/90 dark:text-amber-400/90",
+                      "text-tiny font-medium text-warning/90",
                     )}
                   >
                     <Pin className="size-2.5 fill-current" />

@@ -19,8 +19,8 @@ test("settings surfaces preserve native nodes, props, refs and shared class sets
     [SettingsPanel, {variant: "configuration"}, "div", "space-y-3 rounded-xl border border-border/70 bg-muted/35 p-4"],
     [SettingsHint, {}, "p", "rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"],
     [SettingsNotice, {variant: "validation"}, "div", "flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive"],
-    [SettingsNotice, {variant: "warning"}, "div", "rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-300"],
-    [SettingsNotice, {variant: "installation-warning"}, "div", "rounded-xl border border-amber-500/30 bg-amber-500/[0.05] p-3.5"],
+    [SettingsNotice, {variant: "warning"}, "div", "rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2 text-xs leading-relaxed text-warning"],
+    [SettingsNotice, {variant: "installation-warning"}, "div", "rounded-xl border border-warning/30 bg-warning/[0.05] p-3.5"],
     [SettingsNotice, {variant: "inline-error"}, "div", "flex items-center gap-1.5 text-xs text-destructive"],
   ];
   for (const [kind, color] of [["command", "blue"], ["http", "emerald"], ["prompt", "violet"]]) {

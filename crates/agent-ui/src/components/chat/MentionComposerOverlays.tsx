@@ -359,7 +359,7 @@ export function Popup({
                       : isSkill || isApp
                         ? "text-foreground/85"
                         : isDir
-                          ? "text-amber-600 dark:text-amber-300"
+                          ? "text-warning"
                           : "text-muted-foreground",
                   )}
                 >
@@ -554,10 +554,8 @@ export function CommitMentionTooltip({
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-tight">
           <span className="text-muted-foreground">{filesChangedLabel}</span>
-          <span className="font-medium text-emerald-600 dark:text-emerald-400">
-            {insertionsLabel}
-          </span>
-          <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
+          <span className="font-medium text-success">{insertionsLabel}</span>
+          <span className="font-medium text-destructive">{deletionsLabel}</span>
         </div>
         <div
           className={cn(

@@ -40,9 +40,9 @@ export function UserMenu(props: UserMenuProps) {
         : t("settings.devicesUnknownStatus");
   const statusDotClass =
     agentStatus === "online"
-      ? "bg-emerald-500"
+      ? "bg-success"
       : agentStatus === "offline"
-        ? "bg-rose-500"
+        ? "bg-destructive"
         : "bg-muted-foreground/50";
 
   return (

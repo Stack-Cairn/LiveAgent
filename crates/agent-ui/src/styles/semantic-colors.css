@@ -13,6 +13,12 @@
   --color-success-foreground: var(--success-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-overlay: var(--overlay);
+  --color-surface-subtle: var(--surface-subtle);
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
   --color-settings-rail: hsl(var(--settings-rail));
@@ -33,4 +39,7 @@
   --color-chip: hsl(var(--chip-bg));
   --color-chip-hover: hsl(var(--chip-bg-hover));
   --color-send-disabled: hsl(var(--send-disabled-bg));
+  --color-hub-canvas: hsl(var(--hub-canvas));
+  --color-chat-user: hsl(var(--chat-user-bg));
+  --color-chat-user-foreground: hsl(var(--chat-user-fg));
 }

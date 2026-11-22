@@ -51,6 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { NumberInput } from "@liveagent/ui/components/ui/number-input";
 import {
   Select,
@@ -328,7 +329,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 />
               ) : null}
               {unavailableProviderCount > 0 ? (
-                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-warning/90">
                   {t("settings.failoverQueueUnavailableCandidates").replace(
                     "{count}",
                     String(unavailableProviderCount),
@@ -336,7 +337,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
                 </p>
               ) : null}
               {unavailableQueuedProviderCount > 0 ? (
-                <p className="text-tiny leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+                <p className="text-tiny leading-relaxed text-warning/90">
                   {t("settings.failoverQueueUnavailableExisting").replace(
                     "{count}",
                     String(unavailableQueuedProviderCount),
@@ -864,26 +865,19 @@ function ProviderCardRow(props: {
             <RefreshCw data-refresh-icon className={cn("size-3.5", refreshing && "animate-spin")} />
           </RefreshButton>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={onEdit}
-          title={t("settings.edit")}
-        >
+        <IconButton size="icon-xs" onClick={onEdit} label={t("settings.edit")}>
           <SquarePen className="size-3.5" />
-        </Button>
+        </IconButton>
         <ConfirmDeletePopover name={provider.name} onConfirm={onDelete}>
           {(open) => (
-            <Button
-              variant="ghost"
+            <IconButton
+              tone="destructive"
               size="icon-xs"
-              className="text-muted-foreground hover:text-destructive"
               onClick={open}
-              title={t("settings.delete")}
+              label={t("settings.delete")}
             >
               <Trash2 className="size-3.5" />
-            </Button>
+            </IconButton>
           )}
         </ConfirmDeletePopover>
       </div>
@@ -1140,7 +1134,7 @@ export function ProvidersSection(
             {onDismissRejectedLegacyProviders ? (
               <button
                 type="button"
-                className="absolute top-1.5 right-1.5 rounded p-1 opacity-70 has-hover:hover:bg-amber-500/10 has-hover:hover:opacity-100"
+                className="absolute top-1.5 right-1.5 rounded p-1 opacity-70 has-hover:hover:bg-warning/10 has-hover:hover:opacity-100"
                 aria-label={t("settings.legacyProviderImportDismiss")}
                 title={t("settings.legacyProviderImportDismiss")}
                 onClick={() => void dismissLegacyImportNotice()}

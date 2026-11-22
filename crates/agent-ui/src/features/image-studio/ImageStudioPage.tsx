@@ -46,8 +46,7 @@ const noticeStyles: Record<NoticeTone, { className: string; Icon: typeof Info }>
   success: { className: "border-success/30 bg-success/10 text-success", Icon: CheckCircle2 },
   info: { className: "border-border bg-popover text-foreground", Icon: Info },
   warning: {
-    className:
-      "border-amber-500/30 bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
+    className: "border-warning/30 bg-warning/10 text-warning",
     Icon: AlertTriangle,
   },
   error: {

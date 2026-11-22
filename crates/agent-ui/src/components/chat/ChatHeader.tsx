@@ -2,6 +2,7 @@ import { isDesktopChatHeaderInset } from "@liveagent/adapters/chatHeaderChrome";
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import { PanelLeft, Settings } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { ShortcutTooltip } from "@liveagent/ui/components/ui/shortcut-tooltip";
 import { useSidebarToggleShortcut } from "@liveagent/ui/components/ui/sidebar";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -104,15 +105,13 @@ export const ChatHeader = memo(function ChatHeader(props: ChatHeaderProps) {
         <ThemeToggleButton theme={settings.theme} onToggle={onToggleTheme} />
         {!sidebarOpen && !desktopTitleBarInset ? (
           <ShortcutTooltip label={t("tooltip.settings")} side="bottom">
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <IconButton
+              label={t("tooltip.settings")}
+              nativeTitle={false}
               onClick={() => onOpenSettings()}
-              aria-label={t("tooltip.settings")}
-              className="rounded-lg text-muted-foreground hover:text-foreground"
             >
               <Settings className="size-4" />
-            </Button>
+            </IconButton>
           </ShortcutTooltip>
         ) : null}
         {trailingActions}

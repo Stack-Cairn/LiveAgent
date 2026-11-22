@@ -361,7 +361,7 @@ export function ToolApprovalBar({
           <p
             data-approval-notice=""
             role="status"
-            className="mt-2 break-words text-tiny text-amber-700 dark:text-amber-400"
+            className="mt-2 break-words text-tiny text-warning"
           >
             {t("chat.toolApproval.rememberRefused").replace("{reason}", current.notice)}
           </p>

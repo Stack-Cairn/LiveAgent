@@ -208,7 +208,7 @@ export function TrajectoryTimeline(props: {
                     status === "running"
                       ? "bg-primary/15 text-primary"
                       : status === "error"
-                        ? "bg-red-500/15 text-red-500"
+                        ? "bg-destructive/15 text-destructive"
                         : "bg-muted text-muted-foreground",
                   )}
                   style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
@@ -251,7 +251,7 @@ export function TrajectoryTimeline(props: {
                 aria-hidden="true"
                 className={cn(
                   "absolute overflow-hidden rounded-xs transition-opacity",
-                  span.isError ? "bg-red-500/85" : SPAN_TONE[span.kind],
+                  span.isError ? "bg-destructive/85" : SPAN_TONE[span.kind],
                   span.status === "aborted" && "bg-trajectory-aborted",
                   span.status === "running" && "animate-pulse",
                   dimmed && "opacity-25",
@@ -408,7 +408,7 @@ export function TrajectoryTimeline(props: {
                 aria-hidden="true"
                 className={cn(
                   "absolute rounded-full",
-                  span.isError ? "bg-red-500/80" : SPAN_TONE[span.kind],
+                  span.isError ? "bg-destructive/80" : SPAN_TONE[span.kind],
                 )}
                 style={{
                   left: `${left}%`,

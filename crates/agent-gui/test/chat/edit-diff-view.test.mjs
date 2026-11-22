@@ -15,8 +15,8 @@ test("edit tool diff uses the compact code-block presentation", () => {
   assert.match(source, /-\{diff\.removed\}/);
   assert.match(source, /grid-cols-\[var\(--diff-gutter\)_minmax\(0,1fr\)\]/);
   assert.match(source, /deleted && "bg-diff-deleted"/);
-  assert.match(source, /bg-emerald-500\/20/);
-  assert.match(source, /bg-red-500\/20/);
+  assert.match(source, /bg-success\/20/);
+  assert.match(source, /bg-destructive\/20/);
 });
 
 test("edit tool diff sizes the line-number gutter from the widest line number", () => {

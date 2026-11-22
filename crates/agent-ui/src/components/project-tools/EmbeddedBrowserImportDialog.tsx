@@ -197,7 +197,7 @@ export function EmbeddedBrowserImportDialog(props: EmbeddedBrowserImportDialogPr
                 </p>
               </div>
               <div className="flex gap-2.5 rounded-lg bg-muted/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
                 <div className="space-y-1">
                   <p>{t("projectTools.browserImportKeychainNote")}</p>
                   <p>{t("projectTools.browserImportPrivacyNote")}</p>
@@ -247,14 +247,14 @@ function ImportResult({ result }: { result: BrowserImportResultView }) {
       role="status"
       className={cn(
         "mt-4 space-y-2 rounded-lg border px-3 py-2.5 text-xs",
-        good ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5",
+        good ? "border-success/30 bg-success/5" : "border-warning/40 bg-warning/5",
       )}
     >
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         {good ? (
-          <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="size-4 text-success" />
         ) : (
-          <AlertTriangle className="size-4 text-amber-500" />
+          <AlertTriangle className="size-4 text-warning" />
         )}
         {headline}
       </div>
@@ -275,7 +275,7 @@ function ImportResult({ result }: { result: BrowserImportResultView }) {
         <dd className="text-right tabular-nums text-foreground">{result.failed}</dd>
       </dl>
       {result.keyError ? (
-        <p className="flex gap-1.5 text-amber-700 dark:text-amber-400">
+        <p className="flex gap-1.5 text-warning">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>
             {t("projectTools.browserImportKeyError")} {result.keyError}

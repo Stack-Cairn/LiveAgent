@@ -106,13 +106,13 @@ export function organizerStatusLabel(status: MemoryOrganizeRunStatus, t: (key: s
 
 export function organizerStatusClass(status: MemoryOrganizeRunStatus) {
   if (status === "succeeded") {
-    return "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300";
+    return "border-success/20 bg-success/5 text-success";
   }
   if (status === "failed") {
     return "border-destructive/25 bg-destructive/[0.06] text-destructive";
   }
   if (status === "running" || status === "pending") {
-    return "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/25 bg-warning/[0.06] text-warning";
   }
   return "border-border/60 bg-muted/40 text-muted-foreground";
 }
@@ -152,9 +152,9 @@ export function organizerRiskClass(risk: OrganizerSafeDecision["riskLevel"]) {
     return "border-destructive/35 bg-destructive/[0.06] text-destructive";
   }
   if (risk === "medium") {
-    return "border-amber-500/30 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/30 bg-warning/[0.06] text-warning";
   }
-  return "border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-700 dark:text-emerald-300";
+  return "border-success/30 bg-success/[0.06] text-success";
 }
 
 export function organizerApplyStatusLabel(
@@ -169,13 +169,13 @@ export function organizerApplyStatusLabel(
 
 export function organizerApplyStatusClass(status: OrganizerSafeDecision["applyStatus"]) {
   if (status === "applied") {
-    return "border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-700 dark:text-emerald-300";
+    return "border-success/30 bg-success/[0.06] text-success";
   }
   if (status === "failed") {
     return "border-destructive/35 bg-destructive/[0.06] text-destructive";
   }
   if (status === "skipped") {
-    return "border-amber-500/30 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/30 bg-warning/[0.06] text-warning";
   }
   return "border-border/60 text-muted-foreground";
 }
@@ -192,7 +192,7 @@ export function organizerReviewItemClass(item: OrganizerReviewItem) {
     return "border-destructive/30 bg-destructive/[0.06] text-destructive";
   }
   if (item.kind === "skipped" || item.severity === "warning") {
-    return "border-amber-500/30 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/30 bg-warning/[0.06] text-warning";
   }
   return "border-border/60 bg-muted/30 text-muted-foreground";
 }
@@ -365,22 +365,22 @@ export function strongestQuotaLevel(items: MemoryScopeQuota[]): QuotaLevel {
 
 export function quotaPillClass(level: QuotaLevel) {
   if (level === "full" || level === "danger") {
-    return "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300";
+    return "border-destructive/25 bg-destructive/[0.06] text-destructive";
   }
   if (level === "warning") {
-    return "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/25 bg-warning/[0.06] text-warning";
   }
   return "border-border/60 text-muted-foreground";
 }
 
 export function quotaStatusClass(level: QuotaLevel) {
   if (level === "full" || level === "danger") {
-    return "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300";
+    return "border-destructive/25 bg-destructive/[0.06] text-destructive";
   }
   if (level === "warning") {
-    return "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300";
+    return "border-warning/25 bg-warning/[0.06] text-warning";
   }
-  return "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300";
+  return "border-success/20 bg-success/5 text-success";
 }
 
 export function quotaStatusLabelKey(level: QuotaLevel) {

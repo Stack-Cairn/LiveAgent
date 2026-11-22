@@ -803,7 +803,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                         </div>
 
                         {dirty && !syncLocked ? (
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-warning">
                             <AlertTriangle className="size-3.5 shrink-0" />
                             {t("settings.backupSyncDirtyHint")}
                           </div>

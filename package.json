@@ -23,6 +23,7 @@
     "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:file-size": "node scripts/check-file-size.mjs",
+    "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:knip": "node scripts/check-knip.mjs",
     "check:perf-micro": "node scripts/check-perf-micro.mjs",
     "smoke:bundle": "node scripts/smoke-frontend-bundle.mjs",

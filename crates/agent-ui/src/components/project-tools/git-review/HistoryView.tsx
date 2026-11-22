@@ -164,25 +164,16 @@ function commitRefChipClass(kind: CommitRefKind, selected: boolean) {
 
   switch (kind) {
     case "head":
-      return cn(
-        baseClass,
-        "border-emerald-300/60 bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:border-emerald-300/35 dark:bg-emerald-950/45 dark:text-emerald-200 dark:ring-emerald-300/15",
-      );
+      return cn(baseClass, "border-success/30 bg-success/10 text-success ring-success/20");
     case "remote":
       return cn(
         baseClass,
         "border-blue-300/60 bg-blue-50 text-blue-700 ring-blue-200/70 dark:border-blue-300/35 dark:bg-blue-950/45 dark:text-blue-200 dark:ring-blue-300/15",
       );
     case "tag":
-      return cn(
-        baseClass,
-        "border-amber-300/60 bg-amber-50 text-amber-700 ring-amber-200/70 dark:border-amber-300/35 dark:bg-amber-950/45 dark:text-amber-200 dark:ring-amber-300/15",
-      );
+      return cn(baseClass, "border-warning/30 bg-warning/10 text-warning ring-warning/20");
     case "branch":
-      return cn(
-        baseClass,
-        "border-sky-300/60 bg-sky-50 text-sky-700 ring-sky-200/70 dark:border-sky-300/35 dark:bg-sky-950/45 dark:text-sky-200 dark:ring-sky-300/15",
-      );
+      return cn(baseClass, "border-info/30 bg-info/10 text-info ring-info/20");
     default:
       return cn(baseClass, "border-border/70 bg-muted/50 text-muted-foreground ring-border/60");
   }

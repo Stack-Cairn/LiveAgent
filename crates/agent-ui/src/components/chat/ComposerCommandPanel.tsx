@@ -11,8 +11,8 @@ const NOTICE_TONES = {
   info: { icon: Info, surface: "bg-foreground/[0.04]", iconColor: "text-muted-foreground" },
   warning: {
     icon: Clock3,
-    surface: "bg-amber-500/[0.10] dark:bg-amber-400/[0.12]",
-    iconColor: "text-amber-700 dark:text-amber-400",
+    surface: "bg-warning/[0.10]",
+    iconColor: "text-warning",
   },
   error: { icon: AlertCircle, surface: "bg-destructive/[0.08]", iconColor: "text-destructive" },
 } as const;

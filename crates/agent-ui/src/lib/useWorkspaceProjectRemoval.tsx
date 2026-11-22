@@ -64,7 +64,7 @@ function RunningTerminalWarning(props: { count: number; t: (key: string) => stri
       <div
         className={cn(
           "flex size-9 shrink-0 items-center justify-center",
-          "rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          "rounded-xl border border-warning/25 bg-warning/10 text-warning",
         )}
       >
         <Terminal className="size-4" />
@@ -76,8 +76,8 @@ function RunningTerminalWarning(props: { count: number; t: (key: string) => stri
           </span>
           <span
             className={cn(
-              "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5",
-              "text-xs font-semibold text-amber-700 dark:text-amber-300",
+              "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-warning/15 px-1.5",
+              "text-xs font-semibold text-warning",
             )}
           >
             {count}

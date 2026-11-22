@@ -12,6 +12,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
+import { StatusDot } from "../ui/status-dot";
 import {
   formatTerminalSessionTitle,
   type RightDockLeasedToolKind,
@@ -231,12 +232,7 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           {tab.icon}
           <span className="min-w-0 truncate">{tab.label}</span>
           {tab.running !== undefined ? (
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                tab.running ? "bg-emerald-500" : "bg-muted-foreground/50",
-              )}
-            />
+            <StatusDot tone={tab.running ? "success" : "muted"} />
           ) : null}
         </div>
         <Button

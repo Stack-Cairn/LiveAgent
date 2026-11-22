@@ -112,7 +112,7 @@ export function SubagentStatusText({
     <span
       className={cn(
         "text-xs",
-        view.status === "error" ? "text-[hsl(var(--chat-error))]" : "text-foreground/45",
+        view.status === "error" ? "text-destructive" : "text-foreground/45",
         className,
       )}
     >
@@ -162,7 +162,7 @@ export function SubagentCard({
           <span className="shrink-0 text-xs text-foreground/45">
             {label ?? t("chat.subagent.label")}
           </span>
-          <span className="min-w-0 truncate text-sm font-[450] text-foreground/80">
+          <span className="min-w-0 truncate text-sm font-book text-foreground/80">
             {view.description}
           </span>
         </span>

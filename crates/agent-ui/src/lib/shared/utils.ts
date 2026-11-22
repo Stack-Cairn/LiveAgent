@@ -11,7 +11,8 @@ const isNamedToken = (value: string) => !value.startsWith("[") && !value.startsW
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["tiny", isSizeToken],
+      text: ["tiny", "2xs", isSizeToken],
+      "font-weight": ["book"],
       spacing: [isNamedToken],
       animate: [isNamedToken],
       ease: [isNamedToken],

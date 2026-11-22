@@ -884,14 +884,14 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
           </div>
         ) : loadError ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background px-8 text-center">
-            <AlertTriangle className="size-6 text-amber-500" />
+            <AlertTriangle className="size-6 text-warning" />
             <div className="text-sm font-medium text-foreground">
               {t("projectTools.browserLoadErrorTitle")}
             </div>
             <div className="max-w-80 text-xs leading-relaxed text-muted-foreground">
               {t(LOAD_ERROR_HINT_KEYS[classifyBrowserLoadError(loadError)])}
             </div>
-            <div className="max-w-80 break-all font-mono text-[11px] leading-relaxed text-muted-foreground/80">
+            <div className="max-w-80 break-all font-mono text-2xs leading-relaxed text-muted-foreground/80">
               {activeTab?.url ? <div>{activeTab.url}</div> : null}
               <div>{loadError}</div>
             </div>
@@ -944,7 +944,7 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
 
         {picking ? (
           <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3">
-            <div className="rounded-full bg-foreground/85 px-3 py-1 text-[11px] font-medium text-background shadow-sm">
+            <div className="rounded-full bg-foreground/85 px-3 py-1 text-2xs font-medium text-background shadow-sm">
               {t("projectTools.browserPickingHint")}
             </div>
           </div>
@@ -954,7 +954,7 @@ export function EmbeddedBrowserPanel(props: EmbeddedBrowserPanelProps) {
             <div
               role="status"
               className={cn(
-                "max-w-full truncate rounded-full px-3 py-1 text-[11px] font-medium shadow-sm",
+                "max-w-full truncate rounded-full px-3 py-1 text-2xs font-medium shadow-sm",
                 notice.tone === "error"
                   ? "bg-destructive text-destructive-foreground"
                   : "bg-foreground/85 text-background",

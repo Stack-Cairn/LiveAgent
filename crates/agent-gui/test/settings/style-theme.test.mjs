@@ -69,6 +69,11 @@ test("named size, color and shadow utilities keep caller override behavior", () 
   assert.equal(cn("ring-2", "ring-3px"), "ring-3px");
   assert.equal(cn("grid-cols-form-label", "grid-cols-2"), "grid-cols-2");
   assert.equal(cn("font-[450]", "font-medium"), "font-medium");
+  assert.equal(cn("font-book", "font-medium"), "font-medium");
+  assert.equal(cn("text-2xs", "text-xs"), "text-xs");
+  assert.equal(cn("text-sm text-warning", "text-2xs"), "text-warning text-2xs");
+  assert.equal(cn("shadow-popover", "shadow-dialog"), "shadow-dialog");
+  assert.equal(cn("px-2 py-1.5", "px-row-x py-row-y"), "px-row-x py-row-y");
   assert.equal(cn("duration-220ms", "duration-200"), "duration-200");
   assert.equal(cn("animate-hub-loading-progress", "animate-spin"), "animate-spin");
   assert.equal(cn("animate-chat-bubble-enter", "animate-none"), "animate-none");
@@ -94,7 +99,7 @@ test("lightweight floating components share one border, radius, and shadow", () 
   const surface = readFileSync(new URL("ui/menu-surface.ts", uiRoot), "utf8");
   assert.match(
     surface,
-    /rounded-xl border border-border\/70 bg-popover text-popover-foreground shadow-xs/,
+    /rounded-xl border border-border\/70 bg-popover text-popover-foreground shadow-popover/,
   );
 
   for (const path of [

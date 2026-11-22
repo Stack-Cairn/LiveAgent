@@ -79,9 +79,9 @@ function RedactionPicker(props: {
           "cursor-pointer",
           disabled && "cursor-not-allowed",
           "relative rounded-full px-3 py-1 text-xs font-medium transition-colors",
-          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-success/35 disabled:cursor-not-allowed",
           value
-            ? "bg-emerald-500 text-white shadow-sm"
+            ? "bg-success text-success-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
@@ -94,7 +94,7 @@ function RedactionPicker(props: {
           "cursor-pointer",
           disabled && "cursor-not-allowed",
           "relative rounded-full px-3 py-1 text-xs font-medium transition-colors",
-          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-info/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -188,7 +188,7 @@ export function HistoryShareModal({
             <div
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center",
-                "rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500",
+                "rounded-2xl border border-info/20 bg-info/10 text-info",
               )}
             >
               <Share2 className="size-5" />
@@ -229,9 +229,7 @@ export function HistoryShareModal({
           <div
             className={cn(
               "rounded-2xl border px-4 py-3 transition-colors",
-              redactToolContent
-                ? "border-emerald-500/30 bg-emerald-500/5"
-                : "border-border/60 bg-muted/25",
+              redactToolContent ? "border-success/30 bg-success/5" : "border-border/60 bg-muted/25",
             )}
           >
             <div className="flex items-start justify-between gap-4">
@@ -240,7 +238,7 @@ export function HistoryShareModal({
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
                     redactToolContent
-                      ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      ? "border-success/25 bg-success/10 text-success"
                       : "border-border/60 bg-background text-muted-foreground",
                   )}
                 >
@@ -302,8 +300,8 @@ export function HistoryShareModal({
                     target="_blank"
                     rel="noreferrer"
                     className={cn(
-                      "min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4",
-                      "hover:underline dark:text-sky-400",
+                      "min-w-0 flex-1 truncate font-mono text-xs text-info underline-offset-4",
+                      "hover:underline",
                     )}
                     title={shareUrl}
                   >
@@ -331,11 +329,7 @@ export function HistoryShareModal({
                   title={t("sharedHistory.copyLink")}
                   aria-label={t("sharedHistory.copyLink")}
                 >
-                  {copied ? (
-                    <Check className="size-4 text-emerald-500" />
-                  ) : (
-                    <Copy className="size-4" />
-                  )}
+                  {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
                 </button>
                 <a
                   href={shareUrl || undefined}
@@ -356,8 +350,8 @@ export function HistoryShareModal({
               {!shareOriginLoading && !publicOrigin ? (
                 <div
                   className={cn(
-                    "rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2",
-                    "text-xs leading-5 text-amber-700 dark:text-amber-300",
+                    "rounded-xl border border-warning/25 bg-warning/10 px-3 py-2",
+                    "text-xs leading-5 text-warning",
                   )}
                 >
                   {t("sharedHistory.shareDialog.originWarning")}

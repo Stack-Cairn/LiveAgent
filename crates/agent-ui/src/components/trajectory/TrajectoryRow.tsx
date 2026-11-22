@@ -55,7 +55,7 @@ export function TrajectoryRow(props: {
       <span
         className={cn(
           "shrink-0 rounded px-1.5 py-px font-medium text-tiny tracking-wide",
-          record.isError ? "bg-red-500/15 text-red-600 dark:text-red-300" : KIND_BADGE[record.kind],
+          record.isError ? "bg-destructive/15 text-destructive" : KIND_BADGE[record.kind],
         )}
       >
         {t(trajectoryKindLabelKey(record.kind))}

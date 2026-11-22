@@ -1,5 +1,5 @@
 // Unit tests for the CI code-rule and budget checks (bundle size, file size,
-// knip baseline and loader compiler, micro-benchmark gate). The checks themselves run in CI; these
+// design token baseline, knip baseline and loader compiler, micro-benchmark gate). The checks themselves run in CI; these
 // cover the comparison logic with fixtures so it can change safely.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -15,6 +15,13 @@ import {
   readIndexAssets,
   staticImports,
 } from "./check-bundle-size.mjs";
+import {
+  evaluate as evaluateDesignTokens,
+  formatReport as formatDesignTokenReport,
+  isCheckedSource as isDesignTokenSource,
+  scanSource,
+  stripComments,
+} from "./check-design-tokens.mjs";
 import { countLines, evaluate, formatReport, isCheckedSource } from "./check-file-size.mjs";
 import { collectFindings, diffFindings } from "./check-knip.mjs";
 import { appendLoaderImports, loaderCalls } from "./knip-loader-imports.mjs";
@@ -242,6 +249,88 @@ test("perf scenarios report: medians per scenario and flagged slowdowns", () => 
   assert.match(renderReport(rows, null, "T").markdown, /No results from main/);
 });
 
+test("design tokens: checked sources skip tests, declarations and token files", () => {
+  assert.equal(isDesignTokenSource("crates/agent-ui/src/components/ui/badge.tsx"), true);
+  assert.equal(isDesignTokenSource("crates/agent-gateway/web/src/app/App.css"), true);
+  assert.equal(isDesignTokenSource("crates/agent-ui/src/styles/tokens.css"), false);
+  assert.equal(isDesignTokenSource("crates/agent-ui/src/styles/semantic-colors.css"), false);
+  assert.equal(isDesignTokenSource("crates/agent-gui/src/env.d.ts"), false);
+  assert.equal(isDesignTokenSource("crates/agent-gui/src/a.test.ts"), false);
+  assert.equal(isDesignTokenSource("crates/agent-gui/test/a.test.mjs"), false);
+  assert.equal(isDesignTokenSource("scripts/a.ts"), false);
+});
+
+test("design tokens: comments are blanked, strings are kept", () => {
+  const source = 'const a = "#fff"; // see #359\n/* rgb(1, 2, 3) */ const b = "https://x";';
+  const stripped = stripComments(source);
+  assert.equal(stripped.length, source.length);
+  assert.match(stripped, /"#fff"/);
+  assert.doesNotMatch(stripped, /#359|rgb\(/);
+  assert.match(stripped, /"https:\/\/x"/);
+});
+
+test("design tokens: each rule matches raw styles and leaves tokens alone", () => {
+  const counts = (source) =>
+    Object.fromEntries(Object.entries(scanSource(source)).map(([rule, list]) => [rule, list.map((f) => f.match)]));
+  assert.deepEqual(counts('cn("text-amber-700 dark:text-amber-300 bg-emerald-500/10 bg-black/40")'), {
+    "palette-color": ["text-amber-700", "text-amber-300", "bg-emerald-500/10", "bg-black/40"],
+  });
+  assert.deepEqual(counts('"bg-[#2168d5] text-[hsl(var(--chat-error))] text-[11px] rounded-[10px] z-[60]"'), {
+    // An arbitrary hex is both an arbitrary value and a color literal.
+    "color-literal": ["#2168d5"],
+    "arbitrary-color": ["bg-[#", "text-[hsl("],
+    "arbitrary-size": ["text-[11px]", "rounded-[10px]", "z-[60]"],
+  });
+  assert.deepEqual(counts('const c = "#2a78d6"; const d = "rgba(0, 0, 0, 0.4)";'), {
+    "color-literal": ["#2a78d6", "rgba(0"],
+  });
+  assert.deepEqual(
+    counts('"text-warning bg-success/10 border-info/25 bg-overlay text-2xs font-book rounded-xl layer-popover w-[42rem] grid-cols-[1fr_auto]"'),
+    {},
+  );
+  const [finding] = scanSource('a\nb\n  "text-red-500"')["palette-color"];
+  assert.equal(finding.line, 3);
+});
+
+test("design tokens: baseline counts may only shrink", () => {
+  const baseline = {
+    files: {
+      "grew.tsx": { "palette-color": 2 },
+      "shrunk.tsx": { "palette-color": 5, "arbitrary-size": 1 },
+      "gone.tsx": { "color-literal": 3 },
+    },
+  };
+  const counts = {
+    "grew.tsx": { "palette-color": 3 },
+    "shrunk.tsx": { "palette-color": 4 },
+    "new.tsx": { "arbitrary-color": 1 },
+  };
+  const result = evaluateDesignTokens(counts, baseline);
+  assert.deepEqual(
+    result.violations.map((entry) => [entry.file, entry.rule, entry.count, entry.recorded]),
+    [
+      ["grew.tsx", "palette-color", 3, 2],
+      ["new.tsx", "arbitrary-color", 1, 0],
+    ],
+  );
+  assert.deepEqual(
+    result.stale.map((entry) => [entry.file, entry.rule]).sort(),
+    [
+      ["gone.tsx", "color-literal"],
+      ["shrunk.tsx", "arbitrary-size"],
+      ["shrunk.tsx", "palette-color"],
+    ],
+  );
+  assert.deepEqual(
+    result.tightened,
+    { "grew.tsx": { "palette-color": 2 }, "shrunk.tsx": { "palette-color": 4 } },
+    "--update never adds an entry or raises a count",
+  );
+  const report = formatDesignTokenReport(result, { "new.tsx": { "arbitrary-color": [{ line: 7, match: "bg-[#" }] } });
+  assert.match(report, /new\.tsx \[arbitrary-color\] 1 \(baseline 0\)  7:bg-\[#/);
+  assert.match(report, /pnpm check:design-tokens --update/);
+});
+
 test("budget files are well formed", async () => {
   const { readFileSync } = await import("node:fs");
   const read = (name) => JSON.parse(readFileSync(path.join(scriptsDir, "budgets", name), "utf8"));
@@ -256,4 +345,12 @@ test("budget files are well formed", async () => {
   }
   assert.ok(read("perf-micro-baseline.json").calibrationMs > 0);
   assert.ok(read("knip-baseline.json").issues);
+  const tokens = read("design-token-baseline.json");
+  for (const [file, rules] of Object.entries(tokens.files)) {
+    assert.ok(isDesignTokenSource(file), file);
+    for (const [rule, count] of Object.entries(rules)) {
+      assert.ok(["color-literal", "palette-color", "arbitrary-color", "arbitrary-size"].includes(rule), rule);
+      assert.ok(Number.isInteger(count) && count > 0, `${file} ${rule}`);
+    }
+  }
 });

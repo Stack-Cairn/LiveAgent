@@ -11,7 +11,7 @@ export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
         : "bg-surface-glow-5 dark:bg-surface-glow-6";
   return (
     <>
-      <div className="pointer-events-none absolute inset-0 bg-[hsl(var(--hub-canvas))]" />
+      <div className="pointer-events-none absolute inset-0 bg-hub-canvas" />
       <div
         className={cn(
           "pointer-events-none absolute -left-32 -top-24 size-420px rounded-full opacity-90 blur-3xl",

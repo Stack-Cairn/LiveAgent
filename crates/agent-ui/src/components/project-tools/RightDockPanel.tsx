@@ -39,6 +39,7 @@ import { cn } from "../../lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { Button } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
 import { useFileTreeExternalRoots } from "./file-tree/useFileTreeExternalRoots";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
 import { RightDockContent } from "./RightDockContent";
@@ -966,15 +967,13 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
               onOpenBackgroundTasks={openBackgroundTasks}
             />
             {onClose ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <IconButton
+                label={t("projectTools.closePanel")}
                 onClick={onClose}
-                title={t("projectTools.closePanel")}
-                className="rounded-lg text-muted-foreground hover:text-foreground md:hidden web:max-820:inline-flex"
+                className="md:hidden web:max-820:inline-flex"
               >
                 <X className="size-4" />
-              </Button>
+              </IconButton>
             ) : null}
           </div>
 

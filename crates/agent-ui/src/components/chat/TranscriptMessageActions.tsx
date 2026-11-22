@@ -67,10 +67,7 @@ function TranscriptTimestampLabel(props: { timestamp?: number; className?: strin
   if (!label) return null;
   return (
     <span
-      className={cn(
-        "select-none text-xs tabular-nums text-[hsl(var(--muted-foreground)/0.7)]",
-        props.className,
-      )}
+      className={cn("select-none text-xs tabular-nums text-muted-foreground/70", props.className)}
     >
       {label}
     </span>

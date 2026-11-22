@@ -147,7 +147,7 @@ test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost
   assert.equal(chatPageSource.match(dragGhostClass)?.[1], gatewayViewSource.match(dragGhostClass)?.[1]);
 
   const blockedBannerClass =
-    /className="(flex shrink-0 items-center gap-2 border-b border-amber-500\/30[^"]+)"/;
+    /className="(flex shrink-0 items-center gap-2 border-b border-warning\/30[^"]+)"/;
   const gatewayPaneHostSource = readSource(
     "../../../agent-gateway/web/src/app/workbench/GatewayConversationPaneHost.tsx",
   );

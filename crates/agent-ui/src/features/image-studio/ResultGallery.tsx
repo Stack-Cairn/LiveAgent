@@ -124,7 +124,7 @@ function HistoryCard({
           <ImageOff className="size-5 opacity-60" strokeWidth={1.5} />
         )}
         {assets.length > 1 && (
-          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] leading-4 text-white">
+          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-tiny leading-4 text-white">
             {assets.length}
           </span>
         )}

@@ -43,6 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { copyTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
@@ -853,16 +854,13 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     <div className="relative flex min-h-0 flex-1 overflow-hidden bg-background">
       <div className={settingsPageClassName} aria-hidden={!settingsActive} inert={!settingsActive}>
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-          <Button
+          <IconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="rounded-lg text-muted-foreground hover:text-foreground"
-            title={t("projectTools.sshTunnelBack")}
+            label={t("projectTools.sshTunnelBack")}
             onClick={() => setView("list")}
           >
             <ArrowLeft className="size-4" />
-          </Button>
+          </IconButton>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-foreground">
               {t("projectTools.sshTunnelAssociateHosts")}
@@ -884,7 +882,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
               "text-center",
             )}
           >
-            <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+            <div className="flex size-12 items-center justify-center rounded-xl bg-success/10 text-success">
               <Key className="size-6" />
             </div>
             <div className="max-w-xs space-y-1">
@@ -908,13 +906,13 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                     className={cn(
                       "group flex w-full items-start gap-3",
                       "rounded-lg border border-border/60 bg-card p-3 text-left transition-all",
-                      "hover:border-emerald-500/40 hover:bg-muted/40",
-                      selected && "border-emerald-500/50 bg-emerald-500/5",
+                      "hover:border-success/40 hover:bg-muted/40",
+                      selected && "border-success/50 bg-success/5",
                     )}
                     aria-pressed={selected}
                     onClick={() => toggleHost(host.id)}
                   >
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
                       <Server className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -941,7 +939,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                         "mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border",
                         "transition-colors",
                         selected
-                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          ? "border-success bg-success text-success-foreground"
                           : "border-border bg-background text-transparent",
                       )}
                       aria-hidden="true"
@@ -958,16 +956,13 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
 
       <div className={createPageClassName} aria-hidden={!createActive} inert={!createActive}>
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-          <Button
+          <IconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="rounded-lg text-muted-foreground hover:text-foreground"
-            title={t("projectTools.sshTunnelBack")}
+            label={t("projectTools.sshTunnelBack")}
             onClick={() => setView("list")}
           >
             <ArrowLeft className="size-4" />
-          </Button>
+          </IconButton>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-foreground">
               {t("projectTools.sshTunnelCreateTitle")}
@@ -985,7 +980,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
               "text-center",
             )}
           >
-            <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+            <div className="flex size-12 items-center justify-center rounded-xl bg-success/10 text-success">
               <Key className="size-6" />
             </div>
             <div className="max-w-xs space-y-1">
@@ -1021,12 +1016,12 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                       "flex min-h-12 w-full items-center gap-3",
                       "rounded-lg border border-border/70 bg-card/80 px-3 py-2",
                       "text-left shadow-ui-localtunnelpanel-26 outline-none transition-all",
-                      "hover:border-emerald-500/40 hover:bg-card focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20",
-                      createHostMenuOpen && "border-emerald-500/50 ring-1 ring-emerald-500/20",
+                      "hover:border-success/40 hover:bg-card focus-visible:border-success/50 focus-visible:ring-1 focus-visible:ring-success/20",
+                      createHostMenuOpen && "border-success/50 ring-1 ring-success/20",
                     )}
                     aria-label={t("projectTools.sshTunnelHost")}
                   >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
                       <Server className="size-4" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1050,7 +1045,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                     <ChevronDown
                       className={cn(
                         "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                        createHostMenuOpen && "rotate-180 text-emerald-500",
+                        createHostMenuOpen && "rotate-180 text-success",
                       )}
                       aria-hidden="true"
                     />
@@ -1079,7 +1074,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                             <span
                               className={cn(
                                 "flex size-7 shrink-0 items-center justify-center",
-                                "rounded-lg bg-emerald-500/10 text-emerald-500 transition-colors group-focus/item:bg-emerald-500/15",
+                                "rounded-lg bg-success/10 text-success transition-colors group-focus/item:bg-success/15",
                               )}
                             >
                               <Server className="size-3.5" />
@@ -1099,7 +1094,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                               className={cn(
                                 "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
                                 selected
-                                  ? "border-emerald-500 bg-emerald-500 text-white"
+                                  ? "border-success bg-success text-success-foreground"
                                   : "border-border bg-background text-transparent",
                               )}
                               aria-hidden="true"
@@ -1124,7 +1119,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                   className={cn(
                     "h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3",
                     "text-xs text-foreground outline-none transition-colors",
-                    "placeholder:text-xs placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20",
+                    "placeholder:text-xs placeholder:text-muted-foreground/70 focus-visible:border-success/50 focus-visible:ring-1 focus-visible:ring-success/20",
                   )}
                   placeholder={
                     selectedCreateHost?.name || t("projectTools.sshTunnelTabTitlePlaceholder")
@@ -1136,14 +1131,14 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                 className={cn(
                   "flex cursor-pointer items-center gap-3",
                   "rounded-lg border border-border/70 bg-background/80 px-3 py-2.5 text-sm text-foreground",
-                  "transition-colors hover:border-emerald-500/40",
+                  "transition-colors hover:border-success/40",
                 )}
               >
                 <input
                   type="checkbox"
                   checked={createSftpEnabled}
                   onChange={(event) => setCreateSftpEnabled(event.currentTarget.checked)}
-                  className="size-4 rounded border-border text-emerald-500 accent-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/20"
+                  className="size-4 rounded border-border text-success accent-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/20"
                 />
                 <span className="min-w-0 flex-1 text-xs font-medium">
                   {t("projectTools.sshTunnelSftpEnabled")}
@@ -1153,7 +1148,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
               {selectedCreateHost ? (
                 <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Server className="size-4 shrink-0 text-emerald-500" />
+                    <Server className="size-4 shrink-0 text-success" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-medium text-foreground">
                         {selectedCreateHost.name}
@@ -1395,8 +1390,8 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                           sshStatus === "disconnected"
                             ? "bg-destructive/10 text-destructive"
                             : sshStatus === "reconnecting"
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                              : "bg-emerald-500/10 text-emerald-500",
+                              ? "bg-warning/10 text-warning"
+                              : "bg-success/10 text-success",
                         )}
                       >
                         <Server className="size-4" />
@@ -1413,8 +1408,8 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                               sshStatus === "disconnected"
                                 ? "bg-destructive/10 text-destructive"
                                 : sshStatus === "reconnecting"
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                                  ? "bg-warning/10 text-warning"
+                                  : "bg-success/10 text-success",
                             )}
                           >
                             {sshStatus === "disconnected" ? (
@@ -1461,8 +1456,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                           className={cn(
                             "flex size-8 items-center justify-center",
                             "rounded-lg border border-border/60 bg-background/70 text-muted-foreground transition-colors",
-                            "hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-                            "dark:hover:text-amber-400",
+                            "hover:border-warning/40 hover:bg-warning/10 hover:text-warning focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                           )}
                           title={t("projectTools.sshTunnelReconnect")}
                           aria-label={t("projectTools.sshTunnelReconnect")}
@@ -1476,8 +1470,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                           className={cn(
                             "flex size-8 items-center justify-center",
                             "rounded-lg border border-border/60 bg-background/70 text-muted-foreground transition-colors",
-                            "hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-                            "dark:hover:text-emerald-400",
+                            "hover:border-success/40 hover:bg-success/10 hover:text-success focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                           )}
                           title={t("projectTools.sshTunnelOpenBash")}
                           aria-label={t("projectTools.sshTunnelOpenBash")}
@@ -1501,8 +1494,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                             className={cn(
                               "flex size-8 items-center justify-center",
                               "rounded-lg border border-border/60 bg-background/70 text-muted-foreground transition-colors",
-                              "hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-                              "dark:hover:text-sky-400",
+                              "hover:border-info/40 hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                             )}
                             title={t("projectTools.sshTunnelOpenSftp")}
                             aria-label={t("projectTools.sshTunnelOpenSftp")}
@@ -1596,9 +1588,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                                   <span
                                     className={cn(
                                       "size-1.5 shrink-0 rounded-full",
-                                      waitingForSsh
-                                        ? "animate-pulse bg-amber-500"
-                                        : "bg-emerald-500",
+                                      waitingForSsh ? "animate-pulse bg-warning" : "bg-success",
                                     )}
                                     aria-hidden="true"
                                   />
@@ -1623,7 +1613,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                                     className={cn(
                                       "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
                                       copied
-                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        ? "text-success"
                                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                                     )}
                                     aria-label={
@@ -1700,7 +1690,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                 <div
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center",
-                    "rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    "rounded-lg bg-warning/10 text-warning",
                   )}
                 >
                   <Shield className="size-4.5" />

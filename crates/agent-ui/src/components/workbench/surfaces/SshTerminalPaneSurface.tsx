@@ -65,9 +65,9 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
   const latencyClass = !latencyKnown
     ? "text-muted-foreground/70"
     : latencyMs < 100
-      ? "text-emerald-500"
+      ? "text-success"
       : latencyMs < 300
-        ? "text-amber-500"
+        ? "text-warning"
         : "text-destructive";
 
   return (
@@ -88,9 +88,9 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
             className={cn(
               "size-1.5 shrink-0 rounded-full",
               status === "connected"
-                ? "bg-emerald-500"
+                ? "bg-success"
                 : status === "reconnecting"
-                  ? "bg-amber-500"
+                  ? "bg-warning"
                   : "bg-destructive",
             )}
           />

@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { localizeLocalGatewayError } from "@liveagent/ui/lib/settings/localGatewayError";
 import { buildGatewayPublicBaseUrl } from "@liveagent/ui/lib/shared/gatewayPublicUrl";
@@ -331,9 +332,7 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
               className={cn(
                 "flex max-w-260px items-center gap-2 rounded-lg px-2.5 py-1.5",
                 "text-xs font-medium",
-                isConnected
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted/50 text-muted-foreground",
+                isConnected ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground",
               )}
               title={lastError ?? undefined}
             >
@@ -703,15 +702,11 @@ export function RemoteSection(props: SettingsSectionProps & { surface?: "desktop
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl bg-settings-tile px-4 py-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("settings.remoteConnectedSince")}
-            </div>
+            <SectionHeader size="xs">{t("settings.remoteConnectedSince")}</SectionHeader>
             <div className="mt-1 text-sm font-medium">{formatTimestamp(status.connectedSince)}</div>
           </div>
           <div className="rounded-xl bg-settings-tile px-4 py-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("settings.remoteLastHeartbeat")}
-            </div>
+            <SectionHeader size="xs">{t("settings.remoteLastHeartbeat")}</SectionHeader>
             <div className="mt-1 text-sm font-medium">{formatTimestamp(status.lastHeartbeat)}</div>
           </div>
         </div>

@@ -22,6 +22,7 @@ import {
   DialogSubheader,
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
@@ -187,18 +188,15 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               {t("providerImport.cherry.description")}
             </DialogDescription>
           </div>
-          <Button
+          <IconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0 text-muted-foreground"
+            className="shrink-0"
             onClick={() => setPathDialogOpen(true)}
             disabled={importing}
-            title={t("providerImport.cherry.dataDirectorySettings")}
-            aria-label={t("providerImport.cherry.dataDirectorySettings")}
+            label={t("providerImport.cherry.dataDirectorySettings")}
           >
             <Settings className="size-4" />
-          </Button>
+          </IconButton>
         </DialogHeader>
 
         <DialogSubheader className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
@@ -343,7 +341,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                               </span>
                             ) : null}
                             {!item.enabled ? (
-                              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-tiny text-amber-700 dark:text-amber-300">
+                              <span className="rounded bg-warning/10 px-1.5 py-0.5 text-tiny text-warning">
                                 {t("providerImport.cherry.disabledInSource")}
                               </span>
                             ) : null}
@@ -367,7 +365,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                               {item.reason}
                             </span>
                           ) : item.warning ? (
-                            <span className="mt-1.5 block text-xs text-amber-700 dark:text-amber-300">
+                            <span className="mt-1.5 block text-xs text-warning">
                               {item.warning}
                             </span>
                           ) : null}

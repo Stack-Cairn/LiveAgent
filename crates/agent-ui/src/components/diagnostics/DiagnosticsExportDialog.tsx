@@ -225,7 +225,7 @@ export function DiagnosticsExportDialog(props: DiagnosticsExportDialogProps) {
                     id="diagnostics-redactions-heading"
                     className="flex items-center gap-1.5 text-xs font-medium text-foreground"
                   >
-                    <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <ShieldCheck className="size-3.5 text-success" />
                     {t("diagnostics.redactions")}
                   </h3>
                   {redactionRows.length > 0 ? (
@@ -267,7 +267,7 @@ export function DiagnosticsExportDialog(props: DiagnosticsExportDialogProps) {
             aria-live="polite"
             className={cn(
               "mr-auto flex min-w-0 items-center gap-1.5 truncate text-xs",
-              notice?.tone === "ok" && "text-emerald-700 dark:text-emerald-400",
+              notice?.tone === "ok" && "text-success",
               notice?.tone === "error" && "text-destructive",
             )}
           >

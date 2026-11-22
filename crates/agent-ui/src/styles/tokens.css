@@ -7,6 +7,19 @@
   /* Compact badges, counts and key legends. Other UI text uses Tailwind defaults. */
   --text-tiny: 0.625rem;
   --text-tiny--line-height: 1.2;
+  /* Dense metadata (chart axes, model hints) between text-tiny and text-xs. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  /* Transcript body weight, between normal and medium. */
+  --font-weight-book: 450;
+  /* Dense list rows (dock, palette, menus): horizontal padding and the two row heights. */
+  --spacing-row-x: 0.5rem;
+  --spacing-row-y: 0.375rem;
+  --spacing-row-y-dense: 0.25rem;
+  /* Semantic elevation. Prefer these over the size scale on new surfaces. */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-popover: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-dialog: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   /* Variant and prose mono utilities follow the user-configurable code font. */
   --font-mono: var(--code-font-family);
 }
@@ -480,8 +493,16 @@
 
     --destructive: var(--color-red-700);
     --destructive-foreground: var(--color-white);
-    --success: var(--color-emerald-800);
+    --success: var(--color-emerald-700);
     --success-foreground: var(--color-white);
+    --warning: var(--color-amber-700);
+    --warning-foreground: var(--color-white);
+    --info: var(--color-sky-700);
+    --info-foreground: var(--color-white);
+    /* Scrim behind dialogs, sheets and lightboxes. */
+    --overlay: color-mix(in oklab, var(--color-black) 40%, transparent);
+    /* Faint fill that lifts a row or tile off the surface it sits on. */
+    --surface-subtle: color-mix(in oklab, var(--color-black) 2%, transparent);
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -577,6 +598,12 @@
     --destructive-foreground: var(--color-red-950);
     --success: var(--color-emerald-300);
     --success-foreground: var(--color-emerald-950);
+    --warning: var(--color-amber-300);
+    --warning-foreground: var(--color-amber-950);
+    --info: var(--color-sky-300);
+    --info-foreground: var(--color-sky-950);
+    --overlay: color-mix(in oklab, var(--color-black) 40%, transparent);
+    --surface-subtle: color-mix(in oklab, var(--color-white) 3%, transparent);
 
     --border: 0 0% 26%;
     --input: 0 0% 26%;

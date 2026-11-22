@@ -47,7 +47,7 @@ function MetricCard({
         {value}
       </div>
       {detail ? (
-        <div className="mt-0.5 min-w-0 truncate text-[11px] leading-4 text-muted-foreground">
+        <div className="mt-0.5 min-w-0 truncate text-2xs leading-4 text-muted-foreground">
           {detail}
         </div>
       ) : null}

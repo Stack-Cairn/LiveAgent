@@ -1,8 +1,7 @@
 import { getNextTheme, type Theme } from "@liveagent/app/lib/settings";
 import { MonitorSmartphone, Moon, Sun } from "@liveagent/ui/components/IconSet";
-import { Button } from "@liveagent/ui/components/ui/button";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 
 /** Cycles light → dark → system; the icon previews the theme the next click applies. */
 export function ThemeToggleButton({
@@ -24,15 +23,8 @@ export function ThemeToggleButton({
         : t("tooltip.switchToAuto");
   const Icon = next === "light" ? Sun : next === "dark" ? Moon : MonitorSmartphone;
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={onToggle}
-      title={title}
-      aria-label={title}
-      className={cn("rounded-lg text-muted-foreground hover:text-foreground", className)}
-    >
+    <IconButton label={title} onClick={onToggle} className={className}>
       <Icon className="size-4" />
-    </Button>
+    </IconButton>
   );
 }

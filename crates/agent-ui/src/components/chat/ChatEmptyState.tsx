@@ -41,21 +41,21 @@ const SUGGESTION_CARDS = [
   {
     key: "explore",
     icon: FolderTree,
-    chipClassName: "text-sky-600 dark:text-sky-400",
+    chipClassName: "text-info",
     titleKey: "chat.suggestExploreTitle",
     promptKey: "chat.suggestExplorePrompt",
   },
   {
     key: "fix",
     icon: Wrench,
-    chipClassName: "text-amber-600 dark:text-amber-400",
+    chipClassName: "text-warning",
     titleKey: "chat.suggestFixTitle",
     promptKey: "chat.suggestFixPrompt",
   },
   {
     key: "ideate",
     icon: Lightbulb,
-    chipClassName: "text-emerald-600 dark:text-emerald-400",
+    chipClassName: "text-success",
     titleKey: "chat.suggestIdeateTitle",
     promptKey: "chat.suggestIdeatePrompt",
   },
@@ -80,10 +80,7 @@ export function ChatEmptyState({
     <div className="relative flex w-full flex-col items-center">
       <div className="relative mb-5 flex size-14 items-center justify-center">
         <div className="relative flex size-full items-center justify-center">
-          <div
-            aria-hidden="true"
-            className="absolute inset-1 rounded-full bg-sky-500/10 blur-xl dark:bg-sky-400/10"
-          />
+          <div aria-hidden="true" className="absolute inset-1 rounded-full bg-info/10 blur-xl" />
           <img
             src={getAssistantAvatarUrl()}
             alt=""

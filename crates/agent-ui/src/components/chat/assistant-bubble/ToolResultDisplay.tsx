@@ -326,7 +326,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     return (
       <div className="flex flex-col gap-2">
         <ToolScrollablePre className="max-h-44 bg-zinc-950/90 text-emerald-300/90 dark:bg-zinc-950/90">
-          <span className="mr-1 select-none text-emerald-500/30">$</span>
+          <span className="mr-1 select-none text-success/30">$</span>
           {cmd}
         </ToolScrollablePre>
         {display.tags.length > 0 ? <MetaTags tags={display.tags} /> : null}
@@ -502,8 +502,8 @@ export function ShellToolDisplay({
         {runInfo ? (
           <span
             className={cn(
-              "shrink-0 font-mono text-[11px] font-normal tabular-nums text-muted-foreground/60",
-              result?.isError && "text-red-700/75 dark:text-red-300/75",
+              "shrink-0 font-mono text-2xs font-normal tabular-nums text-muted-foreground/60",
+              result?.isError && "text-destructive/75",
             )}
             data-shell-run-info=""
           >
@@ -515,7 +515,7 @@ export function ShellToolDisplay({
         ref={preRef}
         className={cn(
           "max-h-72 rounded-none bg-transparent px-3 pb-3 pt-1.5 text-foreground/78",
-          result?.isError && "text-red-700/90 dark:text-red-300/90",
+          result?.isError && "text-destructive/90",
         )}
       >
         {command ? (
@@ -1298,8 +1298,8 @@ function ToolRunInfoLine({ details, isError }: { details: unknown; isError?: boo
   return (
     <div
       className={cn(
-        "font-mono text-[11px] tabular-nums text-muted-foreground/60",
-        isError && "text-red-700/75 dark:text-red-300/75",
+        "font-mono text-2xs tabular-nums text-muted-foreground/60",
+        isError && "text-destructive/75",
       )}
       data-tool-run-info=""
     >

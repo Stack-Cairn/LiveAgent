@@ -2022,7 +2022,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                 skipNextGroupBlurCommitRef.current = true;
                               }}
                               onClick={commitNewGroup}
-                              className="flex size-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+                              className="flex size-7 items-center justify-center rounded-lg text-success transition-colors hover:bg-success/10"
                               aria-label={t("chat.workspaceGroupCreate")}
                             >
                               <Check className="size-3.5" />

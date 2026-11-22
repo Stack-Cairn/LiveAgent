@@ -1,0 +1,278 @@
+{
+  "_comment": "Hard-coded styles that bypass the design tokens, per file and rule, recorded when the check was introduced. Checked by scripts/check-design-tokens.mjs: listed counts must not grow and new files must have none; `pnpm check:design-tokens --update` only lowers counts and drops entries. Do not add entries; use the semantic tokens and shared primitives instead (docs/design-system.md).",
+  "files": {
+    "crates/agent-gateway/web/src/app/UserMenu.tsx": {
+      "palette-color": 3
+    },
+    "crates/agent-gateway/web/src/components/StatusPanel.tsx": {
+      "arbitrary-size": 2
+    },
+    "crates/agent-gateway/web/src/lib/webStyleClasses.ts": {
+      "arbitrary-size": 3
+    },
+    "crates/agent-gateway/web/src/pages/LoginPage.tsx": {
+      "palette-color": 23,
+      "arbitrary-size": 3
+    },
+    "crates/agent-gateway/web/src/pages/SettingsSyncLoading.tsx": {
+      "palette-color": 3
+    },
+    "crates/agent-gateway/web/src/pages/StatusDashboardPage.tsx": {
+      "palette-color": 4,
+      "arbitrary-color": 24,
+      "arbitrary-size": 18
+    },
+    "crates/agent-gui/src/components/AppUpdateButton.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-gui/src/components/WindowsTitleBar.tsx": {
+      "palette-color": 15
+    },
+    "crates/agent-gui/src/pages/chat/transcript/ChatTranscript.tsx": {
+      "palette-color": 3,
+      "arbitrary-size": 2
+    },
+    "crates/agent-gui/src/pages/settings/CherryStudioImportModal.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/chat/assistant-bubble/CompactionSeamRow.tsx": {
+      "palette-color": 9
+    },
+    "crates/agent-ui/src/components/chat/assistant-bubble/SshManagerResult.tsx": {
+      "palette-color": 2
+    },
+    "crates/agent-ui/src/components/chat/assistant-bubble/ToolCallItem.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-ui/src/components/chat/assistant-bubble/ToolImages.tsx": {
+      "palette-color": 22
+    },
+    "crates/agent-ui/src/components/chat/assistant-bubble/ToolResultDisplay.tsx": {
+      "palette-color": 30
+    },
+    "crates/agent-ui/src/components/chat/ChangedFilesCard.tsx": {
+      "palette-color": 7
+    },
+    "crates/agent-ui/src/components/chat/ChatHistorySidebarRows.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-ui/src/components/chat/clarify/ClarifyPanel.tsx": {
+      "palette-color": 42
+    },
+    "crates/agent-ui/src/components/chat/CompactionBand.tsx": {
+      "palette-color": 14
+    },
+    "crates/agent-ui/src/components/chat/ComposerAttachmentCard.tsx": {
+      "palette-color": 26
+    },
+    "crates/agent-ui/src/components/chat/ComposerCommandPanel.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/chat/ComposerGoalBar.tsx": {
+      "palette-color": 6
+    },
+    "crates/agent-ui/src/components/chat/ContextCheckpointCard.tsx": {
+      "palette-color": 12
+    },
+    "crates/agent-ui/src/components/chat/ContextUsageRing.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/chat/EditDiffView.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-ui/src/components/chat/FileDropOverlay.tsx": {
+      "palette-color": 26
+    },
+    "crates/agent-ui/src/components/chat/FileToolArgs.tsx": {
+      "palette-color": 2
+    },
+    "crates/agent-ui/src/components/chat/image-annotation/ImageAnnotationDialog.tsx": {
+      "color-literal": 3
+    },
+    "crates/agent-ui/src/components/chat/ImagePreview.tsx": {
+      "palette-color": 20
+    },
+    "crates/agent-ui/src/components/chat/mentionChipStyles.ts": {
+      "color-literal": 1,
+      "palette-color": 34,
+      "arbitrary-color": 1
+    },
+    "crates/agent-ui/src/components/chat/MentionComposer.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/chat/PlanModeCard.tsx": {
+      "palette-color": 11
+    },
+    "crates/agent-ui/src/components/chat/SharedHistoryManagerModal.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/chat/TaskProgressIndicator.tsx": {
+      "palette-color": 1,
+      "arbitrary-color": 1
+    },
+    "crates/agent-ui/src/components/chat/ToolApprovalBar.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-ui/src/components/chat/UserAttachmentCards.tsx": {
+      "palette-color": 27
+    },
+    "crates/agent-ui/src/components/hub/HubChrome.tsx": {
+      "palette-color": 2
+    },
+    "crates/agent-ui/src/components/hub/HubLoading.tsx": {
+      "palette-color": 1,
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/Markdown.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/markdown/markdownStyles.ts": {
+      "palette-color": 2,
+      "arbitrary-size": 6
+    },
+    "crates/agent-ui/src/components/project-tools/EmbeddedBrowserPanel.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/project-tools/file-tree/index.tsx": {
+      "arbitrary-size": 2
+    },
+    "crates/agent-ui/src/components/project-tools/git-review/DiffView.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/project-tools/git-review/HistoryView.css": {
+      "color-literal": 10
+    },
+    "crates/agent-ui/src/components/project-tools/git-review/HistoryView.tsx": {
+      "palette-color": 8,
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/project-tools/git-review/Toolbar.tsx": {
+      "palette-color": 16
+    },
+    "crates/agent-ui/src/components/project-tools/LazyXTermViewport.tsx": {
+      "arbitrary-color": 1
+    },
+    "crates/agent-ui/src/components/project-tools/RightDockPanel.tsx": {
+      "arbitrary-color": 6,
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/components/project-tools/SshPortForwardDialog.tsx": {
+      "palette-color": 4
+    },
+    "crates/agent-ui/src/components/project-tools/SshTunnelPanel.tsx": {
+      "palette-color": 5
+    },
+    "crates/agent-ui/src/components/project-tools/XTermViewport.tsx": {
+      "arbitrary-color": 5
+    },
+    "crates/agent-ui/src/components/ProviderBrandIcon.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/resources/ResourceActivationSwitch.tsx": {
+      "palette-color": 3
+    },
+    "crates/agent-ui/src/components/sandboxed-ui/HtmlPreviewCard.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/settings/ChoiceCard.tsx": {
+      "palette-color": 6
+    },
+    "crates/agent-ui/src/components/subagents/SubagentPane.tsx": {
+      "arbitrary-color": 1
+    },
+    "crates/agent-ui/src/components/trajectory/TrajectoryRow.tsx": {
+      "palette-color": 21
+    },
+    "crates/agent-ui/src/components/trajectory/TrajectoryTimeline.tsx": {
+      "palette-color": 9
+    },
+    "crates/agent-ui/src/components/ui/alert-dialog.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/ui/command.tsx": {
+      "arbitrary-size": 2
+    },
+    "crates/agent-ui/src/components/ui/dialog.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/ui/search-highlight.tsx": {
+      "palette-color": 2
+    },
+    "crates/agent-ui/src/components/ui/sheet.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/components/ui/sidebar.tsx": {
+      "arbitrary-size": 2
+    },
+    "crates/agent-ui/src/components/ui/switch.tsx": {
+      "palette-color": 5
+    },
+    "crates/agent-ui/src/components/ui/toaster.tsx": {
+      "palette-color": 6
+    },
+    "crates/agent-ui/src/components/workspace-editor/WorkspaceFilePreviewOverlay.tsx": {
+      "palette-color": 3
+    },
+    "crates/agent-ui/src/components/workspace-editor/WorkspaceSftpOverlays.tsx": {
+      "palette-color": 10
+    },
+    "crates/agent-ui/src/components/workspace-editor/WorkspaceTextRangePreview.tsx": {
+      "arbitrary-size": 1
+    },
+    "crates/agent-ui/src/features/image-studio/AssetLightbox.tsx": {
+      "palette-color": 5
+    },
+    "crates/agent-ui/src/features/image-studio/InputImageStack.tsx": {
+      "palette-color": 3
+    },
+    "crates/agent-ui/src/features/image-studio/ResultGallery.tsx": {
+      "palette-color": 2
+    },
+    "crates/agent-ui/src/lib/chat/imageAnnotation/model.ts": {
+      "color-literal": 7
+    },
+    "crates/agent-ui/src/lib/chat/imageAnnotation/render.ts": {
+      "color-literal": 4
+    },
+    "crates/agent-ui/src/lib/planning/cronLayer.ts": {
+      "color-literal": 1
+    },
+    "crates/agent-ui/src/lib/planning/layers.ts": {
+      "color-literal": 8
+    },
+    "crates/agent-ui/src/lib/planning/taskLists.ts": {
+      "color-literal": 1
+    },
+    "crates/agent-ui/src/lib/sandboxed-ui/theme.ts": {
+      "color-literal": 10
+    },
+    "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": {
+      "palette-color": 11
+    },
+    "crates/agent-ui/src/pages/planning/PlanningControls.tsx": {
+      "color-literal": 16
+    },
+    "crates/agent-ui/src/pages/settings/modelPicker.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/pages/settings/ProviderPresentation.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/pages/settings/ProvidersSection.tsx": {
+      "palette-color": 2,
+      "arbitrary-size": 2
+    },
+    "crates/agent-ui/src/pages/settings/usage/UsageHeatmap.tsx": {
+      "arbitrary-size": 3
+    },
+    "crates/agent-ui/src/pages/settings/usage/usageUi.tsx": {
+      "color-literal": 26
+    },
+    "crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx": {
+      "palette-color": 1
+    },
+    "crates/agent-ui/src/pages/skills-hub/SkillsImportView.tsx": {
+      "palette-color": 1
+    }
+  }
+}

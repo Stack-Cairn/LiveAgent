@@ -116,7 +116,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
       <div ref={frameRef} className="relative">
         <div className="flex min-w-0 gap-1.5">
           {/* Out of flow so the labels never make the column taller than the cells. */}
-          <div className="relative w-6 shrink-0 text-[10px] leading-none text-muted-foreground">
+          <div className="relative w-6 shrink-0 text-tiny leading-none text-muted-foreground">
             <div className="absolute inset-x-0 bottom-0 top-4 grid grid-rows-7 gap-[3px]">
               {WEEKDAY_ROWS.map((key, row) => (
                 <span key={key || row} className="flex items-center justify-end pr-0.5">
@@ -126,10 +126,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
             </div>
           </div>
           <div className="min-w-0 flex-1">
-            <div
-              className="grid h-4 text-[10px] leading-none text-muted-foreground"
-              style={COLUMNS}
-            >
+            <div className="grid h-4 text-tiny leading-none text-muted-foreground" style={COLUMNS}>
               {heatmap.monthLabels.map((label) => (
                 <span
                   key={`${label.year}-${label.month}`}
@@ -177,7 +174,7 @@ export function UsageHeatmap({ daily, today }: { daily: readonly UsageDay[]; tod
             </div>
           </div>
         </div>
-        <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+        <div className="mt-2.5 flex items-center justify-end gap-1.5 text-tiny text-muted-foreground">
           <span>{t("settings.usage.heatmapLess")}</span>
           {Array.from({ length: HEATMAP_LEVELS + 1 }, (_, level) => (
             <span

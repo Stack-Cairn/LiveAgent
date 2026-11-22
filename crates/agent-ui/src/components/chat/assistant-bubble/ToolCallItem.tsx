@@ -343,7 +343,7 @@ function ToolCallItem({
 
   const statusTextClass =
     result?.isError || shellSessionFailed || subagentControl?.outcome?.failed
-      ? "text-[hsl(var(--chat-error))]"
+      ? "text-destructive"
       : "text-foreground/45";
 
   const liveOutputSettledOk = Boolean(result) && !result?.isError && !shellSessionFailed;
@@ -396,7 +396,7 @@ function ToolCallItem({
       <ToolIcon className="size-3 shrink-0 text-foreground/45" />
       <span
         className={cn(
-          "shrink-0 font-[450] text-foreground/62",
+          "shrink-0 font-book text-foreground/62",
           compactChip ? "text-sm" : "text-sm",
           displayIsRunning && "animate-pulse",
         )}
@@ -440,7 +440,7 @@ function ToolCallItem({
         ) : null}
       </span>
 
-      <span className="shrink-0 text-sm font-[450] text-foreground/62">{summaryTitleName}</span>
+      <span className="shrink-0 text-sm font-book text-foreground/62">{summaryTitleName}</span>
 
       {compactChipText || fileChangeStats ? (
         <span
@@ -485,7 +485,7 @@ function ToolCallItem({
           className="min-w-0 truncate font-mono text-xs leading-5 text-foreground/48"
           title={inlineTargetTitle || undefined}
         >
-          <span className="font-sans text-sm font-[450] text-foreground/62 group-hover/tool:text-foreground/75">
+          <span className="font-sans text-sm font-book text-foreground/62 group-hover/tool:text-foreground/75">
             {summaryTitleName}
             {title.action ? (
               <span className="font-mono text-xs font-normal text-foreground/48">

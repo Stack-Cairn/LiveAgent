@@ -129,7 +129,7 @@ export function AssistantReplyShareDialog({ source, onClose }: AssistantReplySha
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-info/20 bg-info/10 text-info">
             <Share2 className="size-4" />
           </div>
           <DialogTitle className="text-sm leading-normal">{t("chat.replyShare.title")}</DialogTitle>
@@ -192,7 +192,7 @@ export function AssistantReplyShareDialog({ source, onClose }: AssistantReplySha
                   </div>
                 ) : null}
                 <Markdown content={source.reply.trim()} readOnly />
-                <div className="flex justify-end pt-1 text-[11px] text-muted-foreground/70">
+                <div className="flex justify-end pt-1 text-2xs text-muted-foreground/70">
                   LiveAgent
                 </div>
               </div>

@@ -4378,7 +4378,7 @@ function ChatPageContent(props: ChatPageProps) {
               data-workbench-pane-blocked=""
               className={cn(
                 "flex shrink-0 items-center gap-2",
-                "border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400",
+                "border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning",
               )}
             >
               {blockedMessage}

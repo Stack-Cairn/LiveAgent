@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { KbdShortcut } from "../../components/ui/kbd";
+import { StatusDot } from "../../components/ui/status-dot";
 import { ZoneFontScaleContext } from "../../components/ui/zone-font-scale";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";
@@ -57,20 +58,23 @@ function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) 
   switch (state.status) {
     case "saving":
       return {
-        dotClass: "bg-amber-500 animate-pulse",
+        tone: "warning" as const,
+        pulse: true,
         text: t("settings.saving"),
         title: t("settings.savingDesc"),
       };
     case "error":
       return {
-        dotClass: "bg-destructive",
+        tone: "destructive" as const,
+        pulse: false,
         text: t("settings.saveError"),
         title: state.message,
       };
     case "saved":
     case "idle":
       return {
-        dotClass: "bg-emerald-500",
+        tone: "success" as const,
+        pulse: false,
         text: t("settings.saved"),
         title: t("settings.savedDesc"),
       };
@@ -355,7 +359,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                               active
                                 ? "text-foreground"
                                 : "text-muted-foreground group-hover:text-foreground",
-                              "web:max-820:size-24px web:max-820:rounded-8px",
+                              "web:max-820:size-24px web:max-820:rounded-md",
                             )}
                           >
                             {definition.icon}
@@ -420,7 +424,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                   data-testid="settings-save-state"
                   data-state={saveState.status}
                 >
-                  <div className={cn("size-1.5 rounded-full", saveIndicator.dotClass)} />
+                  <StatusDot tone={saveIndicator.tone} pulse={saveIndicator.pulse} />
                   {saveIndicator.text}
                 </div>
               </div>
@@ -455,7 +459,7 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
                   data-testid="settings-save-state"
                   data-state={saveState.status}
                 >
-                  <div className={cn("size-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
+                  <StatusDot tone={saveIndicator.tone} pulse={saveIndicator.pulse} />
                   {saveIndicator.text}
                 </div>
               ) : null}

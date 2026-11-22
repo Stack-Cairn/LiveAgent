@@ -92,9 +92,9 @@ export function PlanModeCard({
           className={cn(
             "size-3.5 shrink-0",
             tone === "approved"
-              ? "text-emerald-600 dark:text-emerald-400"
+              ? "text-success"
               : tone === "pending"
-                ? "text-sky-600 dark:text-sky-400"
+                ? "text-info"
                 : "text-muted-foreground/60",
           )}
         />
@@ -106,12 +106,12 @@ export function PlanModeCard({
         <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-xs leading-none text-muted-foreground">
           {tone === "approved" ? (
             <>
-              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle2 className="size-3 text-success" />
               {t("chat.planMode.approved")}
             </>
           ) : tone === "pending" ? (
             <>
-              <span className="size-1.5 rounded-full bg-sky-500 dark:bg-sky-400" />
+              <span className="size-1.5 rounded-full bg-info" />
               {t("chat.planMode.awaiting")}
             </>
           ) : (
@@ -154,9 +154,7 @@ export function PlanModeCard({
             {submitting ? t("chat.planMode.approving") : t("chat.planMode.approve")}
           </button>
           {errorText ? (
-            <span className="min-w-0 flex-1 text-xs leading-1p5 text-[hsl(var(--chat-error))]">
-              {errorText}
-            </span>
+            <span className="min-w-0 flex-1 text-xs leading-1p5 text-destructive">{errorText}</span>
           ) : null}
         </div>
       ) : null}

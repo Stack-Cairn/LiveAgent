@@ -752,8 +752,8 @@ export function CronTaskModal({
                     {!autoPromptSupported ? (
                       <div
                         className={cn(
-                          "rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3.5 py-3",
-                          "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
+                          "rounded-xl border border-warning/20 bg-warning/[0.05] px-3.5 py-3",
+                          "text-xs leading-relaxed text-warning",
                         )}
                       >
                         {t("settings.cronPromptAgentModeOnlyHint")}
@@ -809,8 +809,7 @@ export function CronTaskModal({
                     {promptModelOptions.length === 0 ? (
                       <div
                         className={cn(
-                          "rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-xs text-amber-700",
-                          "dark:text-amber-300",
+                          "rounded-lg border border-warning/20 bg-warning/[0.04] px-3 py-2 text-xs text-warning",
                         )}
                       >
                         {t("settings.cronPromptModelEmpty")}
