@@ -4,20 +4,20 @@
   "updated": "2026-11-22",
   "apps": {
     "gui": {
-      "startupJsGzip": 343360,
-      "startupJsRaw": 1215733,
+      "startupJsGzip": 344919,
+      "startupJsRaw": 1221569,
       "startupJsFiles": 13,
-      "startupCssGzip": 74051,
-      "totalJsRaw": 34289201,
-      "totalDistRaw": 37676790
+      "startupCssGzip": 74244,
+      "totalJsRaw": 34348261,
+      "totalDistRaw": 37737721
     },
     "webui": {
-      "startupJsGzip": 1558563,
-      "startupJsRaw": 5588404,
+      "startupJsGzip": 1575651,
+      "startupJsRaw": 5646682,
       "startupJsFiles": 49,
-      "startupCssGzip": 84911,
-      "totalJsRaw": 34182579,
-      "totalDistRaw": 37346600
+      "startupCssGzip": 85088,
+      "totalJsRaw": 34240852,
+      "totalDistRaw": 37406744
     }
   }
 }
