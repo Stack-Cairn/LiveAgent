@@ -111,6 +111,20 @@ export const desktopSettingsSearch: SettingsSearchExtension = {
     },
     {
       section: "about",
+      anchor: "about-onboarding",
+      labelKey: "onboarding.reopen",
+      descriptionKey: "onboarding.reopenDesc",
+      keywords: ["getting started", "onboarding", "setup", "welcome", "guide", "tour"],
+    },
+    {
+      section: "about",
+      anchor: "about-diagnostics",
+      labelKey: "diagnostics.export",
+      descriptionKey: "diagnostics.exportDesc",
+      keywords: ["diagnostics", "logs", "bug report", "support", "debug", "zip"],
+    },
+    {
+      section: "about",
       anchor: "about-kbrain",
       labelKey: "settings.aboutKbrain",
       descriptionKey: "settings.aboutKbrainDesc",

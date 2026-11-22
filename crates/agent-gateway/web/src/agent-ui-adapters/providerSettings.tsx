@@ -35,6 +35,9 @@ export function ProviderCopyConfigButton(_props: {
   return null;
 }
 
+/** Importing local configuration files needs the desktop app. */
+export const providerImportAvailable = false;
+
 export function ProviderSettingsExtension(_props: {
   settings: AppSettings;
   setSettings: SettingsSectionProps["setSettings"];

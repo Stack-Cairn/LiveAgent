@@ -67,7 +67,6 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useCatalogLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
-import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
@@ -83,6 +82,7 @@ import {
   UsagePlanLine,
   usageRelativeTimeText,
 } from "./ProviderPresentation";
+import { appendCustomProvider, ProviderServiceList } from "./ProviderServiceList";
 import { RetryErrorSection } from "./RetryErrorSection";
 
 function FailoverNumberField(props: {
@@ -1088,11 +1088,7 @@ export function ProvidersSection(
         return updateCustomProviders(prev, updated);
       }
 
-      const newProvider: CustomProvider = {
-        id: createUuid(),
-        ...data,
-      };
-      return updateCustomProviders(prev, [...prev.customProviders, newProvider]);
+      return appendCustomProvider(prev, data);
     });
   }
 
@@ -1239,21 +1235,13 @@ export function ProvidersSection(
               </p>
             </DialogHeader>
             <DialogBody className="space-y-2">
-              {PROVIDER_TABS.map((type) => (
-                <Button
-                  key={type}
-                  variant="ghost"
-                  className="h-12 w-full justify-start gap-3 bg-settings-tile px-4 hover:bg-settings-tile-hover"
-                  onClick={() => {
-                    setActiveTab(type);
-                    setServicePickerOpen(false);
-                    setModalOpen(true);
-                  }}
-                >
-                  <ProviderBrandIcon type={type} />
-                  {getProviderLabel(type)} {t("settings.compatible")}
-                </Button>
-              ))}
+              <ProviderServiceList
+                onSelect={(type) => {
+                  setActiveTab(type);
+                  setServicePickerOpen(false);
+                  setModalOpen(true);
+                }}
+              />
             </DialogBody>
           </DialogContent>
         </Dialog>

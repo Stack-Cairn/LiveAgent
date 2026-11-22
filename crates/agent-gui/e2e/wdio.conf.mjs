@@ -151,6 +151,8 @@ export const config = {
             VITE_KBRAIN_URL: `http://127.0.0.1:${ports.backend}`,
             VITE_KBRAIN_TOKEN: backendToken,
             VITE_LIVEAGENT_MODEL_CATALOG_URL: catalogUrl,
+            // Specs never race the first-run guide (the onboarding spec is desktop-only).
+            VITE_LIVEAGENT_SKIP_ONBOARDING: "1",
           },
           logFile: join(artifactsDir, "vite.log"),
           name: "vite",
@@ -181,6 +183,9 @@ export const config = {
       LIVEAGENT_DEV_HOME: specHome.home,
       LIVEAGENT_KBRAIN_BINARY: kn,
       LIVEAGENT_DEV_MCP_BRIDGE_PORT: String(ports.mcpBridge),
+      // The first-run guide stays off so it never covers the app mid-spec; the
+      // onboarding spec keeps it to check the real startup decision.
+      ...(specName.includes("onboarding") ? {} : { LIVEAGENT_SKIP_ONBOARDING: "1" }),
       // Keep WebKitGTK quiet and deterministic under Xvfb.
       WEBKIT_DISABLE_COMPOSITING_MODE: "1",
       NO_AT_BRIDGE: "1",

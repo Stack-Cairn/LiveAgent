@@ -231,7 +231,7 @@ test("catalog remains backend-owned without a direct-mode branch", async () => {
 test("ChatPage projects once before model selection and send, without replacing its settings writer", () => {
   const source = readFileSync(new URL("../../src/pages/ChatPage.tsx", import.meta.url), "utf8");
   assert.match(source, /settings: directSettings,/);
-  assert.match(source, /const \{ settings, error: modelCatalogError \}\s*=\s*useKBrainCatalogSettings\(directSettings\)/);
+  assert.match(source, /const \{\s*settings,\s*error: modelCatalogError,(?:\s*\w+: \w+,)*\s*\}\s*=\s*useKBrainCatalogSettings\(directSettings\)/);
   assert.match(source, /useChatModelSelection\(\{\s*settings,\s*setSettings,/);
   assert.match(source, /useSendChatTurn\(\{\s*settings,/);
   assert.match(source, /errorMessage: errorMessage \?\? modelCatalogError/);

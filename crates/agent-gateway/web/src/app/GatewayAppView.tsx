@@ -14,6 +14,7 @@ import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceCloneTaskOverlay } from "@liveagent/ui/components/chat/WorkspaceCloneTaskOverlay";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
+import { DiagnosticsExportHost } from "@liveagent/ui/components/diagnostics/DiagnosticsExportHost";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
@@ -64,6 +65,7 @@ import {
   resolveCloseContextTarget,
   resolveTerminalToggle,
 } from "@liveagent/ui/lib/chat/workbenchCommands";
+import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/exportRequests";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import {
   isWorkbenchNavigationLocationOpenable,
@@ -1458,6 +1460,7 @@ export function GatewayAppView({
         ...SHARED_COMMAND_PALETTE_SETTINGS_SECTIONS.filter((section) => section.id !== "remote"),
         { id: "shortcuts", labelKey: "settings.navShortcuts" },
       ],
+      onExportDiagnostics: requestDiagnosticsExport,
       settingsSearch: { host: webSettingsSearch, hiddenSections: ["remote"] },
       sidebar: { open: sidebarOpen, onToggle: () => setSidebarOpen((open) => !open) },
       theme: {
@@ -2539,6 +2542,7 @@ export function GatewayAppView({
               />
             </div>
           ) : null}
+          <DiagnosticsExportHost settings={settings} />
         </div>
       </AppErrorBoundary>
     </LocaleContext.Provider>

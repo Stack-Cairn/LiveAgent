@@ -188,6 +188,21 @@ pub fn app_runtime_platform() -> RuntimePlatformResponse {
     RuntimePlatformResponse { platform }
 }
 
+/// Whether the first-run guide may open on its own. Only the test harness turns
+/// it off (`LIVEAGENT_SKIP_ONBOARDING=1`, debug builds only, like
+/// `LIVEAGENT_DEV_HOME`) so specs never race the guide's startup decision.
+#[tauri::command]
+pub fn app_onboarding_auto_start() -> bool {
+    !onboarding_suppressed(
+        cfg!(debug_assertions),
+        std::env::var_os("LIVEAGENT_SKIP_ONBOARDING"),
+    )
+}
+
+fn onboarding_suppressed(debug_build: bool, flag: Option<std::ffi::OsString>) -> bool {
+    debug_build && flag.is_some_and(|value| value == "1")
+}
+
 #[tauri::command]
 pub fn app_set_close_window_behavior(
     behavior: String,
@@ -374,6 +389,14 @@ fn macos_window_button_screen_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn onboarding_is_only_suppressed_by_the_harness_flag_in_debug_builds() {
+        assert!(onboarding_suppressed(true, Some("1".into())));
+        assert!(!onboarding_suppressed(true, Some("0".into())));
+        assert!(!onboarding_suppressed(true, None));
+        assert!(!onboarding_suppressed(false, Some("1".into())));
+    }
 
     #[test]
     fn traffic_light_metrics_bounds_reject_fullscreen_garbage() {
