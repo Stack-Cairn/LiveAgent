@@ -2811,3 +2811,58 @@ test("a compaction inside a streaming reply renders one assistant row with an in
   );
   assertUniqueKeys(settled);
 });
+
+test("streaming into the newest of many turns updates it in place of the others", () => {
+  const store = createTranscriptStore();
+  let seq = 1;
+  for (let index = 0; index < 50; index += 1) {
+    store.applyEvent(runStarted(`run-${index}`, seq++));
+    store.applyEvent(userMessage(`run-${index}`, seq++, `question ${index}`));
+    store.applyEvent(token(`run-${index}`, seq++, `answer ${index}`));
+    store.applyEvent(runFinished(`run-${index}`, seq++));
+  }
+  store.applyEvent(runStarted("run-live", seq++));
+  store.applyEvent(userMessage("run-live", seq++, "live question"));
+  store.flush();
+  const before = store.getSnapshot();
+  for (const piece of ["one ", "two ", "three"]) store.applyEvent(token("run-live", seq++, piece));
+  store.flush();
+  const after = store.getSnapshot();
+  assert.equal(rowText(allRows(after).at(-1)), "one two three");
+  // Every earlier row is the same object: only the live turn changed.
+  const live = after.liveStartIndex;
+  assert.ok(allRows(after).slice(0, live).every((row, index) => row === allRows(before)[index]));
+  assert.equal(allRows(after).filter((row) => rowText(row) === "answer 7").length, 1);
+  assertUniqueKeys(after);
+});
+
+test("the edit-resend stash is not changed by later streaming into the same turns", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(userMessage("run-1", 2, "hello", { message_ref: wireMessageRef("m1") }));
+  store.applyEvent(token("run-1", 3, "first answer"));
+  store.applyEvent(runFinished("run-1", 4));
+  store.applyEvent(runStarted("run-2", 5));
+  store.applyEvent(userMessage("run-2", 6, "second", { message_ref: wireMessageRef("m2", 1) }));
+  // Several deltas: the store now writes turns into its private array.
+  store.applyEvent(token("run-2", 7, "partial "));
+  store.applyEvent(token("run-2", 8, "reply"));
+  store.flush();
+  const shown = allRows(store.getSnapshot()).map(rowText);
+
+  store.addOptimisticUserEntry({
+    clientRequestId: "client-1",
+    text: "second, edited",
+    baseMessageRef: messageRef("m2", 1),
+  });
+  store.flush();
+  assert.ok(!allRows(store.getSnapshot()).some((row) => rowText(row) === "partial reply"));
+  store.removeOptimisticUserEntry("client-1");
+
+  assert.equal(store.restoreEditResendTranscript("client-1"), true);
+  store.flush();
+  assert.deepEqual(allRows(store.getSnapshot()).map(rowText), shown);
+  store.applyEvent(token("run-2", 9, " more"));
+  store.flush();
+  assert.equal(rowText(allRows(store.getSnapshot()).at(-1)), "partial reply more");
+});
