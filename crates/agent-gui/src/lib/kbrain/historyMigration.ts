@@ -811,6 +811,13 @@ function migrationCompletionKey(scope: string) {
   return `liveagent.kbrain-history-migration-complete.v1:${scope}`;
 }
 
+type HistorySource = "legacy" | "pi";
+
+/** Each source has its own completion; the legacy key keeps its original name. */
+function sourceCompletionScope(scope: string, source: HistorySource) {
+  return source === "legacy" ? scope : `${scope}|pi`;
+}
+
 /** A complete legacy pass: the source it covered and the K-brain sessions it confirmed. */
 type MigrationCompletion = { marker: string; backendIds: string[] };
 
@@ -877,12 +884,25 @@ async function migratedSessionsStillExist(
   }
 }
 
-async function readLegacySignature(options: HistoryMigrationOptions): Promise<string | null> {
+/**
+ * Metadata-only fingerprint of a history source (the legacy database, or the Pi session files'
+ * paths, sizes and mtimes). An unchanged source whose last complete pass is still in K-brain is
+ * not rescanned at startup.
+ */
+async function readSourceSignature(
+  source: HistorySource,
+  options: HistoryMigrationOptions,
+): Promise<string | null> {
   try {
     const signature = await withDeadline(
-      () => invoke<string | null>("legacy_history_migration_signature"),
+      () =>
+        invoke<string | null>(
+          source === "legacy"
+            ? "legacy_history_migration_signature"
+            : "pi_history_migration_signature",
+        ),
       timeoutsFor(options).pageMs,
-      "Reading the legacy history signature",
+      `Reading the ${source} history signature`,
       options.signal,
     );
     return typeof signature === "string" && signature ? signature : null;
@@ -904,11 +924,12 @@ async function migrateHistorySourceOnce(
     return { results: [], failures: [], complete: true };
   }
   // Read before the pass, so a change made while it runs is never covered by its marker.
+  const source: HistorySource = command === "legacy_history_migration_page" ? "legacy" : "pi";
   const scope = kBrainStorageScope();
-  const signature =
-    command === "legacy_history_migration_page" ? await readLegacySignature(options) : null;
+  const completionScope = sourceCompletionScope(scope, source);
+  const signature = await readSourceSignature(source, options);
   const completion =
-    signature && !options.retryKnownFailures ? readMigrationCompletion(scope) : null;
+    signature && !options.retryKnownFailures ? readMigrationCompletion(completionScope) : null;
   if (
     signature &&
     completion?.marker === migrationMarker(signature) &&
@@ -955,7 +976,7 @@ async function migrateHistorySourceOnce(
           failure.kind !== undefined && (failure.kind !== "transient" || failure.invalidSource),
       )
     ) {
-      writeMigrationCompletion(scope, {
+      writeMigrationCompletion(completionScope, {
         marker: migrationMarker(signature),
         backendIds: all.map((result) => result.backend_id),
       });
