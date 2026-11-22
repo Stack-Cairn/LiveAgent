@@ -33,6 +33,10 @@ const nonTranslationLiterals = new Set([
   "settings.customHeaderImportIssue.",
   "settings.gradle",
   "settings.gradle.kts",
+  // Diagnostics bundle file names.
+  "app.json",
+  "settings.json",
+  "mcp.json",
 ]);
 
 function sourceFilesUnder(directory) {

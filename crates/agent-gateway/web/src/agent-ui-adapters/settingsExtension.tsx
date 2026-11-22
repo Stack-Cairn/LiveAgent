@@ -1,4 +1,5 @@
-import { Keyboard, MonitorSmartphone } from "@liveagent/ui/components/IconSet";
+import { CircleHelp, Keyboard, MonitorSmartphone } from "@liveagent/ui/components/IconSet";
+import { SettingsCard, SettingsSection } from "@liveagent/ui/components/settings/SettingsLayout";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import {
   type KBrainWebSearchSettings,
@@ -12,6 +13,7 @@ import {
 } from "@liveagent/ui/lib/resourceHost";
 import type { SettingsSearchExtension } from "@liveagent/ui/lib/settings/settingsSearchIndex";
 import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/settings/sync";
+import { DiagnosticsExportRow } from "@liveagent/ui/pages/settings/HelpSettingsRows";
 import type {
   KBrainMemoryConfig,
   KBrainMemoryOrganizerConfig,
@@ -61,6 +63,22 @@ export function createSettingsExtension(props: SettingsPageProps): {
         icon: <MonitorSmartphone className="size-4" />,
         showSaveIndicator: false,
         render: () => <DevicesSection onDirectoryChanged={props.onAgentDirectoryChanged} />,
+      },
+      {
+        id: "help",
+        groupKey: "settings.groupConnectivity",
+        groupOrder: 40,
+        order: 90,
+        labelKey: "settings.aboutHelp",
+        icon: <CircleHelp className="size-4" />,
+        showSaveIndicator: false,
+        render: () => (
+          <SettingsSection>
+            <SettingsCard>
+              <DiagnosticsExportRow data-settings-anchor="web-diagnostics" />
+            </SettingsCard>
+          </SettingsSection>
+        ),
       },
     ],
   };

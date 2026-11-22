@@ -17,7 +17,7 @@ export const WEB_UNSUPPORTED_SHORTCUT_COMMANDS: readonly ShortcutCommandId[] = [
 
 /** Settings rows only the WebUI renders, for settings search and the palette. */
 export const webSettingsSearch: SettingsSearchExtension = {
-  sectionLabelKeys: { devices: "settings.navAgentManagement" },
+  sectionLabelKeys: { devices: "settings.navAgentManagement", help: "settings.aboutHelp" },
   hiddenAnchors: WEB_UNSUPPORTED_SHORTCUT_COMMANDS.map(shortcutCommandSettingsAnchor),
   entries: [
     {
@@ -26,6 +26,13 @@ export const webSettingsSearch: SettingsSearchExtension = {
       labelKey: "settings.devicesTitle",
       descriptionKey: "settings.devicesDesc",
       keywords: ["device", "client", "token", "pairing"],
+    },
+    {
+      section: "help",
+      anchor: "web-diagnostics",
+      labelKey: "diagnostics.export",
+      descriptionKey: "diagnostics.exportDesc",
+      keywords: ["diagnostics", "logs", "bug report", "support", "debug", "zip"],
     },
   ],
 };

@@ -12,6 +12,7 @@ import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedH
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { PanelLeft, PanelLeftClose } from "@liveagent/ui/components/IconSet";
+import { OnboardingHost } from "@liveagent/ui/components/onboarding/OnboardingHost";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import {
@@ -77,6 +78,7 @@ import {
   resolveCloseContextTarget,
   resolveTerminalToggle,
 } from "@liveagent/ui/lib/chat/workbenchCommands";
+import { requestDiagnosticsExport } from "@liveagent/ui/lib/diagnostics/bundle";
 import { parseModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useThinkingLiveVersion } from "@liveagent/ui/lib/models/useThinkingLive";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
@@ -86,6 +88,7 @@ import {
   useNavigationHistory,
   workbenchNavigationLocation,
 } from "@liveagent/ui/lib/navigation/navigationHistory";
+import { requestOnboarding } from "@liveagent/ui/lib/onboarding/onboardingState";
 import { releaseProjectToolFromDock } from "@liveagent/ui/lib/projectTools/releaseProjectToolFromDock";
 import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import { normalizeSidebarShortcuts } from "@liveagent/ui/lib/settings/sidebarShortcuts";
@@ -188,6 +191,7 @@ import {
   subscribeKBrainFolderTrustChanged,
 } from "../lib/kbrain/folderTrust";
 import { publishGoalState } from "../lib/kbrain/goalStore";
+import { countKBrainSessions } from "../lib/kbrain/history";
 import { subscribeHistoryImported } from "../lib/kbrain/manualHistoryImport";
 import { getKBrainSessionId } from "../lib/kbrain/mapping";
 import {
@@ -1951,6 +1955,20 @@ function ChatPageContent(props: ChatPageProps) {
   const folderTrustClient = useMemo(
     () => (kBrainBackendEnabled ? createKBrainFolderTrustClient() : undefined),
     [kBrainBackendEnabled],
+  );
+  const onboardingWorkspace = useMemo(
+    () => ({
+      onAddWorkspace: handleOpenClonedWorkspace,
+      trustClient: folderTrustClient,
+      onOpenProjectSettings: (path: string) => {
+        const key = workspaceProjectPathKey(path);
+        const project = workspaceProjects.find(
+          (candidate) => workspaceProjectPathKey(candidate.path) === key,
+        );
+        if (project) setProjectSettingsProject(project);
+      },
+    }),
+    [folderTrustClient, handleOpenClonedWorkspace, setProjectSettingsProject, workspaceProjects],
   );
   const [folderTrustRevision, setFolderTrustRevision] = useState(0);
   useEffect(
@@ -4503,6 +4521,8 @@ function ChatPageContent(props: ChatPageProps) {
         { id: "about", labelKey: "settings.navAbout" },
       ],
       settingsSearch: { host: desktopSettingsSearch },
+      onOpenOnboarding: requestOnboarding,
+      onExportDiagnostics: requestDiagnosticsExport,
       sidebar: { open: sidebarOpen, onToggle: handleToggleSidebar },
       theme: { current: settings.theme, onToggle: onToggleTheme },
       projectTools: projectToolsAvailable
@@ -5015,6 +5035,14 @@ function ChatPageContent(props: ChatPageProps) {
           </WorkspaceToolsPanel>
         </WorkspacePanelGroup>
       </div>
+      <OnboardingHost
+        settings={settings}
+        setSettings={setSettings}
+        autoStart
+        loadSessionCount={countKBrainSessions}
+        workspace={onboardingWorkspace}
+        onInsertPrompt={handleEmptyStateSuggestion}
+      />
       {projectSettingsProject ? (
         <WorkspaceProjectSettingsModal
           project={projectSettingsProject}

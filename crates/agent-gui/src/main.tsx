@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import "katex/dist/katex.min.css";
 import "streamdown/styles.css";
+import { installDiagnosticsCapture } from "@liveagent/ui/lib/diagnostics/recentErrors";
 import { installReactDevTimelineLimit } from "@liveagent/ui/lib/system/reactDevTimeline";
 import { watchHostBridgeStatus } from "@liveagent/ui/lib/tools/hostBridgeStatus";
 import { isTauriHost } from "./lib/host";
@@ -18,6 +19,9 @@ import { createStartupRenderer } from "./lib/startup/render";
 import { runStartupSequence } from "./lib/startup/sequence";
 import { installWebviewNavigationGuard } from "./lib/system/webviewNavigationGuard";
 import { listen } from "./shims/tauriEvent";
+
+// Recent warnings/errors, kept in memory for Settings > About > Export diagnostics.
+installDiagnosticsCapture();
 
 if (import.meta.env.DEV) {
   const stopReactTimelineLimit = installReactDevTimelineLimit();

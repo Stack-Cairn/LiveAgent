@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeft,
   ArrowRight,
   Blend,
@@ -24,6 +25,7 @@ import {
   Plus,
   RotateCcw,
   Settings,
+  Sparkles,
   Square,
   SquarePen,
   Sun,
@@ -133,6 +135,10 @@ export type BuildCommandPaletteActionsInput = {
   zoom?: { level: number; onZoomIn: () => void; onZoomOut: () => void; onReset: () => void };
   /** Closes the current hub / pane / dock; omitted when nothing is closable. */
   closeContext?: { onClose: () => void };
+  /** Re-opens the first-run guide. */
+  onOpenOnboarding?: () => void;
+  /** Opens the diagnostics export preview. */
+  onExportDiagnostics?: () => void;
 };
 
 function format(template: string, values: Record<string, string>) {
@@ -371,6 +377,26 @@ export function buildCommandPaletteActions(
     });
   }
 
+  if (input.onOpenOnboarding) {
+    actions.push({
+      id: "open-onboarding",
+      group: "settings",
+      label: t("onboarding.reopen"),
+      keywords: ["getting started", "onboarding", "setup", "welcome", "guide", "tour"],
+      icon: Sparkles,
+      run: input.onOpenOnboarding,
+    });
+  }
+  if (input.onExportDiagnostics) {
+    actions.push({
+      id: "export-diagnostics",
+      group: "settings",
+      label: t("diagnostics.export"),
+      keywords: ["diagnostics", "logs", "bug report", "support", "debug", "export", "zip"],
+      icon: Archive,
+      run: input.onExportDiagnostics,
+    });
+  }
   if (input.onOpenSettings) {
     const openSettings = input.onOpenSettings;
     const sectionTemplate = t("chat.commandPalette.openSettingsSection");

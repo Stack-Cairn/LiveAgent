@@ -27,7 +27,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useState } from "react";
 import { OfflineSandboxSetupDialog } from "./OfflineSandboxSetupDialog";
 
-const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
+export const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.ask",
   auto: "chat.safety.auto",
   autoEdit: "chat.safety.autoEdit",
@@ -37,7 +37,7 @@ const MODE_I18N_KEYS: Record<CommandSafetyMode, string> = {
   sandboxOffline: "chat.safety.sandboxOffline",
 };
 
-const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
+export const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
   ask: "chat.safety.askDesc",
   auto: "chat.safety.autoDesc",
   autoEdit: "chat.safety.autoEditDesc",
@@ -51,7 +51,7 @@ const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
 // saved "auto" values are migrated to "always" by settings normalization. The
 // sandboxes sit between the reviewed modes and always allow, ordered by how much
 // each one lets through without asking.
-const SAFETY_MODES = [
+export const SAFETY_MODES = [
   "ask",
   "autoEdit",
   "autoReview",
@@ -85,7 +85,7 @@ function isCommandSafetyMode(value: unknown): value is CommandSafetyMode {
 }
 
 // One icon per mode, so neighbouring entries in the menu are distinguishable.
-function modeIcon(mode: CommandSafetyMode, className: string) {
+export function modeIcon(mode: CommandSafetyMode, className: string) {
   if (mode === "ask") return <Hand className={className} />;
   if (mode === "autoEdit") return <SquarePen className={className} />;
   if (mode === "autoReview") return <ShieldCheck className={className} />;
@@ -108,30 +108,14 @@ function triggerIconClass(mode: CommandSafetyMode, reviewerMissing: boolean) {
   return "size-4 shrink-0 text-muted-foreground";
 }
 
-export function CommandSafetyModeSelector(props: {
-  value: CommandSafetyMode;
-  disabled?: boolean;
-  onChange: (mode: CommandSafetyMode) => void;
-  /** Opens the settings page that holds the AI approval reviewer model. */
-  onConfigureAutoReview?: () => void;
-  /** Keyboard shortcut that cycles the mode, shown in the trigger's tooltip. */
-  shortcutHint?: string;
-}) {
-  // Plan mode has its own switch in the composer's plus menu; this menu only
-  // picks the permission mode, and choosing one leaves plan mode as it is.
-  const { value, disabled, onChange, onConfigureAutoReview, shortcutHint } = props;
-  const { t } = useLocale();
-  const [menuOpen, setMenuOpen] = useState(false);
-  // Counts openings only, so the reviewer check re-reads on open and not on close.
-  const [menuOpenings, setMenuOpenings] = useState(0);
-  const handleMenuOpenChange = (open: boolean) => {
-    setMenuOpen(open);
-    if (open) setMenuOpenings((count) => count + 1);
-  };
-  const capability = useSandboxCapability();
-  // Each opening remounts the setup dialog so it starts at the confirmation.
-  const [setupOpenings, setSetupOpenings] = useState(0);
-  const [setupOpen, setSetupOpen] = useState(false);
+/**
+ * Which modes this backend can offer and how each is described. Shared by the
+ * composer menu and the onboarding safety step so both say the same thing.
+ */
+export function commandSafetyModeAvailability(
+  capability: ReturnType<typeof useSandboxCapability>,
+  t: (key: string) => string,
+) {
   // 写围栏(sandbox):平台不支持时禁用。桌面端探测返回前(null)乐观启用,由执行层
   // fail-closed 兜底;WebUI 执行端平台未知,同样交由 fail-closed。
   // 受保护路径(.liveagent、.git/hooks 等)在沙箱内仍可写(path_protection=false,
@@ -167,6 +151,46 @@ export function CommandSafetyModeSelector(props: {
     mode === "sandbox" && sandboxLacksReadMasking
       ? "chat.safety.sandboxDescNoReadMask"
       : MODE_DESC_I18N_KEYS[mode];
+  return {
+    sandboxLacksPathProtection,
+    sandboxUnavailable,
+    offlineUnavailable,
+    disabledHint,
+    modeDescKey,
+  };
+}
+
+export function CommandSafetyModeSelector(props: {
+  value: CommandSafetyMode;
+  disabled?: boolean;
+  onChange: (mode: CommandSafetyMode) => void;
+  /** Opens the settings page that holds the AI approval reviewer model. */
+  onConfigureAutoReview?: () => void;
+  /** Keyboard shortcut that cycles the mode, shown in the trigger's tooltip. */
+  shortcutHint?: string;
+}) {
+  // Plan mode has its own switch in the composer's plus menu; this menu only
+  // picks the permission mode, and choosing one leaves plan mode as it is.
+  const { value, disabled, onChange, onConfigureAutoReview, shortcutHint } = props;
+  const { t } = useLocale();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Counts openings only, so the reviewer check re-reads on open and not on close.
+  const [menuOpenings, setMenuOpenings] = useState(0);
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open);
+    if (open) setMenuOpenings((count) => count + 1);
+  };
+  const capability = useSandboxCapability();
+  // Each opening remounts the setup dialog so it starts at the confirmation.
+  const [setupOpenings, setSetupOpenings] = useState(0);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const {
+    sandboxLacksPathProtection,
+    sandboxUnavailable,
+    offlineUnavailable,
+    disabledHint,
+    modeDescKey,
+  } = commandSafetyModeAvailability(capability, t);
   // 当前值本身不可用(如设置同步自 macOS,本机是 Windows)时仍显示,但标红提示
   // 由执行层报错兜底;这里不做静默改写,避免设置回写抖动。
   const selected = isCommandSafetyMode(value) && value !== "auto" ? value : "always";

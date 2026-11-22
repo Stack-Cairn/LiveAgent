@@ -34,7 +34,6 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const STOP_GRACE: Duration = Duration::from_secs(2);
 const STARTS_SUSPENDED_ERROR: &str = "正在迁移数据目录，本地服务将在应用重启后恢复";
 const MAX_STDOUT_LINE: usize = 16 * 1024;
-const MAX_STDERR_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -755,21 +754,16 @@ fn spawn_stderr_drain(stderr: impl Read + Send + 'static, token: String) -> Resu
         .name("kbrain-stderr".into())
         .spawn(move || {
             let mut reader = BufReader::new(stderr);
-            let mut retained = Vec::with_capacity(MAX_STDERR_BYTES);
             let mut buffer = [0u8; 4096];
+            // The newest output stays in a bounded in-memory tail for the
+            // diagnostics export; the token is redacted when the tail is read.
+            crate::commands::diagnostics::reset_kbrain_stderr_tail(&token);
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => break,
-                    Ok(bytes) => {
-                        let keep = bytes.min(MAX_STDERR_BYTES);
-                        if retained.len() < MAX_STDERR_BYTES {
-                            let available = MAX_STDERR_BYTES - retained.len();
-                            retained.extend_from_slice(&buffer[..keep.min(available)]);
-                        }
-                    }
+                    Ok(bytes) => crate::commands::diagnostics::append_kbrain_stderr(&buffer[..bytes]),
                 }
             }
-            let _diagnostic = String::from_utf8_lossy(&retained).replace(&token, "<redacted>");
         })
         .map_err(|error| format!("failed to start K-brain stderr reader: {error}"))?;
     Ok(())

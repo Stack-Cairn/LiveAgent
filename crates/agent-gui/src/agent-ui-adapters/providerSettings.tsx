@@ -404,6 +404,9 @@ export function ProviderCopyConfigButton(props: {
   );
 }
 
+/** The desktop can import providers from local configuration files. */
+export const providerImportAvailable = true;
+
 export function ProviderSettingsExtension(props: {
   settings: AppSettings;
   setSettings: SetSettingsFn;

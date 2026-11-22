@@ -356,3 +356,41 @@ test("typing settings keeps Open settings and drops the sidebar toggle", async (
     env.cleanup();
   }
 });
+
+test("onboarding and diagnostics export are palette commands where the host wires them", async () => {
+  const env = await createEnv();
+  try {
+    const { createTsModuleLoader } = await import("../helpers/load-ts-module.mjs");
+    const en = createTsModuleLoader().loadModule("src/i18n/config.ts").translations["en-US"];
+    const { buildCommandPaletteActions } = env.loadModule("@liveagent/ui/lib/chat/commandPaletteActions.ts");
+    const { filterCommandPaletteActions } = env.loadModule("@liveagent/ui/lib/chat/commandPalette.ts");
+    const calls = [];
+    const actions = buildCommandPaletteActions({
+      t: (key) => en[key] ?? key,
+      isMac: false,
+      onOpenOnboarding: () => calls.push("onboarding"),
+      onExportDiagnostics: () => calls.push("diagnostics"),
+    });
+    const byId = new Map(actions.map((item) => [item.id, item]));
+    assert.equal(byId.get("export-diagnostics").label, "Export diagnostics");
+    assert.equal(byId.get("export-diagnostics").group, "settings");
+    assert.ok(byId.get("open-onboarding").label.length > 0);
+    assert.deepEqual(
+      filterCommandPaletteActions(actions, "diagnostics").map((item) => item.id),
+      ["export-diagnostics"],
+    );
+    byId.get("open-onboarding").run();
+    byId.get("export-diagnostics").run();
+    assert.deepEqual(calls, ["onboarding", "diagnostics"]);
+
+    const read = (relative) => fs.readFileSync(new URL(relative, import.meta.url), "utf8");
+    assert.match(read("../../src/pages/ChatPage.tsx"), /onOpenOnboarding: requestOnboarding/);
+    assert.match(read("../../src/pages/ChatPage.tsx"), /onExportDiagnostics: requestDiagnosticsExport/);
+    assert.match(
+      read("../../../agent-gateway/web/src/app/GatewayAppView.tsx"),
+      /onExportDiagnostics: requestDiagnosticsExport/,
+    );
+  } finally {
+    env.cleanup();
+  }
+});

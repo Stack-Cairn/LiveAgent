@@ -607,6 +607,12 @@ export function supportsKBrainSessionArchive(): Promise<boolean> {
   });
 }
 
+/** Number of (unarchived) sessions; used for first-run detection and diagnostics. */
+export async function countKBrainSessions(): Promise<number> {
+  const result = await client().listSessions({ page: 1, pageSize: 1 });
+  return result.total_count;
+}
+
 export async function listKBrainArchivedHistory(
   page: number,
   pageSize: number,

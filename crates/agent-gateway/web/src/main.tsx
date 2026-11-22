@@ -1,3 +1,4 @@
+import { installDiagnosticsCapture } from "@liveagent/ui/lib/diagnostics/recentErrors";
 import { GATEWAY_WEBUI_MARKER } from "@liveagent/ui/lib/runtimeEnv";
 import { installReactDevTimelineLimit } from "@liveagent/ui/lib/system/reactDevTimeline";
 import React from "react";
@@ -12,6 +13,9 @@ import "streamdown/styles.css";
 
 // 渲染前写入 WebUI 运行时标记（isGatewayWebuiRuntime 的唯一权威写入点）。
 document.documentElement.dataset.liveagentWebui = GATEWAY_WEBUI_MARKER;
+
+// Recent warnings/errors, kept in memory for the diagnostics export.
+installDiagnosticsCapture();
 
 if (import.meta.env.DEV) {
   const stopReactTimelineLimit = installReactDevTimelineLimit();

@@ -45,6 +45,56 @@ export function listLocalFontFamilies(): Promise<string[]> {
   return fontFamiliesRequest;
 }
 
+/** Desktop run notifications and completion chime; shared by Settings and onboarding. */
+export function notificationSettingsAvailable(): boolean {
+  return isTauriHost();
+}
+
+export function NotificationSettingsRows(
+  props: Pick<SettingsSectionProps, "settings" | "setSettings">,
+) {
+  const { settings, setSettings } = props;
+  const { t } = useLocale();
+  return (
+    <SettingsGroup title={t("settings.notificationsGroup")}>
+      <SettingsRow
+        data-settings-anchor="run-notifications"
+        title={t("settings.runNotifications")}
+        description={t("settings.runNotificationsDesc")}
+        control={
+          <AgentActivationSwitch
+            checked={settings.customSettings.runNotifications}
+            title={t("settings.runNotifications")}
+            onToggle={() =>
+              setSettings((prev) =>
+                updateRunNotifications(prev, !prev.customSettings.runNotifications),
+              )
+            }
+          />
+        }
+      />
+      <SettingsRow
+        data-settings-anchor="run-completion-sound"
+        title={t("settings.runCompletionSound")}
+        description={t("settings.runCompletionSoundDesc")}
+        control={
+          <AgentActivationSwitch
+            checked={settings.customSettings.runCompletionSound}
+            title={t("settings.runCompletionSound")}
+            onToggle={() => {
+              const enabled = !settings.customSettings.runCompletionSound;
+              // Turning it on previews the chime; the click also unlocks audio
+              // for later background playback.
+              if (enabled) completionSoundPlayer().play();
+              setSettings((prev) => updateRunCompletionSound(prev, enabled));
+            }}
+          />
+        }
+      />
+    </SettingsGroup>
+  );
+}
+
 export function SystemSettingsExtensions(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
@@ -56,44 +106,7 @@ export function SystemSettingsExtensions(props: SettingsSectionProps) {
   return (
     <>
       <LegacyHistoryImportSettings />
-      {isTauriHost() && (
-        <SettingsGroup title={t("settings.notificationsGroup")}>
-          <SettingsRow
-            data-settings-anchor="run-notifications"
-            title={t("settings.runNotifications")}
-            description={t("settings.runNotificationsDesc")}
-            control={
-              <AgentActivationSwitch
-                checked={settings.customSettings.runNotifications}
-                title={t("settings.runNotifications")}
-                onToggle={() =>
-                  setSettings((prev) =>
-                    updateRunNotifications(prev, !prev.customSettings.runNotifications),
-                  )
-                }
-              />
-            }
-          />
-          <SettingsRow
-            data-settings-anchor="run-completion-sound"
-            title={t("settings.runCompletionSound")}
-            description={t("settings.runCompletionSoundDesc")}
-            control={
-              <AgentActivationSwitch
-                checked={settings.customSettings.runCompletionSound}
-                title={t("settings.runCompletionSound")}
-                onToggle={() => {
-                  const enabled = !settings.customSettings.runCompletionSound;
-                  // Turning it on previews the chime; the click also unlocks audio
-                  // for later background playback.
-                  if (enabled) completionSoundPlayer().play();
-                  setSettings((prev) => updateRunCompletionSound(prev, enabled));
-                }}
-              />
-            }
-          />
-        </SettingsGroup>
-      )}
+      {isTauriHost() && <NotificationSettingsRows settings={settings} setSettings={setSettings} />}
       {isTauriHost() && (
         <SettingsGroup title={t("settings.calendarNotifications")}>
           <SettingsRow
