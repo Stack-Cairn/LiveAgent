@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CustomHeader } from "@liveagent/ui/lib/providers/customHeaders";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
@@ -99,6 +100,7 @@ function itemProtocolLabel(item: CherryProviderImportItem) {
 }
 
 export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
+  const { t } = useLocale();
   const {
     initialType,
     response,
@@ -173,14 +175,16 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
       <DialogContent
         className="flex h-[min(38rem,calc(100dvh-2rem))] max-w-3xl flex-col overflow-hidden p-0"
         closeDisabled={importing}
-        closeLabel="关闭"
+        closeLabel={t("settings.close")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-start gap-4 px-6">
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-base leading-normal">从 Cherry Studio 同步</DialogTitle>
+            <DialogTitle className="text-base leading-normal">
+              {t("providerImport.cherry.title")}
+            </DialogTitle>
             <DialogDescription className="mt-1 text-xs">
-              选择要同步的供应商。同步地址与密钥后，自动获取模型。
+              {t("providerImport.cherry.description")}
             </DialogDescription>
           </div>
           <Button
@@ -190,8 +194,8 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             className="shrink-0 text-muted-foreground"
             onClick={() => setPathDialogOpen(true)}
             disabled={importing}
-            title="Cherry Studio 数据目录设置"
-            aria-label="Cherry Studio 数据目录设置"
+            title={t("providerImport.cherry.dataDirectorySettings")}
+            aria-label={t("providerImport.cherry.dataDirectorySettings")}
           >
             <Settings className="size-4" />
           </Button>
@@ -208,7 +212,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               onCheckedChange={(checked) => setShowAll(checked === true)}
               disabled={importing}
             />
-            显示禁用或不兼容配置
+            {t("providerImport.cherry.showAll")}
           </label>
           <div className="flex items-center gap-1.5">
             <Button
@@ -219,7 +223,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               onClick={selectActive}
               disabled={importing}
             >
-              全选可用项
+              {t("providerImport.cherry.selectAvailable")}
             </Button>
             <Button
               type="button"
@@ -229,7 +233,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               onClick={clearActive}
               disabled={importing}
             >
-              清空
+              {t("providerImport.cherry.clear")}
             </Button>
           </div>
         </DialogSubheader>
@@ -242,7 +246,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                 "text-center text-sm text-muted-foreground",
               )}
             >
-              没有可同步的 Cherry Studio 聊天供应商
+              {t("providerImport.cherry.empty")}
             </div>
           ) : (
             <>
@@ -279,7 +283,10 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                           {PROVIDER_LABELS[group.type]}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {group.items.length} 项配置
+                          {t("providerImport.cherry.groupCount").replace(
+                            "{count}",
+                            String(group.items.length),
+                          )}
                         </span>
                       </span>
                       {groupSelected > 0 ? (
@@ -332,22 +339,27 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                             </span>
                             {existing ? (
                               <span className="rounded bg-background px-1.5 py-0.5 text-tiny text-muted-foreground">
-                                将更新
+                                {t("providerImport.cherry.willUpdate")}
                               </span>
                             ) : null}
                             {!item.enabled ? (
                               <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-tiny text-amber-700 dark:text-amber-300">
-                                Cherry 中已禁用
+                                {t("providerImport.cherry.disabledInSource")}
                               </span>
                             ) : null}
                           </span>
                           <span className="mt-1 block truncate text-xs text-muted-foreground">
-                            {item.baseUrl || "未配置 Base URL"}
+                            {item.baseUrl || t("providerImport.noBaseUrl")}
                           </span>
                           <span className="mt-1 block text-xs text-muted-foreground">
-                            {item.apiKeyCount > 0 ? "密钥已配置" : "无可迁移密钥"}
+                            {item.apiKeyCount > 0
+                              ? t("providerImport.cherry.keyConfigured")
+                              : t("providerImport.cherry.noKey")}
                             {item.excludedModelCount > 0
-                              ? ` · Cherry 中识别到 ${item.excludedModelCount} 个非聊天模型`
+                              ? t("providerImport.cherry.nonChatModels").replace(
+                                  "{count}",
+                                  String(item.excludedModelCount),
+                                )
                               : ""}
                           </span>
                           {item.reason ? (
@@ -371,11 +383,11 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
 
         <DialogFooter className="bg-background px-6 min-[821px]:justify-between">
           <div className="text-xs text-muted-foreground">
-            已选择 {selectedItems.length} 个供应商配置
+            {t("providerImport.cherry.selected").replace("{count}", String(selectedItems.length))}
           </div>
           <DialogActions>
             <Button size="sm" variant="outline" onClick={onClose} disabled={importing}>
-              取消
+              {t("settings.cancel")}
             </Button>
             <Button
               size="sm"
@@ -384,7 +396,9 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               disabled={importing || selectedItems.length === 0}
             >
               {importing ? <RefreshCw className="size-4 animate-spin" /> : null}
-              {importing ? "正在同步…" : `同步 ${selectedItems.length} 个`}
+              {importing
+                ? t("providerImport.cherry.syncing")
+                : t("providerImport.cherry.sync").replace("{count}", String(selectedItems.length))}
             </Button>
           </DialogActions>
         </DialogFooter>
@@ -392,15 +406,17 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
           <DialogContent
             className="max-w-md p-0"
             closeDisabled={scanning || importing}
-            closeLabel="关闭"
+            closeLabel={t("settings.close")}
             showCloseButton
           >
             <DialogHeader>
-              <DialogTitle className="text-sm leading-normal">Cherry Studio 数据目录</DialogTitle>
+              <DialogTitle className="text-sm leading-normal">
+                {t("providerImport.cherry.dataDirectory")}
+              </DialogTitle>
               <DialogDescription className="text-xs">
                 {dataPath
-                  ? "正在使用手动指定的目录"
-                  : "LiveAgent 会自动读取 Cherry Studio 的数据目录设置"}
+                  ? t("providerImport.cherry.manualDirectoryInUse")
+                  : t("providerImport.cherry.autoDirectory")}
               </DialogDescription>
             </DialogHeader>
             <DialogBody>
@@ -409,7 +425,11 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                   variant="plain"
                   readOnly
                   value={resolvedDataPath}
-                  placeholder={scanning ? "正在检测…" : "未检测到数据目录"}
+                  placeholder={
+                    scanning
+                      ? t("providerImport.cherry.detecting")
+                      : t("providerImport.cherry.noDirectory")
+                  }
                   className="h-9 min-w-0 flex-1 text-xs"
                   title={resolvedDataPath}
                 />
@@ -420,8 +440,8 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                   className="shrink-0"
                   disabled={scanning || importing}
                   onClick={onChooseDataDirectory}
-                  title="选择数据目录"
-                  aria-label="选择 Cherry Studio 数据目录"
+                  title={t("providerImport.cherry.chooseDirectory")}
+                  aria-label={t("providerImport.cherry.chooseDirectoryLabel")}
                 >
                   {scanning ? (
                     <RefreshCw className="size-4 animate-spin" />
@@ -432,7 +452,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
               </div>
               {dataPath ? (
                 <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>手动指定</span>
+                  <span>{t("providerImport.cherry.manual")}</span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -441,7 +461,7 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                     disabled={scanning || importing}
                     onClick={onResetDataDirectory}
                   >
-                    恢复自动检测
+                    {t("providerImport.cherry.resetDirectory")}
                   </Button>
                 </div>
               ) : null}

@@ -1,5 +1,5 @@
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
-import { useLocale } from "@liveagent/ui/i18n/index";
+import { type Locale, t as translate, useLocale } from "@liveagent/ui/i18n/index";
 import {
   createContext,
   type ReactNode,
@@ -81,40 +81,31 @@ export type CheckpointRewoundInfo = {
  */
 export function formatCheckpointRewoundNotification(
   info: CheckpointRewoundInfo,
-  zh: boolean,
+  locale: Locale,
 ): { level: "success" | "error"; message: string } {
-  const nb = (value: number) => `\u00A0${value}\u00A0`;
-  const files = (value: number) => `${value} ${value === 1 ? "file" : "files"}`;
+  const text = (key: string) => translate(`checkpointRewind.notice.${key}`, locale);
+  const counted = (key: string, value: number) =>
+    text(`${key}.${value === 1 ? "one" : "other"}`).replace("{count}", String(value));
   const changes: string[] = [];
   const issues: string[] = [];
-  if (zh) {
-    if (info.restoredFiles > 0) changes.push(`恢复${nb(info.restoredFiles)}个`);
-    if (info.deletedFiles > 0) changes.push(`删除${nb(info.deletedFiles)}个`);
-    // 组尾统一补"文件":单项时"删除 1 个文件",双项时"恢复 2 个、删除 1 个文件"。
-    if (changes.length > 0) changes[changes.length - 1] += "文件";
-    if (info.conflicts > 0) issues.push(`冲突跳过${nb(info.conflicts)}个`);
-    if (info.failed > 0) issues.push(`失败${nb(info.failed)}个`);
-    if (info.captureErrors > 0) issues.push(`${info.captureErrors}\u00A0个无前像未回退`);
-  } else {
-    if (info.restoredFiles > 0) changes.push(`restored ${files(info.restoredFiles)}`);
-    if (info.deletedFiles > 0) changes.push(`deleted ${files(info.deletedFiles)}`);
-    if (info.conflicts > 0)
-      issues.push(`${info.conflicts} conflict${info.conflicts === 1 ? "" : "s"} skipped`);
-    if (info.failed > 0) issues.push(`${info.failed} failed`);
-    if (info.captureErrors > 0) issues.push(`${info.captureErrors} without pre-image`);
-  }
-  const head = zh
-    ? changes.length > 0
-      ? `已回退代码：${changes.join("、")}`
-      : "已回退代码：没有文件需要改动"
-    : changes.length > 0
-      ? `Code rewound: ${changes.join(", ")}`
-      : "Code rewound: no file changes were needed";
+  if (info.restoredFiles > 0) changes.push(counted("restored", info.restoredFiles));
+  if (info.deletedFiles > 0) changes.push(counted("deleted", info.deletedFiles));
+  if (info.conflicts > 0) issues.push(counted("conflicts", info.conflicts));
+  if (info.failed > 0) issues.push(text("failed").replace("{count}", String(info.failed)));
+  if (info.captureErrors > 0)
+    issues.push(text("noPreImage").replace("{count}", String(info.captureErrors)));
+  const separator = text("separator");
+  const head =
+    changes.length > 0
+      ? text("head").replace(
+          "{changes}",
+          // Chinese closes the whole group with a single trailing noun ("files").
+          text("changes").replace("{changes}", changes.join(separator)),
+        )
+      : text("headNone");
   const message =
     issues.length > 0
-      ? zh
-        ? `${head}（${issues.join("、")}）`
-        : `${head} (${issues.join(", ")})`
+      ? text("withIssues").replace("{head}", head).replace("{issues}", issues.join(separator))
       : head;
   return {
     level: info.failed > 0 || info.conflicts > 0 || info.captureErrors > 0 ? "error" : "success",
@@ -185,8 +176,7 @@ export function CheckpointRewindProvider(props: {
     resolveAuthorizedRoots,
     onRewound,
   } = props;
-  const { locale } = useLocale();
-  const zh = locale === "zh-CN";
+  const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
   const [turns, setTurns] = useState<CheckpointTurnSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -250,67 +240,38 @@ export function CheckpointRewindProvider(props: {
           turnSeq: turn.turnSeq,
           authorizedRoots,
         });
+        const counted = (key: string, value: number) =>
+          t(`checkpointRewind.${key}.${value === 1 ? "one" : "other"}`).replace(
+            "{count}",
+            String(value),
+          );
         const parts: string[] = [];
-        if (stats.restoreFiles > 0)
-          parts.push(
-            zh ? `将恢复 ${stats.restoreFiles} 个文件` : `Restore ${stats.restoreFiles} file(s)`,
-          );
-        if (stats.deleteFiles > 0)
-          parts.push(
-            zh ? `将删除 ${stats.deleteFiles} 个文件` : `Delete ${stats.deleteFiles} file(s)`,
-          );
-        if (stats.cleanFiles > 0)
-          parts.push(
-            zh ? `${stats.cleanFiles} 个文件无变化` : `${stats.cleanFiles} file(s) unchanged`,
-          );
-        if (stats.skippedDirs > 0)
-          parts.push(
-            zh
-              ? `${stats.skippedDirs} 个已删除的目录无法恢复`
-              : `${stats.skippedDirs} deleted director(ies) cannot be restored`,
-          );
-        if (stats.missingBlobs > 0)
-          parts.push(
-            zh
-              ? `${stats.missingBlobs} 个文件缺少改动前快照`
-              : `${stats.missingBlobs} file(s) missing their pre-edit snapshot`,
-          );
+        if (stats.restoreFiles > 0) parts.push(counted("preview.restore", stats.restoreFiles));
+        if (stats.deleteFiles > 0) parts.push(counted("preview.delete", stats.deleteFiles));
+        if (stats.cleanFiles > 0) parts.push(counted("preview.clean", stats.cleanFiles));
+        if (stats.skippedDirs > 0) parts.push(counted("preview.skippedDirs", stats.skippedDirs));
+        if (stats.missingBlobs > 0) parts.push(counted("preview.missingBlobs", stats.missingBlobs));
         if (stats.unresolvableFiles > 0)
-          parts.push(
-            zh
-              ? `${stats.unresolvableFiles} 个路径无法回退（目录未授权，或路径包含符号链接）`
-              : `${stats.unresolvableFiles} path(s) cannot be rewound (directory unauthorized, or path contains a symlink)`,
-          );
+          parts.push(counted("preview.unresolvable", stats.unresolvableFiles));
         if (stats.captureErrors > 0 || turn.incomplete)
-          parts.push(
-            zh
-              ? `本轮有 ${Math.max(stats.captureErrors, 1)} 次快照记录失败，回退结果可能不完整`
-              : `${Math.max(stats.captureErrors, 1)} snapshot(s) failed to record this turn; the rewind may be incomplete`,
-          );
+          parts.push(counted("preview.captureErrors", Math.max(stats.captureErrors, 1)));
         const actionable = stats.entries.filter(
           (entry) => entry.action === "restore" || entry.action === "delete",
         );
         // 检查点只记录 agent 工具写入前的前像,编辑器/文件树里的手改既不入账、
         // 也无法与工具写入区分。回退按前像整体覆盖,手改会被一并抹掉,先说清楚。
-        if (actionable.length > 0)
-          parts.push(
-            zh
-              ? "在编辑器或文件树中的手动修改不在检查点内，将被一并覆盖"
-              : "Manual edits made in the editor or file tree are not checkpointed and will be overwritten",
-          );
+        if (actionable.length > 0) parts.push(t("checkpointRewind.preview.manualEdits"));
         const confirmed = await confirm({
-          title: zh ? "回退到本轮开始前" : "Rewind to before this turn",
+          title: t("checkpointRewind.preview.title"),
           subtitle: new Date(turn.firstCapturedAt).toLocaleString(),
           description:
             parts.length > 0
-              ? parts.join(zh ? "，" : ", ")
-              : zh
-                ? "本轮没有可回退的文件改动"
-                : "No file changes to rewind in this turn",
+              ? parts.join(t("checkpointRewind.preview.separator"))
+              : t("checkpointRewind.preview.noChanges"),
           detail:
             actionable.length > 0 ? actionable.map((entry) => entry.path).join("\n") : undefined,
-          confirmLabel: zh ? "回退" : "Rewind",
-          cancelLabel: zh ? "取消" : "Cancel",
+          confirmLabel: t("checkpointRewind.preview.confirm"),
+          cancelLabel: t("checkpointRewind.preview.cancel"),
         });
         if (!confirmed) return;
         // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
@@ -344,39 +305,35 @@ export function CheckpointRewindProvider(props: {
         ) {
           const issueLines = [
             ...result.conflicts.map((path) =>
-              zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`,
+              t("checkpointRewind.result.conflict").replace("{path}", path),
             ),
-            ...result.failed.map((path) => (zh ? `失败: ${path}` : `failed: ${path}`)),
+            ...result.failed.map((path) =>
+              t("checkpointRewind.result.failed").replace("{path}", path),
+            ),
           ];
           // 捕获缺口/不可恢复目录没有具体路径列表,单独一行说明。
           if (result.captureErrors > 0)
-            issueLines.push(
-              zh
-                ? `该轮有 ${result.captureErrors} 个文件没有前像(捕获失败),未被回退`
-                : `${result.captureErrors} file(s) had no pre-image (capture failed) and were not rewound`,
-            );
+            issueLines.push(counted("result.captureErrors", result.captureErrors));
           if (result.skippedDirs > 0)
-            issueLines.push(
-              zh
-                ? `${result.skippedDirs} 个被删除目录无法恢复`
-                : `${result.skippedDirs} deleted dir(s) could not be restored`,
-            );
+            issueLines.push(counted("result.skippedDirs", result.skippedDirs));
           await confirm({
-            title: zh ? "回退部分未完成" : "Rewind partially completed",
-            description: zh
-              ? `已恢复 ${result.restoredFiles} 个、删除 ${result.deletedFiles} 个；冲突跳过 ${result.conflicts.length} 个、失败 ${result.failed.length} 个`
-              : `Restored ${result.restoredFiles}, deleted ${result.deletedFiles}; ${result.conflicts.length} conflict(s) skipped, ${result.failed.length} failed`,
+            title: t("checkpointRewind.result.partialTitle"),
+            description: t("checkpointRewind.result.partialSummary")
+              .replace("{restored}", String(result.restoredFiles))
+              .replace("{deleted}", String(result.deletedFiles))
+              .replace("{conflicts}", String(result.conflicts.length))
+              .replace("{failed}", String(result.failed.length)),
             detail: issueLines.join("\n"),
-            confirmLabel: zh ? "知道了" : "OK",
+            confirmLabel: t("checkpointRewind.result.ok"),
             cancelLabel: "",
             hideCancel: true,
           });
         }
       } catch (error) {
         await confirm({
-          title: zh ? "回退失败" : "Rewind failed",
+          title: t("checkpointRewind.result.failedTitle"),
           description: String(error),
-          confirmLabel: zh ? "知道了" : "OK",
+          confirmLabel: t("checkpointRewind.result.ok"),
           cancelLabel: "",
           hideCancel: true,
         });
@@ -385,7 +342,7 @@ export function CheckpointRewindProvider(props: {
         setBusyTurn(null);
       }
     },
-    [client, confirm, conversationId, loadTurns, zh],
+    [client, confirm, conversationId, loadTurns, t],
   );
 
   const latestRef = useRef({ turns, loading });

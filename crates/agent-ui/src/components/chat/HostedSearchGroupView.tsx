@@ -97,17 +97,24 @@ function SourceFavicon({ url }: { url: string }) {
   );
 }
 
-function completedLabel(locale: "zh-CN" | "en-US", searchCount: number, sourceCount: number) {
-  if (locale === "en-US") {
-    if (searchCount === 0) {
-      return sourceCount > 0 ? `Search complete · ${sourceCount} sources` : "Search complete";
-    }
-    return `Searched ${searchCount} ${searchCount === 1 ? "time" : "times"}${sourceCount > 0 ? ` · ${sourceCount} sources` : ""}`;
-  }
+function countText(t: (key: string) => string, key: string, count: number) {
+  return t(key).replace("{count}", String(count));
+}
+
+function completedLabel(t: (key: string) => string, searchCount: number, sourceCount: number) {
   if (searchCount === 0) {
-    return sourceCount > 0 ? `联网搜索完成 · ${sourceCount} 个来源` : "联网搜索完成";
+    return sourceCount > 0
+      ? countText(t, "chat.hostedSearch.completedWithSources", sourceCount)
+      : t("chat.hostedSearch.completed");
   }
-  return `已搜索 ${searchCount} 次${sourceCount > 0 ? ` · ${sourceCount} 个来源` : ""}`;
+  const searched = countText(
+    t,
+    `chat.hostedSearch.searched.${searchCount === 1 ? "one" : "other"}`,
+    searchCount,
+  );
+  return sourceCount > 0
+    ? searched + countText(t, "chat.hostedSearch.sourcesSuffix", sourceCount)
+    : searched;
 }
 
 export function HostedSearchGroupView({
@@ -118,7 +125,7 @@ export function HostedSearchGroupView({
   isLive?: boolean;
   readOnly?: boolean;
 }) {
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const queries = useMemo(() => getUniqueQueries(items), [items]);
@@ -130,14 +137,10 @@ export function HostedSearchGroupView({
   const hiddenSourceCount = sources.length - visibleSources.length;
   const hasDetails = queries.length > 0 || sources.length > 0 || failedCount > 0;
   const label = active
-    ? locale === "en-US"
-      ? "Searching the web"
-      : "正在联网搜索"
+    ? t("chat.hostedSearch.searching")
     : status === "failed"
-      ? locale === "en-US"
-        ? "Web search failed"
-        : "联网搜索失败"
-      : completedLabel(locale, items.length, sources.length);
+      ? t("chat.hostedSearch.failed")
+      : completedLabel(t, items.length, sources.length);
 
   return (
     <section
@@ -182,7 +185,7 @@ export function HostedSearchGroupView({
           {() => (
             <div className="mt-1 border-l border-border/55 py-1 pl-3">
               <section
-                aria-label={locale === "en-US" ? "Web search activity" : "联网搜索过程"}
+                aria-label={t("chat.hostedSearch.activity")}
                 className="max-h-64 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
               >
                 <div className="flex flex-col gap-1">
@@ -219,9 +222,11 @@ export function HostedSearchGroupView({
 
                   {failedCount > 0 ? (
                     <p className="px-1.5 py-1 text-xs leading-5 text-destructive">
-                      {locale === "en-US"
-                        ? `${failedCount} ${failedCount === 1 ? "search" : "searches"} failed`
-                        : `${failedCount} 次搜索失败`}
+                      {countText(
+                        t,
+                        `chat.hostedSearch.failedCount.${failedCount === 1 ? "one" : "other"}`,
+                        failedCount,
+                      )}
                     </p>
                   ) : null}
 
@@ -234,9 +239,7 @@ export function HostedSearchGroupView({
                       onClick={() => setShowAll(true)}
                       type="button"
                     >
-                      {locale === "en-US"
-                        ? `Show ${hiddenSourceCount} more sources`
-                        : `查看其余 ${hiddenSourceCount} 个来源`}
+                      {countText(t, "chat.hostedSearch.showMore", hiddenSourceCount)}
                     </button>
                   ) : null}
                 </div>

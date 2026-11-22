@@ -464,10 +464,10 @@ export function GatewayAppView({
   const sttSettingsService = useMemo(
     () =>
       createWebSttSettingsService(async (sttSecretUpdate) => {
-        if (!api) throw new Error("桌面 Agent 未连接，无法同步 STT 配置");
+        if (!api) throw new Error(translate("gatewayWeb.sttSyncNeedsAgent", settings.locale));
         await api.updateSettings({ sttSecretUpdate });
       }),
-    [api],
+    [api, settings.locale],
   );
 
   const {
@@ -544,7 +544,7 @@ export function GatewayAppView({
 
   const handleCheckpointRewound = useCallback(
     (info: CheckpointRewoundInfo) => {
-      const notice = formatCheckpointRewoundNotification(info, settings.locale === "zh-CN");
+      const notice = formatCheckpointRewoundNotification(info, settings.locale);
       addNotify(notice.level, notice.message);
     },
     [addNotify, settings.locale],

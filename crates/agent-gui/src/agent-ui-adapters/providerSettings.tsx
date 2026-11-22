@@ -268,6 +268,7 @@ function CcsImportModal(props: {
   onClose: () => void;
 }) {
   const { items, existingProviders, importing, result, onImport, onClose } = props;
+  const { t } = useLocale();
   const existing = useMemo(
     () => new Set(existingProviders.map(ccsImportIdentity)),
     [existingProviders],
@@ -291,15 +292,17 @@ function CcsImportModal(props: {
       <DialogContent
         className="flex h-dialog-34rem-dvh max-w-xl flex-col p-0"
         closeDisabled={importing}
-        closeLabel="关闭"
+        closeLabel={t("settings.close")}
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6">
           {sourceLogo("ccswitch", "size-9")}
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-sm leading-normal">从 CC Switch 导入</DialogTitle>
+            <DialogTitle className="text-sm leading-normal">
+              {t("providerImport.ccs.title")}
+            </DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              选择要导入的配置，并在后台获取模型列表
+              {t("providerImport.ccs.description")}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -330,19 +333,21 @@ function CcsImportModal(props: {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{item.name}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {item.baseUrl || "未配置 Base URL"}
+                      {item.baseUrl || t("providerImport.noBaseUrl")}
                     </div>
                   </div>
                   {item.apiKey.trim() ? <Key className="size-3.5" /> : null}
                   {alreadyImported ? (
-                    <span className="text-xs text-emerald-600">已导入</span>
+                    <span className="text-xs text-emerald-600">
+                      {t("providerImport.alreadyImported")}
+                    </span>
                   ) : null}
                 </label>
               );
             })
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              未发现可导入配置
+              {t("providerImport.ccs.empty")}
             </div>
           )}
         </DialogBody>
@@ -355,7 +360,7 @@ function CcsImportModal(props: {
         <DialogFooter className="px-6">
           <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={importing}>
-              关闭
+              {t("settings.close")}
             </Button>
             <Button
               className="gap-1.5"
@@ -367,7 +372,7 @@ function CcsImportModal(props: {
               ) : (
                 <Download className="size-3.5" />
               )}
-              导入 {selectedItems.length} 项
+              {t("providerImport.ccs.import").replace("{count}", String(selectedItems.length))}
             </Button>
           </DialogActions>
         </DialogFooter>
@@ -435,7 +440,7 @@ export function ProviderSettingsExtension(props: {
         .map((result) =>
           result.reason instanceof Error ? result.reason.message : String(result.reason),
         );
-      if (errors.length > 0) setMessage(errors.join("；"));
+      if (errors.length > 0) setMessage(errors.join(t("providerImport.errorSeparator")));
     } finally {
       setScanning(false);
     }
@@ -497,7 +502,9 @@ export function ProviderSettingsExtension(props: {
     );
     const failed = results.filter((result) => !result.ok).length;
     setMessage(
-      failed > 0 ? `已导入配置，${failed} 个供应商模型获取失败` : "已导入配置并激活新获取的模型",
+      failed > 0
+        ? t("providerImport.ccsImportedPartial").replace("{failed}", String(failed))
+        : t("providerImport.ccsImported"),
     );
   }
 
@@ -521,7 +528,7 @@ export function ProviderSettingsExtension(props: {
         ? updateCustomProviders(current, [...current.customProviders, ...imported])
         : current;
     });
-    setMessage(`已导入 ${imported.length} 个 CC Switch 供应商，正在获取模型…`);
+    setMessage(t("providerImport.ccsImporting").replace("{count}", String(imported.length)));
     void syncModels(imported).finally(() => setImporting(false));
   }
 
@@ -607,8 +614,10 @@ export function ProviderSettingsExtension(props: {
     const failed = results.filter((result) => !result.ok).length;
     setMessage(
       failed > 0
-        ? `已同步 ${importable.length} 个 Cherry Studio 供应商，${failed} 个模型列表获取失败`
-        : `已同步 ${importable.length} 个 Cherry Studio 供应商并激活新获取的模型`,
+        ? t("providerImport.cherrySyncedPartial")
+            .replace("{count}", String(importable.length))
+            .replace("{failed}", String(failed))
+        : t("providerImport.cherrySynced").replace("{count}", String(importable.length)),
     );
     setCherryModalOpen(false);
     setImporting(false);
@@ -663,7 +672,7 @@ export function ProviderSettingsExtension(props: {
         <DialogContent className="max-w-md" showCloseButton closeLabel={t("settings.close")}>
           <DialogHeader>
             <DialogTitle>{t("settings.importProviders")}</DialogTitle>
-            <DialogDescription>选择配置来源，再选择要导入的供应商。</DialogDescription>
+            <DialogDescription>{t("providerImport.chooseSource")}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-3">
             <Button
@@ -678,7 +687,9 @@ export function ProviderSettingsExtension(props: {
               {sourceLogo("ccswitch", "size-9")}
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">CC Switch</span>
-                <span className="block text-xs text-muted-foreground">发现 {ccsCount} 项配置</span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("providerImport.ccsFound").replace("{count}", String(ccsCount))}
+                </span>
               </span>
             </Button>
             <Button
@@ -694,7 +705,7 @@ export function ProviderSettingsExtension(props: {
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">Cherry Studio</span>
                 <span className="block text-xs text-muted-foreground">
-                  发现 {cherryCount} 项可同步配置
+                  {t("providerImport.cherryFound").replace("{count}", String(cherryCount))}
                 </span>
               </span>
             </Button>
@@ -712,7 +723,7 @@ export function ProviderSettingsExtension(props: {
               disabled={scanning}
             >
               <RefreshCw data-refresh-icon className={cn("size-4", scanning && "animate-spin")} />
-              {scanning ? "正在扫描…" : "重新扫描本地配置"}
+              {scanning ? t("providerImport.scanning") : t("providerImport.rescan")}
             </RefreshButton>
           </DialogFooter>
         </DialogContent>

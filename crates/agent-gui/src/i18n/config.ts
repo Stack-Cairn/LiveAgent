@@ -1,4 +1,6 @@
 import { createHostTranslations, type Locale } from "@liveagent/ui/i18n/hostTranslations";
+import { CHAT_PAGE_TRANSLATIONS } from "./chatPageTranslations";
+import { PROVIDER_IMPORT_TRANSLATIONS } from "./providerImportTranslations";
 
 export type { Locale } from "@liveagent/ui/i18n/hostTranslations";
 export {
@@ -13,6 +15,8 @@ export {
  */
 export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    ...CHAT_PAGE_TRANSLATIONS["zh-CN"],
+    ...PROVIDER_IMPORT_TRANSLATIONS["zh-CN"],
     "app.loadingStalled": "本地服务长时间没有响应，设置还没有加载完成。",
     "app.restartLocalService": "重启本地服务",
     "app.restartingLocalService": "正在重启本地服务…",
@@ -384,6 +388,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
   },
   "en-US": {
+    ...CHAT_PAGE_TRANSLATIONS["en-US"],
+    ...PROVIDER_IMPORT_TRANSLATIONS["en-US"],
     "app.loadingStalled":
       "The local service has not answered for a while, so settings are still loading.",
     "app.restartLocalService": "Restart local service",

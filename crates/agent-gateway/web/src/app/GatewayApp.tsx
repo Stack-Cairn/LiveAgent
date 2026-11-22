@@ -626,7 +626,7 @@ function useGatewayAppController() {
   const resolveActiveAgentID = useCallback(async () => {
     const currentApi = apiRef.current;
     if (!currentApi) {
-      throw new Error("Gateway 尚未连接。");
+      throw new Error(translate("gatewayWeb.gatewayNotConnected", localeRef.current));
     }
     let agentID = currentApi.getActiveAgent().trim();
     if (!agentID) {
@@ -634,7 +634,7 @@ function useGatewayAppController() {
       agentID = currentApi.getActiveAgent().trim();
     }
     if (!agentID) {
-      throw new Error("没有可用的 Agent。");
+      throw new Error(translate("gatewayWeb.noAgent", localeRef.current));
     }
     return agentID;
   }, []);

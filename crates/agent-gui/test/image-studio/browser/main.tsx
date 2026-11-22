@@ -4,12 +4,17 @@ import '@liveagent/app/index.css';
 import {ImageStudioPage} from '@liveagent/ui/features/image-studio/ImageStudioPage';
 import {ImageSettings} from '@liveagent/ui/pages/settings/ImageSettings';
 import {createImageStudioClient} from '@liveagent/ui/lib/imaging/client';
+import {LocaleContext,normalizeLocale,useLocaleContextValue} from '@liveagent/ui/i18n/index';
 import {transport,state} from './fixture';
 const client=createImageStudioClient({transport,reconnectDelaysMs:[20,40]});
 const memory=new Map<string,string>();
 const storage={getItem:(key:string)=>memory.get(key)??null,setItem:(key:string,v:string)=>{memory.set(key,v)},removeItem:(key:string)=>{memory.delete(key)}};
-const isSettings=new URLSearchParams(location.search).has('settings');
-createRoot(document.getElementById('root')!).render(<div style={{height:'100dvh',display:'flex',flexDirection:'column'}}>
+const params=new URLSearchParams(location.search);
+const isSettings=params.has('settings');
+// Optional ?locale=en-US renders the surfaces in English (default zh-CN).
+const locale=normalizeLocale(params.get('locale'));
+function WithLocale({children}:{children:React.ReactNode}){return <LocaleContext.Provider value={useLocaleContextValue(locale)}>{children}</LocaleContext.Provider>;}
+createRoot(document.getElementById('root')!).render(<WithLocale><div style={{height:'100dvh',display:'flex',flexDirection:'column'}}>
  <header style={{background:'#fff0a8',color:'#222',padding:'6px',fontSize:12}}>
   TEST MODE — fake transport only / no provider calls / NOT production dual-host acceptance
   <nav><a href="/">Workbench test</a> | <a href="/?settings">Settings test (reloads fixture)</a></nav>
@@ -17,4 +22,4 @@ createRoot(document.getElementById('root')!).render(<div style={{height:'100dvh'
   <label> <input type="checkbox" aria-label="Conflict on next settings save" onChange={e=>state.conflict=e.target.checked}/> Conflict on next settings save</label>
  </header>
  <div style={{flex:1,minHeight:0,overflow:isSettings?'auto':undefined}}>{isSettings?<ImageSettings client={client}/>:<ImageStudioPage client={client} ownerId="fake-owner" backendId="fake-backend" storage={storage}/>}</div>
-</div>);
+</div></WithLocale>);

@@ -2329,9 +2329,9 @@ function ChatPageContent(props: ChatPageProps) {
     : isCompactionRunning
       ? t("chat.compactingContextWait")
       : isConversationHydrating
-        ? "正在加载会话，请稍候..."
+        ? t("chat.hydrating")
         : isConversationHydrationFailed
-          ? "当前会话加载失败，请重新打开会话..."
+          ? t("chat.hydrationFailed")
           : enabledComposerSkills.length > 0
             ? t("chat.inputHintWithSkills")
             : t("chat.inputHint");
@@ -2503,7 +2503,7 @@ function ChatPageContent(props: ChatPageProps) {
           // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
           // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
           // 那要改写已落库的摘要才能修,不在本功能范围内。
-          const notice = formatCheckpointRewoundNotification(info, locale === "zh-CN");
+          const notice = formatCheckpointRewoundNotification(info, locale);
           addNotify(notice.level, notice.message);
         },
       },

@@ -126,7 +126,8 @@ export function ConfirmDeletePopover(props: {
       description={
         <>
           {t("settings.deleteConfirmYes")}{" "}
-          <span className="font-medium text-foreground">{props.name}</span>？
+          <span className="font-medium text-foreground">{props.name}</span>
+          {t("format.deleteQuestionEnd")}
           {t("settings.deleteConfirmDesc")}
         </>
       }

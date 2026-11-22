@@ -328,10 +328,13 @@ test("native K-brain host routes backend-owned memory over HTTP and rejects desk
 });
 
 test("checkpoint provider exposes unsupported reason and disables backend reads", () => {
+  const { t: translate } = createTsModuleLoader().loadModule("src/i18n/config.ts");
   const loader = createTsModuleLoader({
     mocks: {
       react: { useCallback: (callback) => callback },
-      "@liveagent/ui/i18n/index": { useLocale: () => ({ locale: "zh-CN" }) },
+      "@liveagent/ui/i18n/index": {
+        useLocale: () => ({ locale: "zh-CN", t: (key) => translate(key, "zh-CN") }),
+      },
       [source("lib/host.ts")]: {
         liveAgentRuntimeCapabilities: () => capabilities,
       },

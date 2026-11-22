@@ -82,7 +82,7 @@ test("完整读数：role=status + aria-label 拼出全部分组", async () => {
   const label = bar.getAttribute("aria-label");
   assert.equal(
     label,
-    "Turns 51 · Reasoning steps 672 ｜ Model inference 12m34s · Tool execution 42s ｜ Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% ｜ Time to first token 20.9s · Decode throughput 170 tok/s",
+    "Turns 51 · Reasoning steps 672 | Model inference 12m34s · Tool execution 42s | Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% | Time to first token 20.9s · Decode throughput 170 tok/s",
   );
   await unmount();
 });
@@ -109,7 +109,7 @@ test("提供 contextWindow 时 context 分组恒显，与 scale 同级不挂断�
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
   assert.equal(
     label,
-    "Turns 51 · Reasoning steps 672 ｜ Window used 25% ｜ Model inference 12m34s · Tool execution 42s ｜ Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% ｜ Time to first token 20.9s · Decode throughput 170 tok/s",
+    "Turns 51 · Reasoning steps 672 | Window used 25% | Model inference 12m34s · Tool execution 42s | Input tokens 111M tok · Output tokens 2.3M tok · Cache hit rate 85% | Time to first token 20.9s · Decode throughput 170 tok/s",
   );
   const contextEl = container.querySelector('[data-stats-group="context"]');
   assert.ok(contextEl, "应渲染 context 分组");
@@ -167,7 +167,7 @@ test("provider 未返回 usage 时 token 与性能分组整组隐藏", async () 
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
   assert.equal(
     label,
-    "Turns 51 · Reasoning steps 672 ｜ Model inference 12m34s · Tool execution 42s",
+    "Turns 51 · Reasoning steps 672 | Model inference 12m34s · Tool execution 42s",
   );
   await unmount();
 });

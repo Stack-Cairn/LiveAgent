@@ -710,7 +710,7 @@ export function DiffContent(props: {
   onInsertComposerSegments?: (segments: MentionComposerDraftSegment[]) => boolean;
 }) {
   const { diff, title, error, loading = false, showStat = true, onInsertComposerSegments } = props;
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const isDark = useIsDark();
   const rootRef = useRef<HTMLElement | null>(null);
   const scrollViewportRef = useRef<HTMLElement | null>(null);
@@ -1164,7 +1164,7 @@ export function DiffContent(props: {
   // hard-coded width/height): useLayoutEffect runs before paint, so an
   // out-of-bounds menu never flashes at the raw pointer position.
 
-  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "复制选中文本";
+  const copySelectedTextLabel = t("diffView.copySelectedText");
 
   return (
     <fieldset
@@ -1285,7 +1285,7 @@ export function DiffContent(props: {
           <div
             ref={diffHorizontalScrollbarTrackRef}
             role="scrollbar"
-            aria-label={locale === "en-US" ? "Horizontal diff scrollbar" : "diff 横向滚动条"}
+            aria-label={t("diffView.horizontalScrollbar")}
             aria-controls={diffScrollViewportId}
             aria-orientation="horizontal"
             aria-valuemin={0}

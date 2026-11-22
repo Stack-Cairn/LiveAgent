@@ -455,7 +455,18 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                       type="button"
                       aria-pressed={selected}
                       aria-current={index === setupStep ? "step" : undefined}
-                      aria-label={`${t(`settings.cuaDriver.${step}`)}，${t(done ? "settings.cuaDriver.stepDone" : index === setupStep ? "settings.cuaDriver.stepNext" : "settings.cuaDriver.stepPending")}`}
+                      aria-label={t("settings.cuaDriver.stepAriaLabel")
+                        .replace("{step}", t(`settings.cuaDriver.${step}`))
+                        .replace(
+                          "{state}",
+                          t(
+                            done
+                              ? "settings.cuaDriver.stepDone"
+                              : index === setupStep
+                                ? "settings.cuaDriver.stepNext"
+                                : "settings.cuaDriver.stepPending",
+                          ),
+                        )}
                       aria-controls="cua-step-content"
                       onClick={() => setSelectedStep(index)}
                       className={cn(

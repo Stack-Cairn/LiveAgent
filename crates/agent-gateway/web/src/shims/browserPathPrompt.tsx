@@ -13,6 +13,8 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { t } from "../i18n/config";
+import { loadWebLocale } from "../lib/webLocale";
 
 type BrowserPathPromptOptions = {
   title: string;
@@ -28,10 +30,15 @@ function BrowserPathPromptDialog(props: {
 }) {
   const { options, onResolve } = props;
   const [value, setValue] = useState("");
+  const [locale] = useState(loadWebLocale);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onResolve(null)}>
-      <DialogContent className="max-w-md p-0" closeLabel="取消" showCloseButton>
+      <DialogContent
+        className="max-w-md p-0"
+        closeLabel={t("gatewayWeb.pathPrompt.cancel", locale)}
+        showCloseButton
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -58,10 +65,10 @@ function BrowserPathPromptDialog(props: {
           <DialogFooter className="bg-muted/20">
             <DialogActions>
               <Button type="button" variant="outline" onClick={() => onResolve(null)}>
-                取消
+                {t("gatewayWeb.pathPrompt.cancel", locale)}
               </Button>
               <Button type="submit" disabled={!value.trim()}>
-                确认
+                {t("gatewayWeb.pathPrompt.confirm", locale)}
               </Button>
             </DialogActions>
           </DialogFooter>

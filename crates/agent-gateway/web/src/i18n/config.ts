@@ -1,4 +1,6 @@
 import { createHostTranslations, type Locale } from "@liveagent/ui/i18n/hostTranslations";
+import { GATEWAY_WEB_TRANSLATIONS } from "./gatewayWebTranslations";
+import { STATUS_DASHBOARD_TRANSLATIONS } from "./statusDashboardTranslations";
 
 export type { Locale } from "@liveagent/ui/i18n/hostTranslations";
 export {
@@ -13,6 +15,8 @@ export {
  */
 export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    ...GATEWAY_WEB_TRANSLATIONS["zh-CN"],
+    ...STATUS_DASHBOARD_TRANSLATIONS["zh-CN"],
     "app.desktopSettingsSyncFailed": "同步桌面端设置失败。",
     "app.webSettingsSaveFailed": "保存 WebUI 设置失败。",
     "chat.runtime.settingsSyncTitle": "正在同步桌面端设置",
@@ -131,6 +135,8 @@ export const WEBUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>>
     "login.rememberHint": "Token 验证通过后将本地保存，下次自动登录",
   },
   "en-US": {
+    ...GATEWAY_WEB_TRANSLATIONS["en-US"],
+    ...STATUS_DASHBOARD_TRANSLATIONS["en-US"],
     "app.desktopSettingsSyncFailed": "Failed to sync desktop settings.",
     "app.webSettingsSaveFailed": "Failed to save WebUI settings.",
     "chat.runtime.settingsSyncTitle": "Syncing desktop settings",

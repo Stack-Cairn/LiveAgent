@@ -41,7 +41,7 @@ export function DesktopCheckpointRewindProvider(props: {
   onRewound?: (info: CheckpointRewoundInfo) => void;
 }) {
   const { children, conversationId, workspaceRoot, project, disabled, onRewound } = props;
-  const { locale } = useLocale();
+  const { t } = useLocale();
   const capabilities = liveAgentRuntimeCapabilities();
 
   // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 且可写的额外授权根。
@@ -75,13 +75,7 @@ export function DesktopCheckpointRewindProvider(props: {
       client={desktopCheckpointRewindClient}
       conversationId={conversationId}
       disabled={disabled || !capabilities.checkpoints}
-      disabledReason={
-        capabilities.checkpoints
-          ? undefined
-          : locale === "zh-CN"
-            ? "K-brain 模式尚不支持文件检查点回退；文件修改由后端工具执行。"
-            : "File checkpoint rewind is not supported in K-brain mode; file changes are executed by backend tools."
-      }
+      disabledReason={capabilities.checkpoints ? undefined : t("chat.checkpointRewindUnsupported")}
       resolveAuthorizedRoots={resolveAuthorizedRoots}
       onRewound={onRewound}
     >
