@@ -21,11 +21,22 @@ function withFakeFrames(run) {
   const previous = [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame];
   const frames = new Map();
   let nextId = 1;
-  globalThis.requestAnimationFrame = (callback) => {
+  // Like the browser, reject a receiver other than the window (WebKit throws
+  // "Can only call Window.cancelAnimationFrame on instances of Window").
+  const assertWindowReceiver = (receiver, name) => {
+    if (receiver !== undefined && receiver !== globalThis) {
+      throw new TypeError(`Can only call Window.${name} on instances of Window`);
+    }
+  };
+  globalThis.requestAnimationFrame = function requestAnimationFrame(callback) {
+    assertWindowReceiver(this, "requestAnimationFrame");
     frames.set(nextId, callback);
     return nextId++;
   };
-  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+  globalThis.cancelAnimationFrame = function cancelAnimationFrame(id) {
+    assertWindowReceiver(this, "cancelAnimationFrame");
+    frames.delete(id);
+  };
   const flush = (now = 16) => {
     const pending = [...frames.values()];
     frames.clear();

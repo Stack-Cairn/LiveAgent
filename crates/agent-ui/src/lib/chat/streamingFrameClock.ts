@@ -51,14 +51,21 @@ export function requestStreamingFrame(callback: FrameCallback): () => void {
   // that was torn down) will never fire: schedule on the current one.
   if (pendingFrame === null || pendingFrame.request !== globalThis.requestAnimationFrame) {
     const request = globalThis.requestAnimationFrame;
-    pendingFrame = { id: request(runFrame), request, cancel: globalThis.cancelAnimationFrame };
+    // Host frame functions must be called on the window: WebKit rejects any
+    // other receiver ("Can only call Window.cancelAnimationFrame on instances
+    // of Window"), so the stored references are always invoked through call().
+    pendingFrame = {
+      id: request.call(globalThis, runFrame),
+      request,
+      cancel: globalThis.cancelAnimationFrame,
+    };
   }
   return () => {
     const index = queue.indexOf(entry);
     if (index === -1) return;
     queue.splice(index, 1);
     if (queue.length === 0 && pendingFrame !== null) {
-      pendingFrame.cancel?.(pendingFrame.id);
+      pendingFrame.cancel?.call(globalThis, pendingFrame.id);
       pendingFrame = null;
     }
   };
