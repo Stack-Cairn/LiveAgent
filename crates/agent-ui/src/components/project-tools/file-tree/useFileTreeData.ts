@@ -12,7 +12,7 @@ import { invokeFs, isFsBackendError } from "../../../lib/tools/fsBackend";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import {
   applyFileTreeExternalRoots,
-  applyFileTreeListResponse,
+  applyFileTreeListResponses,
   createFileTreeBuckets,
   createRootNode,
   dirname,
@@ -22,6 +22,7 @@ import {
   type FileTreeEntry,
   type FileTreeExternalRoot,
   type FileTreeKind,
+  type FileTreeListing,
   type FileTreeNodes,
   getFileTreeNodes,
   initialFileTreeInvalidationState,
@@ -58,6 +59,16 @@ type MentionListResponse = {
 };
 
 type LoadOptions = { force?: boolean; silent?: boolean };
+
+// A listing that arrived and waits for the next batch. It still has to be the
+// newest request for its path when the batch is applied.
+type PendingListing = FileTreeListing & {
+  key: string;
+  projectCwd: string;
+  tracker: ProjectRequestTracker;
+  epoch: number;
+  done: () => void;
+};
 
 // Per-project request bookkeeping. Living in a ref (never inside a setState
 // updater) so duplicate requests are rejected synchronously even when React
@@ -135,9 +146,28 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     return roots;
   }, [externalRoots]);
 
+  // Reconciling a 50k-node map with the attached roots scans every key, and the
+  // same map is reconciled from several places (render, updates, lookups).
+  // Remember the result per map for the current roots.
+  const reconciledNodes = useMemo(() => {
+    void externalRoots;
+    return new WeakMap<FileTreeNodes, FileTreeNodes>();
+  }, [externalRoots]);
+
+  const rememberReconciled = useCallback(
+    (current: FileTreeNodes, next: FileTreeNodes) => {
+      reconciledNodes.set(current, next);
+      reconciledNodes.set(next, next);
+      return next;
+    },
+    [reconciledNodes],
+  );
+
   const withExternalRoots = useCallback(
-    (current: FileTreeNodes) => applyFileTreeExternalRoots(current, externalRoots),
-    [externalRoots],
+    (current: FileTreeNodes) =>
+      reconciledNodes.get(current) ??
+      rememberReconciled(current, applyFileTreeExternalRoots(current, externalRoots)),
+    [externalRoots, reconciledNodes, rememberReconciled],
   );
 
   const resolveTreePath = useCallback(
@@ -195,15 +225,27 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
     setBuckets(next);
   }, []);
 
+  // Updates start from a reconciled map and never add nodes of a revoked root
+  // (listings of a revoked root are dropped), so the result only needs the
+  // roots re-attached to the primary root, not a scan for revoked nodes.
   const updateNodes = useCallback(
     (key: string, workdir: string, update: (nodes: FileTreeNodes) => FileTreeNodes) => {
       commitBuckets(
-        updateFileTreeNodes(bucketsRef.current, key, workdir, (current) =>
-          withExternalRoots(update(withExternalRoots(current))),
-        ),
+        updateFileTreeNodes(bucketsRef.current, key, workdir, (current) => {
+          const reconciled = withExternalRoots(current);
+          const next = update(reconciled);
+          if (next === reconciled) return reconciled;
+          return (
+            reconciledNodes.get(next) ??
+            rememberReconciled(
+              next,
+              applyFileTreeExternalRoots(next, externalRoots, { pruneRevoked: false }),
+            )
+          );
+        }),
       );
     },
-    [commitBuckets, withExternalRoots],
+    [commitBuckets, externalRoots, reconciledNodes, rememberReconciled, withExternalRoots],
   );
 
   const currentNodesForProject = useCallback(
@@ -238,6 +280,60 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
       if (!keep.has(key)) trackersRef.current.delete(key);
     }
   }, [commitBuckets, cwd, projectPathKey, withExternalRoots]);
+
+  // Listings that arrive close together (a refresh of every expanded folder)
+  // are applied in one update: one copy of the node map and one render
+  // instead of one per folder.
+  const pendingListingsRef = useRef<PendingListing[]>([]);
+  const listingFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushListings = useCallback(() => {
+    listingFlushTimerRef.current = null;
+    const pending = pendingListingsRef.current;
+    pendingListingsRef.current = [];
+    const byProject = new Map<string, { projectCwd: string; listings: FileTreeListing[] }>();
+    for (const listing of pending) {
+      if (listing.tracker.epochByPath.get(listing.path) !== listing.epoch) continue;
+      if (externalRootPathInfo(listing.path) && !resolveTreePath(listing.path)) continue;
+      let project = byProject.get(listing.key);
+      if (!project) {
+        project = { projectCwd: listing.projectCwd, listings: [] };
+        byProject.set(listing.key, project);
+      }
+      project.listings.push(listing);
+    }
+    for (const [key, { projectCwd, listings }] of byProject) {
+      updateNodes(key, projectCwd, (current) => applyFileTreeListResponses(current, listings));
+    }
+    for (const listing of pending) listing.done();
+  }, [resolveTreePath, updateNodes]);
+
+  const flushListingsRef = useRef(flushListings);
+  useEffect(() => {
+    flushListingsRef.current = flushListings;
+  }, [flushListings]);
+
+  useEffect(
+    () => () => {
+      if (listingFlushTimerRef.current !== null) clearTimeout(listingFlushTimerRef.current);
+      listingFlushTimerRef.current = null;
+      const pending = pendingListingsRef.current;
+      pendingListingsRef.current = [];
+      for (const listing of pending) listing.done();
+    },
+    [],
+  );
+
+  const queueListing = useCallback(
+    (listing: Omit<PendingListing, "done">) =>
+      new Promise<void>((resolve) => {
+        pendingListingsRef.current.push({ ...listing, done: resolve });
+        if (listingFlushTimerRef.current === null) {
+          listingFlushTimerRef.current = setTimeout(() => flushListingsRef.current(), 0);
+        }
+      }),
+    [],
+  );
 
   const loadChildren = useCallback(
     async (path: string, loadOptions?: LoadOptions) => {
@@ -285,9 +381,17 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
           ),
         );
         const listError = response.hasMore ? t("projectTools.fileTree.tooManyItems") : undefined;
-        updateNodes(key, cwd, (current) =>
-          applyFileTreeListResponse(current, path, workdir, entries, listError),
-        );
+        // Resolves once the listing is in the tree, so callers can rely on it.
+        await queueListing({
+          key,
+          projectCwd: cwd,
+          tracker,
+          epoch,
+          path,
+          cwd: workdir,
+          entries,
+          listError,
+        });
       } catch (error) {
         if (tracker.epochByPath.get(path) !== epoch) return;
         updateNodes(key, cwd, (current) =>
@@ -304,7 +408,16 @@ export function useFileTreeData(options: UseFileTreeDataOptions): UseFileTreeDat
         if (tracker.epochByPath.get(path) === epoch) tracker.loading.delete(path);
       }
     },
-    [currentNodesForProject, cwd, projectPathKey, resolveTreePath, t, trackerFor, updateNodes],
+    [
+      currentNodesForProject,
+      cwd,
+      projectPathKey,
+      queueListing,
+      resolveTreePath,
+      t,
+      trackerFor,
+      updateNodes,
+    ],
   );
 
   // Initial root load once the tool is initialized for a project.

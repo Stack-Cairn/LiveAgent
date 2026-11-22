@@ -155,9 +155,15 @@ function createExternalRootNode(root: FileTreeExternalRoot): FileTreeNode {
 // Adds each active attached directory as a child of the primary workspace
 // root. The primary root remains the source of truth for its own fs_list
 // response; this helper preserves external children across those refreshes.
+//
+// `pruneRevoked: false` skips the scan of the whole map for nodes of revoked
+// roots. Only valid for a map derived from one that was already reconciled
+// with the same roots by updates that add no such nodes (a listing of an
+// active root); it still re-attaches the roots to the primary root.
 export function applyFileTreeExternalRoots(
   nodes: FileTreeNodes,
   roots: readonly FileTreeExternalRoot[],
+  options: { pruneRevoked?: boolean } = {},
 ): FileTreeNodes {
   const normalizedRoots: FileTreeExternalRoot[] = [];
   const seen = new Set<string>();
@@ -181,10 +187,13 @@ export function applyFileTreeExternalRoots(
 
   // A revoked, missing, or renamed root must not leave stale nodes behind in
   // an LRU project bucket.
-  for (const path of Object.keys(nodes)) {
-    const info = externalRootPathInfo(path);
-    if (info && !activeIds.has(info.rootId)) {
-      delete mutable()[path];
+  if (options.pruneRevoked !== false) {
+    for (const path in nodes) {
+      if (!path.startsWith(EXTERNAL_ROOT_PATH_PREFIX)) continue;
+      const info = externalRootPathInfo(path);
+      if (info && !activeIds.has(info.rootId)) {
+        delete mutable()[path];
+      }
     }
   }
 
@@ -270,27 +279,34 @@ export function markFileTreeNodeLoadError(
   return { ...nodes, [path]: { ...node, loading: false, error: nextError } };
 }
 
-// Merges one fs_list response into the node map. Children and entry nodes
-// keep their previous object identity when unchanged; if the whole listing is
-// unchanged the previous map reference is returned as-is.
-export function applyFileTreeListResponse(
-  nodes: FileTreeNodes,
-  path: string,
-  cwd: string,
-  entries: FileTreeEntry[],
-  listError: string | undefined,
-): FileTreeNodes {
+export type FileTreeListing = {
+  path: string;
+  cwd: string;
+  entries: FileTreeEntry[];
+  listError: string | undefined;
+};
+
+// Copy-on-write view of a node map: the map is copied once, on the first
+// write, however many listings are applied to it.
+type FileTreeNodesDraft = { base: FileTreeNodes; next: FileTreeNodes | null };
+
+function writableNodes(draft: FileTreeNodesDraft) {
+  if (!draft.next) draft.next = { ...draft.base };
+  return draft.next;
+}
+
+function applyListingToDraft(draft: FileTreeNodesDraft, listing: FileTreeListing) {
+  const { path, cwd, entries, listError } = listing;
+  const nodes = draft.next ?? draft.base;
   const parent = nodes[path] ?? (path === ROOT_PATH ? createRootNode(cwd) : undefined);
-  if (!parent || parent.kind !== "dir") return nodes;
-  const next: FileTreeNodes = { ...nodes };
-  let changed = nodes[path] === undefined;
+  if (!parent || parent.kind !== "dir") return;
   const childPaths: string[] = [];
   for (const entry of entries) {
     if (!entry.path) continue;
     childPaths.push(entry.path);
     const name = basename(entry.path) || entry.path;
     const hidden = parent.hidden || entry.hidden;
-    const existing = nodes[entry.path];
+    const existing = (draft.next ?? draft.base)[entry.path];
     if (
       existing &&
       existing.kind === entry.kind &&
@@ -300,7 +316,7 @@ export function applyFileTreeListResponse(
       continue;
     }
     const sameKind = existing !== undefined && existing.kind === entry.kind;
-    next[entry.path] = {
+    writableNodes(draft)[entry.path] = {
       path: entry.path,
       name,
       kind: entry.kind,
@@ -310,42 +326,71 @@ export function applyFileTreeListResponse(
       loading: false,
       error: sameKind ? existing.error : undefined,
     };
-    changed = true;
   }
   // Prune subtrees of children that disappeared so the map cannot grow
-  // without bound across refreshes.
+  // without bound across refreshes. One pass over the map covers all of them.
   const kept = new Set(childPaths);
+  const vanished: string[] = [];
   for (const previousChild of parent.children) {
     if (
       kept.has(previousChild) ||
       (path === ROOT_PATH && isExternalRootPath(previousChild)) ||
-      next[previousChild] === undefined
+      (draft.next ?? draft.base)[previousChild] === undefined
     ) {
       continue;
     }
-    for (const key of Object.keys(next)) {
-      if (key === previousChild || key.startsWith(`${previousChild}/`)) {
-        delete next[key];
-        changed = true;
+    vanished.push(previousChild);
+  }
+  if (vanished.length > 0) {
+    const next = writableNodes(draft);
+    const prefixes = vanished.map((child) => `${child}/`);
+    const removed: string[] = [];
+    for (const key in next) {
+      if (vanished.includes(key) || prefixes.some((prefix) => key.startsWith(prefix))) {
+        removed.push(key);
       }
     }
+    for (const key of removed) delete next[key];
   }
   const parentUnchanged =
+    nodes[path] !== undefined &&
     parent.loaded &&
     !parent.loading &&
     parent.error === listError &&
     sameStringArray(parent.children, childPaths);
   if (!parentUnchanged) {
-    next[path] = {
+    writableNodes(draft)[path] = {
       ...parent,
       children: childPaths,
       loaded: true,
       loading: false,
       error: listError,
     };
-    changed = true;
   }
-  return changed ? next : nodes;
+}
+
+// Merges one fs_list response into the node map. Children and entry nodes
+// keep their previous object identity when unchanged; if the whole listing is
+// unchanged the previous map reference is returned as-is (and nothing is copied).
+export function applyFileTreeListResponse(
+  nodes: FileTreeNodes,
+  path: string,
+  cwd: string,
+  entries: FileTreeEntry[],
+  listError: string | undefined,
+): FileTreeNodes {
+  return applyFileTreeListResponses(nodes, [{ path, cwd, entries, listError }]);
+}
+
+// Applies several listings in order, exactly as consecutive
+// applyFileTreeListResponse calls would, but copies the map at most once.
+export function applyFileTreeListResponses(
+  nodes: FileTreeNodes,
+  listings: readonly FileTreeListing[],
+): FileTreeNodes {
+  const draft: FileTreeNodesDraft = { base: nodes, next: null };
+  for (const listing of listings) applyListingToDraft(draft, listing);
+  return draft.next ?? nodes;
 }
 
 export function removeFileTreeNodeSubtree(nodes: FileTreeNodes, path: string): FileTreeNodes {
