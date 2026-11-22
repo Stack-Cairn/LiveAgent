@@ -66,6 +66,9 @@ export function transpileTypeScriptModule(source, filePath) {
       loader: loaderFor(filePath),
       platform: "node",
       sourcefile: filePath,
+      // Lower `import()` to `require()` so lazily loaded modules resolve through
+      // the test loaders (and their mocks); vm scripts cannot import natively.
+      supported: { "dynamic-import": false },
       target: "es2022",
     }).code;
   } catch (error) {

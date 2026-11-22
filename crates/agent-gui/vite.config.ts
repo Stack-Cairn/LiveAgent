@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import Icons from "unplugin-icons/vite";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { lazyDiffHighlightGrammars } from "../agent-ui/build/lazyDiffGrammars";
 
 const packageJson = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
@@ -18,7 +19,7 @@ if (!Number.isInteger(desktopDevPort) || desktopDevPort < 1 || desktopDevPort > 
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), Icons({ compiler: "jsx", jsx: "react" })],
+  plugins: [react(), Icons({ compiler: "jsx", jsx: "react" }), lazyDiffHighlightGrammars()],
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
@@ -45,17 +46,32 @@ export default defineConfig(async () => ({
     // is the TypeScript worker at ~6.6 MB). Bump the warning limit so those
     // known-large chunks don't drown out real regressions in the console.
     chunkSizeWarningLimit: 7_000,
-    // NOTE: a previous build config set `rolldownOptions.output.codeSplitting`
-    // with a `liveagent-app` group. That custom chunking split the
+    // Chunking: rolldown's default automatic splitting (one chunk per dynamic
+    // import boundary plus shared chunks), with one pinned group.
+    //
+    // History: a custom `liveagent-app` group with `maxSize` once split the
     // `style-to-js → style-to-object → inline-style-parser` CommonJS interop
-    // chain across chunks, and rolldown's `__commonJSMin` thunks failed to
-    // initialize across the chunk boundary — the release bundle crashed at
-    // render time with "require_cjs$N is not a function" (black screen), while
-    // `tauri dev` (no chunk splitting) worked. Disabled here to fall back to
-    // rolldown's default automatic chunking, which keeps that CJS chain intact.
+    // chain (pulled in by the markdown renderer via hast-util-to-jsx-runtime)
+    // across chunks. rolldown's `__commonJSMin` thunks then failed to
+    // initialize across the chunk boundary and the release bundle crashed at
+    // render time with "require_cjs$N is not a function" (black screen) while
+    // `tauri dev` worked. The bundle was then shipped as one 24 MB file.
+    //
+    // The `markdown-style-cjs` group keeps that whole chain (and its only
+    // consumer) in a single chunk no matter how the rest is split. Do not add
+    // size-based groups (`maxSize`/`minSize`) — they are what cut the chain.
+    // `scripts/smoke-frontend-bundle.mjs` loads the built bundle in Chromium
+    // and WebKit and imports every chunk; run it after changing this block.
     rolldownOptions: {
       output: {
-        codeSplitting: false,
+        codeSplitting: {
+          groups: [
+            {
+              name: "markdown-style-cjs",
+              test: /[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:style-to-js|style-to-object|inline-style-parser|hast-util-to-jsx-runtime)[\\/]/,
+            },
+          ],
+        },
       },
     },
   },

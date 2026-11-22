@@ -12,11 +12,7 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import {
-  IMPORT_BATCH,
-  type ImportPreview,
-  readCalendarFile,
-} from "../../lib/planning/calendarImport";
+import type { ImportPreview } from "../../lib/planning/calendarImport";
 import { calendarName, localizePlanningError, translate } from "../../lib/planning/i18n";
 import { planningStore } from "../../lib/planning/store";
 import { addDays, timeLabel, zonedParts } from "../../lib/planning/time";
@@ -24,9 +20,12 @@ import type { PlanningSnapshot } from "../../lib/planning/types";
 import { PlanningField, PlanningSelect } from "./PlanningControls";
 
 const PREVIEW_ROWS = 100;
-function chunks<T>(items: T[]) {
-  return Array.from({ length: Math.ceil(items.length / IMPORT_BATCH) }, (_, i) =>
-    items.slice(i * IMPORT_BATCH, (i + 1) * IMPORT_BATCH),
+// The ICS, ZIP and mail parsers only matter once a file is picked, so they load
+// on demand instead of with the planner and settings screens.
+const loadCalendarImport = () => import("../../lib/planning/calendarImport");
+function chunks<T>(items: T[], size: number) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
+    items.slice(i * size, (i + 1) * size),
   );
 }
 
@@ -55,6 +54,7 @@ export function CalendarImport({
     setResult("");
     setPreview(null);
     try {
+      const { readCalendarFile } = await loadCalendarImport();
       setPreview(await readCalendarFile(file, { from, to, zone: snapshot.timeZone }));
     } catch (e) {
       setError(localizePlanningError(e));
@@ -74,9 +74,16 @@ export function CalendarImport({
       const calendar = snapshot.calendars.find((c) => c.id === calendarId);
       if (preview.entries.length && !calendar)
         throw Error(translate("planner.import.needCalendar"));
+      const { IMPORT_BATCH } = await loadCalendarImport();
       const batches = [
-        ...chunks(preview.entries).map((entries) => ({ kind: "events" as const, entries })),
-        ...chunks(preview.tasks).map((entries) => ({ kind: "tasks" as const, entries })),
+        ...chunks(preview.entries, IMPORT_BATCH).map((entries) => ({
+          kind: "events" as const,
+          entries,
+        })),
+        ...chunks(preview.tasks, IMPORT_BATCH).map((entries) => ({
+          kind: "tasks" as const,
+          entries,
+        })),
       ];
       for (const [index, batch] of batches.entries()) {
         setProgress(

@@ -1,6 +1,5 @@
 import { Loader2, Minus, Plus, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { mermaid } from "@streamdown/mermaid";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   formatMermaidViewBox,
@@ -10,6 +9,7 @@ import {
   zoomMermaidViewBox,
 } from "../../lib/mermaidViewBox";
 import { cn } from "../../lib/shared/utils";
+import { mermaid } from "./lazyMermaid";
 import { useMermaidConfig } from "./MermaidTheme";
 
 const MIN_ZOOM = 0.5;

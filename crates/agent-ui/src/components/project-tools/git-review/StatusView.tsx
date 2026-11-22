@@ -35,7 +35,7 @@ import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import { Button } from "../../ui/button";
 import { useRightDockToolContext } from "../RightDockContext";
 import { GitCommitComposer } from "./CommitComposer";
-import { DiffReviewCard } from "./DiffView";
+import { DiffReviewCard } from "./LazyDiffView";
 import {
   basename,
   type ChangeContextMenuState,

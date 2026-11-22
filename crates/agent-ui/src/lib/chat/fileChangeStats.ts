@@ -1,4 +1,4 @@
-import { generateDiffFile } from "@git-diff-view/file";
+import { structuredPatch } from "diff";
 import { fileToolFieldLines, readStreamPreviewMeta } from "./toolPreview";
 
 export type FileChangeStats = {
@@ -11,9 +11,18 @@ const MAX_DIFF_CHARS = 200_000;
 function diffLineCounts(oldText: string, newText: string): FileChangeStats | undefined {
   if (!oldText && !newText) return { added: 0, removed: 0 };
   try {
-    const file = generateDiffFile("old", oldText, "new", newText, "txt", "txt");
-    file.initRaw();
-    return { added: file.additionLength, removed: file.deletionLength };
+    // Count the hunk lines of the same patch the diff viewer renders, without
+    // pulling the viewer's syntax highlighter into every bundle that shows stats.
+    const patch = structuredPatch("old", "new", oldText, newText, "", "");
+    let added = 0;
+    let removed = 0;
+    for (const hunk of patch.hunks) {
+      for (const line of hunk.lines) {
+        if (line.startsWith("+")) added += 1;
+        else if (line.startsWith("-")) removed += 1;
+      }
+    }
+    return { added, removed };
   } catch {
     return undefined;
   }

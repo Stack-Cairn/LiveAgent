@@ -448,9 +448,14 @@ export default function App() {
     async function hydrateSettings() {
       // 在发起加载前取版本：加载途中到达的新目录不会被误记为已处理。
       catalogVersionAtSettingsLoadRef.current = getCatalogLiveVersion();
+      // The chat page is its own chunk. Leaving the boot screen before it arrived would put the
+      // chat surface into its Suspense fallback, and React then holds a shown fallback for at
+      // least 300 ms even when the chunk lands right after. A failed load still surfaces through
+      // the lazy component and its error boundary.
+      let chatPageLoaded: Promise<unknown> = Promise.resolve();
       try {
         const persistedSettingsPromise = loadPersistedSettingsWithDefaults();
-        void loadChatPage();
+        chatPageLoaded = loadChatPage().catch(() => undefined);
         const { settings: loaded, defaultWorkdir } = await persistedSettingsPromise;
         loaded.skills = (await kbrainSkillsAdapter.list()).settings;
         void syncWorkspaceSkillsOverridesOnce(loaded).catch((error) => {
@@ -483,6 +488,7 @@ export default function App() {
           });
         }
       } finally {
+        await chatPageLoaded;
         if (!cancelled) {
           setSettingsReady(true);
         }
