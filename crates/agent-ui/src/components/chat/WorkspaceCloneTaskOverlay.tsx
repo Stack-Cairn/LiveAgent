@@ -37,11 +37,10 @@ type WorkspaceCloneTaskOverlayProps = {
 };
 
 function TaskIcon({ task }: { task: WorkspaceCloneTask }) {
-  if (task.status === "completed")
-    return <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-300" />;
+  if (task.status === "completed") return <CheckCircle2 className="size-4 text-success" />;
   if (task.status === "failed") return <XCircle className="size-4 text-destructive" />;
   if (task.status === "cancelled") return <Ban className="size-4 text-muted-foreground" />;
-  return <Loader2 className="size-4 animate-spin text-sky-600 dark:text-sky-300" />;
+  return <Loader2 className="size-4 animate-spin text-info" />;
 }
 
 function CloneTaskCard({
@@ -103,10 +102,10 @@ function CloneTaskCard({
         <div className="px-3.5 pb-3">
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
             {progress === null ? (
-              <div className="h-full w-2/5 animate-hub-loading-progress rounded-full bg-sky-500" />
+              <div className="h-full w-2/5 animate-hub-loading-progress rounded-full bg-info" />
             ) : (
               <div
-                className="h-full rounded-full bg-sky-500 transition-[width] duration-200"
+                className="h-full rounded-full bg-info transition-[width] duration-200"
                 style={{ width: `${progress}%` }}
               />
             )}

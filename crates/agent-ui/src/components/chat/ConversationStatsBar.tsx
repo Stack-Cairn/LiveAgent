@@ -1,3 +1,4 @@
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useDocumentHidden } from "@liveagent/ui/lib/shared/documentVisibility";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -323,9 +324,7 @@ export function ConversationStatsBar(props: {
     <span className="flex min-w-48 flex-col gap-2">
       {tooltipSections.map((section) => (
         <span key={section.key} className="flex flex-col gap-1">
-          <span className="text-tiny font-medium uppercase tracking-wide text-muted-foreground/70">
-            {section.label}
-          </span>
+          <SectionHeader render={<span />}>{section.label}</SectionHeader>
           <span className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 whitespace-nowrap">
             {section.rows.map((row) => (
               <Fragment key={row.key}>

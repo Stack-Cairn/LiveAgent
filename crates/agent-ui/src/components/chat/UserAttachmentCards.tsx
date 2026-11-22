@@ -182,11 +182,11 @@ function UserImageAttachmentCard(props: {
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+          <div className="truncate text-xs font-medium leading-tight text-chat-user-foreground/85">
             {file.fileName}
           </div>
         </div>
-        <span className="shrink-0 text-tiny tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
+        <span className="shrink-0 text-tiny tabular-nums text-chat-user-foreground/40">
           {formatUploadedFileSize(file.sizeBytes)}
         </span>
       </div>
@@ -222,10 +222,10 @@ function UserFileAttachmentCard(props: {
         <TypeIcon className="size-4.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+        <div className="truncate text-xs font-medium leading-tight text-chat-user-foreground/85">
           {file.fileName}
         </div>
-        <div className="mt-0.5 text-tiny tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
+        <div className="mt-0.5 text-tiny tabular-nums leading-tight text-chat-user-foreground/40">
           {formatUploadedFileSize(file.sizeBytes)}
         </div>
       </div>
@@ -235,8 +235,8 @@ function UserFileAttachmentCard(props: {
           onClick={() => onRemove(file.relativePath)}
           className={cn(
             "absolute top-1/2 right-1.5 z-10 flex size-5 -translate-y-1/2 items-center",
-            "justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all",
-            "hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10",
+            "justify-center rounded-full text-chat-user-foreground/30 opacity-0 transition-all",
+            "hover:bg-black/5 hover:text-chat-user-foreground/60 group-hover:opacity-100 dark:hover:bg-white/10",
           )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}

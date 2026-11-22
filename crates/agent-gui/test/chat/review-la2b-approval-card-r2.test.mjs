@@ -51,7 +51,7 @@ async function renderDesktopEdit(editArgs) {
     );
     const changed = [...host.querySelectorAll("[data-chat-code-diff] .grid")]
       .map((row) => {
-        const sign = row.className.includes("emerald") ? "+" : row.className.includes("red") ? "-" : " ";
+        const sign = row.className.includes("success") ? "+" : row.className.includes("destructive") ? "-" : " ";
         return [sign, row.querySelector("code")?.textContent ?? ""];
       })
       .filter(([sign]) => sign !== " ");

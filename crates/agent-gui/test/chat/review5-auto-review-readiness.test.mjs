@@ -108,7 +108,7 @@ test("saving a reviewer in settings clears the composer warning without reopenin
       /autoReviewNeedsModel/,
       "the trigger still says no reviewer model is selected after one was saved",
     );
-    assert.doesNotMatch(view.trigger().querySelector("svg").getAttribute("class"), /amber/);
+    assert.doesNotMatch(view.trigger().querySelector("svg").getAttribute("class"), /amber|text-warning/);
   } finally {
     await view.close();
   }

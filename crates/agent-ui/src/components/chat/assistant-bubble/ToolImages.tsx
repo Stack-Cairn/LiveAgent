@@ -281,7 +281,7 @@ function ToolImageStatusCard(props: {
         "relative flex min-h-28 w-full flex-col items-center justify-center gap-2",
         "overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
         isError
-          ? "border-red-500/25 bg-red-500/[0.04] text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.06] dark:text-red-300"
+          ? "border-destructive/25 bg-destructive/[0.04] text-destructive"
           : "border-black/[0.08] bg-black/[0.025] text-muted-foreground dark:border-white/[0.1] dark:bg-white/[0.035]",
         className,
       )}
@@ -290,7 +290,7 @@ function ToolImageStatusCard(props: {
         className={cn(
           "flex size-9 items-center justify-center",
           "rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
-          isError ? "border-red-500/20" : "border-black/[0.06] dark:border-white/[0.08]",
+          isError ? "border-destructive/20" : "border-black/[0.06] dark:border-white/[0.08]",
         )}
       >
         <Icon
@@ -308,7 +308,7 @@ function ToolImageStatusCard(props: {
           <div
             className={cn(
               "max-w-full truncate text-xs",
-              isError ? "text-red-700/75 dark:text-red-200/75" : "text-muted-foreground",
+              isError ? "text-destructive/75" : "text-muted-foreground",
             )}
             title={detail}
           >

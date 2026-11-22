@@ -404,9 +404,7 @@ export function AskUserQuestionCard({
                       : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/80",
                   )}
                 >
-                  {answered ? (
-                    <Check className="size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  ) : null}
+                  {answered ? <Check className="size-3 shrink-0 text-success" /> : null}
                   <span className="truncate">
                     {askUserQuestionTabLabel(question, index, tabFallback)}
                   </span>
@@ -645,13 +643,13 @@ export function AskUserQuestionCard({
           ) : timedOut && !isSettled ? (
             // K-brain no longer picks an option on timeout, so a timed-out card can carry no
             // answers; it is finished all the same and must say nothing was chosen.
-            <span className="text-right text-xs leading-1p35 text-amber-600 dark:text-amber-400">
+            <span className="text-right text-xs leading-1p35 text-warning">
               {t("chat.askUser.timedOutNoSelection")}
             </span>
           ) : isSettled ? (
             timedOut ? (
               // Older backends and the local tool still auto-select on timeout.
-              <span className="text-right text-xs leading-1p35 text-amber-600 dark:text-amber-400">
+              <span className="text-right text-xs leading-1p35 text-warning">
                 {t("chat.askUser.timedOut")}
               </span>
             ) : (

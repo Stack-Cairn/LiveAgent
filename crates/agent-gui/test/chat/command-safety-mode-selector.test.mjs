@@ -165,7 +165,7 @@ test("sandbox entries follow the backend's run sandbox capability", async () => 
     };
     view = await mount({ value: "sandbox" });
     try {
-      assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-emerald-600/);
+      assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-success/);
       await view.open();
       assert.equal(disabled(view, "chat.safety.sandboxOffline"), false);
       assert.match(view.items()[3].textContent, /chat\.safety\.sandboxDescNoReadMask/);
@@ -211,7 +211,7 @@ test("always allow keeps its risk visible on the trigger", async () => {
   loadConfig = async () => null;
   const view = await mount({ value: "always" });
   try {
-    assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-amber-600/);
+    assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-warning/);
   } finally {
     await view.close();
   }
@@ -222,7 +222,7 @@ test("auto review without a reviewer model warns and links to the settings page"
   const view = await mount({ value: "autoReview" });
   try {
     assert.match(view.trigger().getAttribute("title"), /chat\.safety\.autoReviewNeedsModel/);
-    assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-amber-600/);
+    assert.match(view.trigger().querySelector("svg").getAttribute("class"), /text-warning/);
     await view.open();
     const review = view.items().find((item) => item.textContent.includes("chat.safety.autoReview"));
     assert.match(review.textContent, /chat\.safety\.autoReviewNeedsModel/);

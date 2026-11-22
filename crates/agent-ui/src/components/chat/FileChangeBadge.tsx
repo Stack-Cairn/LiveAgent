@@ -17,12 +17,12 @@ export function FileChangeBadge({
       className={cn("flex shrink-0 items-center gap-1.5 font-mono text-xs tabular-nums", className)}
     >
       {added !== undefined ? (
-        <span className="flex items-center text-[hsl(var(--chat-success))]">
+        <span className="flex items-center text-success">
           +<OdometerNumber value={added} />
         </span>
       ) : null}
       {removed !== undefined ? (
-        <span className="flex items-center text-[hsl(var(--chat-error))]">
+        <span className="flex items-center text-destructive">
           -<OdometerNumber value={removed} />
         </span>
       ) : null}

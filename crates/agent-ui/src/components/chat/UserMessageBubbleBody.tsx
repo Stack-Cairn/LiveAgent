@@ -159,8 +159,8 @@ export function UserMessageBubbleBody(props: UserMessageBubbleBodyProps) {
     <div
       className={cn(
         "ml-auto w-fit max-w-full",
-        "whitespace-pre-wrap rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5",
-        "font-chat text-sm leading-relaxed break-words text-[hsl(var(--chat-user-fg))] [overflow-wrap:anywhere]",
+        "whitespace-pre-wrap rounded-2xl rounded-br-md bg-chat-user px-4 py-2.5",
+        "font-chat text-sm leading-relaxed break-words text-chat-user-foreground [overflow-wrap:anywhere]",
       )}
     >
       <UserAttachmentCards
@@ -192,7 +192,7 @@ export function UserMessageBubbleBody(props: UserMessageBubbleBodyProps) {
                 aria-hidden="true"
                 className={cn(
                   "pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b",
-                  "from-transparent to-[hsl(var(--chat-user-bg))]",
+                  "from-transparent to-chat-user",
                 )}
               />
             ) : null}
@@ -205,8 +205,8 @@ export function UserMessageBubbleBody(props: UserMessageBubbleBodyProps) {
               onClick={() => setExpanded(!expanded)}
               className={cn(
                 "-ml-1.5 mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 outline-hidden",
-                "text-xs font-medium text-[hsl(var(--chat-user-fg)/0.65)] transition-colors",
-                "hover:bg-foreground/[0.06] hover:text-[hsl(var(--chat-user-fg))]",
+                "text-xs font-medium text-chat-user-foreground/65 transition-colors",
+                "hover:bg-foreground/[0.06] hover:text-chat-user-foreground",
                 "focus-visible:ring-2 focus-visible:ring-ring/50",
               )}
             >

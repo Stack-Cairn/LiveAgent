@@ -29,7 +29,7 @@ function TaskStatusIcon({ state, className }: { state: DisplayState; className?:
       <span
         aria-hidden="true"
         className={cn(
-          "inline-flex size-14px shrink-0 items-center justify-center rounded-full bg-[hsl(var(--chat-success))] text-white",
+          "inline-flex size-14px shrink-0 items-center justify-center rounded-full bg-success text-white",
           className,
         )}
       >
@@ -63,7 +63,7 @@ function TaskStatusIcon({ state, className }: { state: DisplayState; className?:
             "origin-center",
             state === "running"
               ? "animate-spin stroke-[hsl(var(--tool-list-accent))] motion-reduce:animate-none"
-              : "stroke-amber-600 dark:stroke-amber-300",
+              : "stroke-warning",
           )}
           cx={ICON_SIZE / 2}
           cy={ICON_SIZE / 2}

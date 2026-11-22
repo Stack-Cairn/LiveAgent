@@ -97,14 +97,14 @@ export function modeIcon(mode: CommandSafetyMode, className: string) {
 
 function triggerIconClass(mode: CommandSafetyMode, reviewerMissing: boolean) {
   if (mode === "autoReview" && reviewerMissing) {
-    return "size-4 shrink-0 text-amber-600 dark:text-amber-400";
+    return "size-4 shrink-0 text-warning";
   }
   if (mode === "sandbox" || mode === "sandboxOffline") {
-    return "size-4 shrink-0 text-emerald-600 dark:text-emerald-400";
+    return "size-4 shrink-0 text-success";
   }
-  if (mode === "ask") return "size-4 shrink-0 text-sky-600 dark:text-sky-400";
+  if (mode === "ask") return "size-4 shrink-0 text-info";
   // Always allow runs everything without review; keep the risk visible.
-  if (mode === "always") return "size-4 shrink-0 text-amber-600 dark:text-amber-400";
+  if (mode === "always") return "size-4 shrink-0 text-warning";
   return "size-4 shrink-0 text-muted-foreground";
 }
 
@@ -271,7 +271,7 @@ export function CommandSafetyModeSelector(props: {
                   <span
                     className={cn(
                       "text-tiny font-normal leading-4 text-muted-foreground",
-                      needsReviewer && "text-amber-700 dark:text-amber-400",
+                      needsReviewer && "text-warning",
                     )}
                   >
                     {entryDisabled

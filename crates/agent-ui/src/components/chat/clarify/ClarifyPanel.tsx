@@ -12,6 +12,7 @@ import {
   WandSparkles,
   X,
 } from "@liveagent/ui/components/IconSet";
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type KeyboardEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
@@ -56,8 +57,8 @@ function RecommendedTag({ label }: { label: string }) {
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r",
         "from-amber-400/25 to-amber-500/15 px-1.5 py-0.5",
-        "text-tiny font-semibold leading-none text-amber-700 ring-1 ring-inset ring-amber-500/25",
-        "dark:from-amber-300/[0.18] dark:to-amber-400/[0.10] dark:text-amber-300 dark:ring-amber-300/20",
+        "text-tiny font-semibold leading-none text-warning ring-1 ring-inset ring-warning/25",
+        "dark:from-amber-300/[0.18] dark:to-amber-400/[0.10] ",
       )}
     >
       <Sparkles className="size-2.5" />
@@ -90,11 +91,11 @@ function choiceRowClassName(selected: boolean, interactive: boolean, recommended
     selected
       ? "border-primary/45 bg-primary/[0.06] dark:border-primary/40 dark:bg-primary/[0.1]"
       : recommended
-        ? "border-amber-400/45 bg-gradient-to-r from-amber-400/[0.09] to-amber-300/[0.03] dark:border-amber-300/30 dark:from-amber-300/[0.08] dark:to-amber-200/[0.02]"
+        ? "border-warning/45 bg-gradient-to-r from-amber-400/[0.09] to-amber-300/[0.03] dark:from-amber-300/[0.08] dark:to-amber-200/[0.02]"
         : "border-border/40 dark:border-white/[0.07]",
     interactive && !selected
       ? recommended
-        ? "hover:border-amber-400/70 hover:from-amber-400/[0.14] dark:hover:border-amber-300/50"
+        ? "hover:border-warning/70 hover:from-amber-400/[0.14]"
         : "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
       : "",
     interactive ? "cursor-pointer" : "cursor-default opacity-70",
@@ -222,10 +223,8 @@ function SettledRoundSummary({
           "border-b border-black/[0.04] bg-muted/35 px-2.5 py-1 dark:border-white/[0.05] dark:bg-white/[0.03]",
         )}
       >
-        <CheckCircle2 className="size-3 text-emerald-500" />
-        <span className="text-tiny font-medium uppercase tracking-wide text-muted-foreground/75">
-          {roundLabel}
-        </span>
+        <CheckCircle2 className="size-3 text-success" />
+        <SectionHeader render={<span />}>{roundLabel}</SectionHeader>
       </div>
       <div className="flex flex-col gap-2.5 px-2.5 py-2">
         {round.questions.map((question, index) => {
@@ -266,11 +265,11 @@ function SettledRoundSummary({
                   <span
                     className={cn(
                       "inline-flex max-w-full items-center gap-1",
-                      "rounded-full border border-dashed border-sky-500/35 bg-sky-500/[0.07] px-1.5 py-0.5",
-                      "text-xs leading-1p4 text-foreground/80 dark:border-sky-300/30 dark:bg-sky-300/[0.08]",
+                      "rounded-full border border-dashed border-info/35 bg-info/[0.07] px-1.5 py-0.5",
+                      "text-xs leading-1p4 text-foreground/80 ",
                     )}
                   >
-                    <SquarePen className="size-2.5 shrink-0 text-sky-600 dark:text-sky-300" />
+                    <SquarePen className="size-2.5 shrink-0 text-info" />
                     <span className="min-w-0 break-words">{custom}</span>
                   </span>
                 ) : null}
@@ -491,9 +490,9 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
         <div className="flex flex-col gap-2">
           {state.draftText ? (
             <div className="rounded-xl bg-primary/10 px-2.5 py-1.5">
-              <span className="mr-1.5 text-tiny font-medium uppercase tracking-wide text-muted-foreground/70">
+              <SectionHeader className="mr-1.5" render={<span />}>
                 {t("chat.clarify.draftLabel")}
-              </span>
+              </SectionHeader>
               <span className="line-clamp-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground/80">
                 {state.draftText}
               </span>
@@ -538,7 +537,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                                   : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/80",
                               )}
                             >
-                              {isAnswered ? <Check className="size-3 text-emerald-500" /> : null}
+                              {isAnswered ? <Check className="size-3 text-success" /> : null}
                               {question.header || `${t("chat.clarify.tabFallback")} ${index + 1}`}
                             </button>
                           );

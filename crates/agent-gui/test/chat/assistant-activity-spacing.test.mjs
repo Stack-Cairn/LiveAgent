@@ -57,8 +57,8 @@ test("operation components defer outer spacing to the shared block wrapper", () 
 });
 
 test("chat typography keeps body copy substantial and emphasis at weight 500", () => {
-  assert.match(markdownStylesSource, /font-\[450\]/);
-  assert.match(markdownStylesSource, /\[&_p\]:font-\[450\]/);
+  assert.match(markdownStylesSource, /font-book/);
+  assert.match(markdownStylesSource, /\[&_p\]:font-book/);
   assert.match(markdownStylesSource, /\[&_strong\]:font-medium/);
   assert.match(markdownSource, /CHAT_MARKDOWN_CLASS/);
 });

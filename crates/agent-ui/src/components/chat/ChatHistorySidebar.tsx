@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -2022,7 +2023,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                 skipNextGroupBlurCommitRef.current = true;
                               }}
                               onClick={commitNewGroup}
-                              className="flex size-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-300"
+                              className="flex size-7 items-center justify-center rounded-lg text-success transition-colors hover:bg-success/10"
                               aria-label={t("chat.workspaceGroupCreate")}
                             >
                               <Check className="size-3.5" />
@@ -2074,9 +2075,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       {renderedSections.ungrouped.length > 0 ? (
                         <Fragment>
                           {renderedSections.grouped.length > 0 ? (
-                            <div className="px-2 pt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+                            <SectionHeader size="xs" className="px-2 pt-1.5">
                               {t("chat.workspaceUngrouped")}
-                            </div>
+                            </SectionHeader>
                           ) : null}
                           {renderedSections.ungrouped.map((project) =>
                             renderWorkspaceProject(project),

@@ -174,7 +174,7 @@ test("FileChangeBadge renders green added and red removed counts", () => {
 
   const addedOnly = badge.FileChangeBadge({ added: 2 });
   const [addedSpan, removedSpan] = childrenOf(addedOnly);
-  assert.ok(addedSpan.props.className.includes("--chat-success"));
+  assert.ok(addedSpan.props.className.includes("text-success"));
   assert.equal(removedSpan, null);
   const [addedSign, addedNumber] = childrenOf(addedSpan);
   assert.equal(addedSign, "+");
@@ -183,8 +183,8 @@ test("FileChangeBadge renders green added and red removed counts", () => {
 
   const both = badge.FileChangeBadge({ added: 2, removed: 1 });
   const [green, red] = childrenOf(both);
-  assert.ok(green.props.className.includes("--chat-success"));
-  assert.ok(red.props.className.includes("--chat-error"));
+  assert.ok(green.props.className.includes("text-success"));
+  assert.ok(red.props.className.includes("text-destructive"));
   const [removedSign, removedNumber] = childrenOf(red);
   assert.equal(removedSign, "-");
   assert.equal(removedNumber.props.value, 1);

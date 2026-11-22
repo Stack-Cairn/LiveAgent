@@ -131,9 +131,9 @@ function RedactionPicker(props: {
         }}
         className={cn(
           "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/35 disabled:cursor-not-allowed",
           value
-            ? "bg-emerald-500 text-white shadow-sm"
+            ? "bg-success text-success-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
@@ -153,7 +153,7 @@ function RedactionPicker(props: {
         }}
         className={cn(
           "relative rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 disabled:cursor-not-allowed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -182,7 +182,7 @@ function EmptyState(props: { isFiltered: boolean }) {
       <div
         className={cn(
           "flex size-12 items-center justify-center",
-          "rounded-2xl border border-sky-500/15 bg-sky-500/10 text-sky-500",
+          "rounded-2xl border border-info/15 bg-info/10 text-info",
         )}
       >
         <Share2 className="size-5" />
@@ -269,7 +269,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
               <div
                 className={cn(
                   "flex size-11 shrink-0 items-center justify-center",
-                  "rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500",
+                  "rounded-2xl border border-info/20 bg-info/10 text-info",
                 )}
               >
                 <Share2 className="size-5" />
@@ -310,7 +310,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                   "text-sm font-medium text-foreground sm:gap-2",
                 )}
               >
-                {hasLoading ? <Loader2 className="size-3.5 animate-spin text-sky-500" /> : null}
+                {hasLoading ? <Loader2 className="size-3.5 animate-spin text-info" /> : null}
                 <span className="truncate">
                   {hasLoading ? t("sharedHistory.syncing") : t("sharedHistory.synced")}
                 </span>
@@ -321,8 +321,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
           {!shareOriginLoading && !publicOrigin ? (
             <div
               className={cn(
-                "mt-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2",
-                "text-xs leading-5 text-amber-700 dark:text-amber-300",
+                "mt-3 rounded-2xl border border-warning/25 bg-warning/10 px-3 py-2",
+                "text-xs leading-5 text-warning",
               )}
             >
               {t("sharedHistory.originUnavailable")}
@@ -330,8 +330,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
           ) : shareOriginLoading && !publicOrigin ? (
             <div
               className={cn(
-                "mt-3 rounded-2xl border border-sky-500/20 bg-sky-500/10 px-3 py-2",
-                "text-xs leading-5 text-sky-700 dark:text-sky-300",
+                "mt-3 rounded-2xl border border-info/20 bg-info/10 px-3 py-2",
+                "text-xs leading-5 text-info",
               )}
             >
               {t("sharedHistory.originLoading")}
@@ -412,8 +412,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5",
-                              "text-xs font-medium text-sky-600 dark:text-sky-400",
+                              "shrink-0 rounded-full border border-info/20 bg-info/10 px-2 py-0.5",
+                              "text-xs font-medium text-info",
                             )}
                           >
                             {t("sharedHistory.publicBadge")}
@@ -421,8 +421,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           {redactToolContent ? (
                             <span
                               className={cn(
-                                "shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5",
-                                "text-xs font-medium text-emerald-600 dark:text-emerald-400",
+                                "shrink-0 rounded-full border border-success/20 bg-success/10 px-2 py-0.5",
+                                "text-xs font-medium text-success",
                               )}
                             >
                               {t("sharedHistory.redactedBadge")}
@@ -445,9 +445,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        {isLoading ? (
-                          <Loader2 className="size-4 animate-spin text-sky-500" />
-                        ) : null}
+                        {isLoading ? <Loader2 className="size-4 animate-spin text-info" /> : null}
                         <ShareSwitch
                           disabled={isUpdating}
                           onDisable={() => onDisableShare(conversation)}
@@ -468,8 +466,8 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           target="_blank"
                           rel="noreferrer"
                           className={cn(
-                            "min-w-0 flex-1 truncate font-mono text-xs text-sky-600 underline-offset-4",
-                            "hover:underline dark:text-sky-400",
+                            "min-w-0 flex-1 truncate font-mono text-xs text-info underline-offset-4",
+                            "hover:underline",
                           )}
                           title={shareUrl}
                         >
@@ -500,7 +498,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                         aria-label={t("sharedHistory.copyLink")}
                       >
                         {copiedId === conversation.id ? (
-                          <Check className="size-4 text-emerald-500" />
+                          <Check className="size-4 text-success" />
                         ) : (
                           <Copy className="size-4" />
                         )}
@@ -528,7 +526,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                         "mt-2 flex items-center justify-between gap-3 rounded-xl border",
                         "px-3 py-2 transition-colors",
                         redactToolContent
-                          ? "border-emerald-500/25 bg-emerald-500/5"
+                          ? "border-success/25 bg-success/5"
                           : "border-border/60 bg-muted/20",
                       )}
                     >
@@ -537,7 +535,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                           className={cn(
                             "flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
                             redactToolContent
-                              ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              ? "border-success/25 bg-success/10 text-success"
                               : "border-border/60 bg-background text-muted-foreground",
                           )}
                         >

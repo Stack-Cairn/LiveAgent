@@ -1607,7 +1607,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 "pointer-events-none absolute inset-0 z-40 flex items-center justify-center",
                 "rounded-3xl border-2 border-dashed bg-background/90 text-sm font-medium backdrop-blur-sm",
                 workspacePathDropState === "accept"
-                  ? "border-sky-500/70 text-sky-600 dark:text-sky-300"
+                  ? "border-info/70 text-info"
                   : "border-destructive/60 text-destructive",
               )}
             >
@@ -1639,14 +1639,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             <div
               className={cn(
                 "pointer-events-none absolute inset-1 z-50 flex items-center justify-center",
-                "rounded-3xl border border-dashed border-amber-500/45 bg-background/90 px-6",
+                "rounded-3xl border border-dashed border-warning/45 bg-background/90 px-6",
                 "text-center shadow-inner backdrop-blur-sm",
               )}
             >
               <span
                 className={cn(
-                  "max-w-full rounded-full bg-amber-500/10 px-3 py-1.5",
-                  "text-xs font-medium text-amber-700 dark:text-amber-300",
+                  "max-w-full rounded-full bg-warning/10 px-3 py-1.5",
+                  "text-xs font-medium text-warning",
                 )}
               >
                 {conversationDropNoticeText}
@@ -1784,7 +1784,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             "hover:bg-muted/60 focus-visible:bg-muted/60 data-[popup-open]:bg-muted/60",
                             "disabled:pointer-events-none disabled:opacity-40",
                             pendingUploadedFiles.length > 0
-                              ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
+                              ? "text-info hover:text-info"
                               : "text-muted-foreground hover:text-foreground dark:hover:text-white",
                           )}
                         />
@@ -1800,9 +1800,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                           aria-hidden
                           className={cn(
                             "absolute -right-0.5 -top-0.5 flex h-15px min-w-15px items-center justify-center",
-                            "rounded-full bg-sky-500 px-3px",
-                            "text-tiny font-semibold leading-none text-white shadow-ui-chatcomposerbar-41",
-                            "dark:bg-sky-400 dark:text-slate-900 dark:shadow-ui-chatcomposerbar-42",
+                            "rounded-full bg-info px-3px",
+                            "text-tiny font-semibold leading-none text-info-foreground shadow-ui-chatcomposerbar-41",
+                            "dark:shadow-ui-chatcomposerbar-42",
                           )}
                         >
                           {pendingUploadedFiles.length}
@@ -1853,7 +1853,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                           className={cn(
                             "size-3.5 shrink-0 transition-colors",
                             chatRuntimeControls.planModeEnabled
-                              ? "text-sky-600 dark:text-sky-300"
+                              ? "text-info"
                               : "text-muted-foreground",
                           )}
                         />
@@ -1878,9 +1878,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     title={t("chat.runtime.planModeSlashOff")}
                     aria-label={t("chat.runtime.planModeSlashOff")}
                     className={cn(
-                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5",
-                      "text-xs font-medium text-sky-700 outline-hidden transition-colors",
-                      "hover:bg-sky-500/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40 dark:text-sky-300",
+                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-info/10 px-2.5",
+                      "text-xs font-medium text-info outline-hidden transition-colors",
+                      "hover:bg-info/15 focus-visible:ring-2 focus-visible:ring-primary/35 disabled:pointer-events-none disabled:opacity-40",
                     )}
                   >
                     <Lightbulb className="size-3.5 shrink-0" />
@@ -1924,7 +1924,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         "transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
                         "disabled:pointer-events-none disabled:opacity-40",
                         stt.active
-                          ? "bg-red-500/10 text-red-600"
+                          ? "bg-destructive/10 text-destructive"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >

@@ -381,9 +381,9 @@ export function MarkdownFileLink(props: MarkdownFileLinkProps) {
       className={cn(
         "inline max-w-full cursor-pointer appearance-none",
         "whitespace-normal rounded-sm border-0 bg-transparent p-0",
-        "text-left font-medium text-sky-600 no-underline",
-        "decoration-sky-500/45 underline-offset-2 outline-none",
-        "[overflow-wrap:anywhere] hover:underline focus-visible:ring-2 focus-visible:ring-ring/35 dark:text-sky-400",
+        "text-left font-medium text-info no-underline",
+        "decoration-info/45 underline-offset-2 outline-none",
+        "[overflow-wrap:anywhere] hover:underline focus-visible:ring-2 focus-visible:ring-ring/35 ",
       )}
       data-liveagent-file-link="true"
       title={label}
@@ -430,7 +430,7 @@ function MarkdownReadOnlyLink(props: MarkdownAnchorFallbackProps) {
         ? href.trim()
         : undefined;
   return (
-    <span className="text-sky-600 no-underline dark:text-sky-400" title={label}>
+    <span className="text-info no-underline " title={label}>
       {children}
     </span>
   );
@@ -454,8 +454,8 @@ function MarkdownExternalLink(props: MarkdownAnchorFallbackProps) {
         className={cn(
           "inline max-w-full cursor-pointer appearance-none",
           "whitespace-normal border-0 bg-transparent p-0",
-          "text-left font-medium text-sky-600 no-underline decoration-sky-500/45 underline-offset-2",
-          "[overflow-wrap:anywhere] hover:underline dark:text-sky-400",
+          "text-left font-medium text-info no-underline decoration-info/45 underline-offset-2",
+          "[overflow-wrap:anywhere] hover:underline ",
           className,
         )}
         data-incomplete={incomplete}

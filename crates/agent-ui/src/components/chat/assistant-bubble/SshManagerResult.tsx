@@ -23,7 +23,7 @@ function StreamBlock({ label, text, tone }: { label: string; text: string; tone?
       <ToolScrollablePre
         className={cn(
           "max-h-56 bg-black/[0.02] font-mono dark:bg-white/[0.03]",
-          tone === "error" && "text-red-700/85 dark:text-red-300/85",
+          tone === "error" && "text-destructive/85",
         )}
       >
         {previewText(text.replace(/\n+$/, ""), STREAM_PREVIEW_CHARS)}
@@ -84,9 +84,7 @@ export function getSshManagerResultView(toolName: string, text: string, isError?
           </div>
         ) : null}
         {transfer.error ? (
-          <div className="break-words text-xs text-red-700/85 dark:text-red-300/85">
-            {transfer.error}
-          </div>
+          <div className="break-words text-xs text-destructive/85">{transfer.error}</div>
         ) : null}
       </div>
     );

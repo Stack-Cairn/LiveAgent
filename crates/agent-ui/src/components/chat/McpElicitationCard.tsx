@@ -482,7 +482,7 @@ export function McpElicitationForm({
           {hasSensitive ? (
             <div
               role="note"
-              className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-2 text-xs leading-1p5 text-amber-700 dark:text-amber-300"
+              className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/[0.06] px-2.5 py-2 text-xs leading-1p5 text-warning"
             >
               <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
               <span>
@@ -584,9 +584,7 @@ export function McpElicitationForm({
             {sent ? (
               <span>{t("chat.mcpElicitation.sent")}</span>
             ) : expired ? (
-              <span className="text-amber-600 dark:text-amber-400">
-                {t("chat.mcpElicitation.expired")}
-              </span>
+              <span className="text-warning">{t("chat.mcpElicitation.expired")}</span>
             ) : interactive && trusted ? (
               <span role="timer">
                 {fill(t("chat.mcpElicitation.countdown"), { time: formatCountdown(remainingMs) })}
@@ -731,7 +729,7 @@ export function McpElicitationSummary({ record }: { record: McpElicitationRecord
             {t(OUTCOME_KEYS[outcome])}
           </Badge>
         ) : tone === "warning" ? (
-          <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 text-xs text-warning">
             <AlertTriangle className="size-3" />
             {t(OUTCOME_KEYS[outcome])}
           </span>
