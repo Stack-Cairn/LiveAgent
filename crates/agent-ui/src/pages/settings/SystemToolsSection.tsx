@@ -96,8 +96,8 @@ function BrowserModeRow(props: {
             <span
               className={
                 info.connected
-                  ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-tiny leading-none text-emerald-500"
-                  : "rounded-full bg-amber-500/10 px-2 py-0.5 text-tiny leading-none text-amber-500"
+                  ? "rounded-full bg-success/10 px-2 py-0.5 text-tiny leading-none text-success"
+                  : "rounded-full bg-warning/10 px-2 py-0.5 text-tiny leading-none text-warning"
               }
             >
               {t(
@@ -128,7 +128,7 @@ function BrowserModeRow(props: {
         {t(`settings.browserMode.${mode}.desc`)}
       </p>
       {showGuide ? (
-        <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
+        <div className="space-y-1.5 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2">
           <p className="text-xs leading-relaxed text-muted-foreground">
             {t("settings.browserMode.installGuide")}
           </p>
@@ -165,11 +165,11 @@ function BrowserModeRow(props: {
 const HOST_BRIDGE_BADGE: Record<HostBridgeToolAvailability, { key: string; className: string }> = {
   available: {
     key: "settings.hostBridge.available",
-    className: "bg-emerald-500/10 text-emerald-500",
+    className: "bg-success/10 text-success",
   },
   tunnels_off: {
     key: "settings.hostBridge.tunnelsOff",
-    className: "bg-amber-500/10 text-amber-500",
+    className: "bg-warning/10 text-warning",
   },
   unsupported: {
     key: "settings.hostBridge.unsupported",

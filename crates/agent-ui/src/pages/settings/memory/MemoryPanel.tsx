@@ -67,9 +67,9 @@ import {
 } from "./panelModel";
 import { type MemoryCreateDraft, useMemoryPanelData } from "./useMemoryPanelData";
 
-// Pending-review tone. Amber is a Tailwind palette override until a warning semantic token exists.
-const PENDING_REVIEW_TEXT = "text-amber-700 dark:text-amber-300";
-const PENDING_REVIEW_FILL = "bg-amber-500/10";
+// Pending-review tone.
+const PENDING_REVIEW_TEXT = "text-warning";
+const PENDING_REVIEW_FILL = "bg-warning/10";
 
 const EMPTY_CREATE_DRAFT: MemoryCreateDraft = {
   slug: "",
@@ -381,7 +381,7 @@ export function MemoryPanel(props: {
               className={cn(
                 "mt-3 h-auto w-full justify-start whitespace-normal rounded-lg px-3 text-left",
                 "font-normal text-xs",
-                "border border-amber-500/20 bg-amber-500/[0.06] hover:bg-amber-500/[0.1]",
+                "border border-warning/20 bg-warning/[0.06] hover:bg-warning/[0.1]",
                 PENDING_REVIEW_TEXT,
               )}
             >
@@ -395,8 +395,7 @@ export function MemoryPanel(props: {
             <div
               className={cn(
                 "mt-3 flex items-start gap-2",
-                "rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700",
-                "dark:text-amber-300",
+                "rounded-lg border border-warning/20 bg-warning/[0.06] px-3 py-2 text-xs text-warning",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -408,8 +407,7 @@ export function MemoryPanel(props: {
             <div
               className={cn(
                 "mt-3 flex items-start gap-2",
-                "rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-700",
-                "dark:text-red-300",
+                "rounded-lg border border-destructive/20 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -423,8 +421,7 @@ export function MemoryPanel(props: {
             <div
               className={cn(
                 "mt-3 flex items-start gap-2",
-                "rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700",
-                "dark:text-amber-300",
+                "rounded-lg border border-warning/20 bg-warning/[0.06] px-3 py-2 text-xs text-warning",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -514,7 +511,7 @@ export function MemoryPanel(props: {
                   className={cn(
                     "shrink-0 gap-1",
                     unreviewedOnly
-                      ? cn(PENDING_REVIEW_FILL, PENDING_REVIEW_TEXT, "hover:bg-amber-500/15")
+                      ? cn(PENDING_REVIEW_FILL, PENDING_REVIEW_TEXT, "hover:bg-warning/15")
                       : "text-muted-foreground",
                   )}
                 >
@@ -601,7 +598,7 @@ export function MemoryPanel(props: {
                           {memoryTypeLabel(selected.memoryType, t)}
                         </span>
                         {selected.meta.unreviewed ? (
-                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-tiny text-amber-700 dark:text-amber-300">
+                          <span className="rounded bg-warning/10 px-1.5 py-0.5 text-tiny text-warning">
                             {t("settings.memoryUnreviewed")}
                           </span>
                         ) : null}

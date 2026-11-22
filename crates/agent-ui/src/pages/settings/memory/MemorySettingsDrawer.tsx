@@ -82,8 +82,8 @@ export function MemorySettingsDrawer(props: {
                   "flex items-start gap-2 rounded-2xl border px-4 py-3",
                   "text-xs leading-relaxed",
                   quotaLadder.level === "critical" || quotaLadder.level === "exhausted"
-                    ? "border-red-500/25 bg-red-500/[0.06] text-red-700 dark:text-red-300"
-                    : "border-amber-500/25 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300",
+                    ? "border-destructive/25 bg-destructive/[0.06] text-destructive"
+                    : "border-warning/25 bg-warning/[0.06] text-warning",
                 )}
               >
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />

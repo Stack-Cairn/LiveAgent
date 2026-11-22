@@ -142,7 +142,7 @@ export function UsageTrendChart({ stats, today }: { stats: UsageStats; today: st
                   y={y(tick)}
                   dy="0.32em"
                   textAnchor="end"
-                  className="fill-muted-foreground font-mono text-[10px]"
+                  className="fill-muted-foreground font-mono text-tiny"
                 >
                   {formatCompact(tick, usageLocale)}
                 </text>
@@ -155,7 +155,7 @@ export function UsageTrendChart({ stats, today }: { stats: UsageStats; today: st
                   x={x(index)}
                   y={HEIGHT - 6}
                   textAnchor={index === count - 1 ? "end" : index === 0 ? "start" : "middle"}
-                  className="fill-muted-foreground text-[10px]"
+                  className="fill-muted-foreground text-tiny"
                 >
                   {formatDay(day.date, usageLocale)}
                 </text>

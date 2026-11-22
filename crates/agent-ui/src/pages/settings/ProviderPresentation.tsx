@@ -81,9 +81,7 @@ export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
       <span
         className={cn(
           "whitespace-nowrap font-medium",
-          plan.severity === "low"
-            ? "text-amber-500 dark:text-amber-400"
-            : "text-emerald-600 dark:text-emerald-400",
+          plan.severity === "low" ? "text-warning" : "text-success",
         )}
       >
         {plan.amount ?? "—"}

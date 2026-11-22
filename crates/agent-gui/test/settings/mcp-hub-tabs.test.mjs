@@ -129,7 +129,7 @@ test("installed MCP resources use a compact settings list while Store keeps its 
   );
   assert.match(
     serverCardSource,
-    /size="icon-sm"\s+onClick=\{open\}\s+className="text-muted-foreground transition-colors hover:bg-destructive\/10 hover:text-destructive"/,
+    /<IconButton\s+tone="destructive"\s+type="button"\s+onClick=\{open\}\s+label=\{t\("settings\.delete"\)\}/,
   );
   assert.doesNotMatch(serverCardSource, /border-emerald/);
   assert.doesNotMatch(serverCardSource, /hover:-translate-y/);

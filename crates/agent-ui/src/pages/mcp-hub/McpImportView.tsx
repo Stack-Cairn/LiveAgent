@@ -279,7 +279,7 @@ export function McpImportView(props: {
         {importedCount !== null && importedCount > 0 ? (
           <GlassPanel tone="muted">
             <div className="flex items-center gap-2">
-              <Check className="size-4 shrink-0 text-[hsl(var(--chat-success))]" />
+              <Check className="size-4 shrink-0 text-success" />
               <span className="text-xs text-muted-foreground">
                 {t("mcpHub.importDone").replace("{count}", String(importedCount))}
               </span>
@@ -333,7 +333,7 @@ export function McpImportView(props: {
                   {loading ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : rescanComplete ? (
-                    <Check className="size-3.5 text-[hsl(var(--chat-success))]" />
+                    <Check className="size-3.5 text-success" />
                   ) : (
                     <RefreshCw data-refresh-icon className="size-3.5" />
                   )}

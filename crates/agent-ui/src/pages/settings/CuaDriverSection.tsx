@@ -105,8 +105,8 @@ function PermissionRow(props: {
         <span
           className={cn(
             "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
-            status === "granted" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-            status === "pending" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+            status === "granted" && "bg-success/10 text-success",
+            status === "pending" && "bg-warning/10 text-warning",
             status === "unknown" && "bg-muted/60 text-muted-foreground",
           )}
         >
@@ -705,7 +705,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                 {permissionsKnown && !permissionsPending ? (
                   <CardBlock className="py-2.5">
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                      <CheckCircle2 className="size-3.5 shrink-0 text-success" />
                       {t("settings.cuaDriver.permissionsGranted").replace(
                         "{bundleId}",
                         permissions?.attributedTo ?? "com.trycua.driver",
@@ -805,7 +805,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
             ) : null}
             {commandDrift ? (
               <SettingsNotice variant="installation-warning">
-                <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-warning">
                   <AlertTriangle className="size-3.5" />
                   {t("settings.cuaDriver.commandDriftTitle")}
                 </p>
@@ -914,7 +914,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
                           "text-xs text-foreground/80",
                         )}
                       >
-                        <div className="size-1.5 shrink-0 rounded-full bg-sky-500/70" />
+                        <div className="size-1.5 shrink-0 rounded-full bg-info/70" />
                         <span className="truncate">{cap.label}</span>
                       </div>
                     ))}

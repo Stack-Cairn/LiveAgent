@@ -156,8 +156,8 @@ export function CronSection(props: SettingsSectionProps) {
       {!autoPromptSupported ? (
         <div
           className={cn(
-            "rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3",
-            "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
+            "rounded-xl border border-warning/20 bg-warning/[0.05] px-4 py-3",
+            "text-xs leading-relaxed text-warning",
           )}
         >
           {t("settings.cronPromptAgentModeOnlyHint")}

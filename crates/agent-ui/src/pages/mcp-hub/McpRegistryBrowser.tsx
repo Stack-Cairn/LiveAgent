@@ -231,7 +231,7 @@ function RegistryCard(props: {
         "group relative flex h-full min-h-228px cursor-pointer flex-col",
         "rounded-xl border bg-card p-3.5 text-left shadow-xs transition-[border-color,box-shadow,background-color]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        done ? "border-emerald-600/25" : "border-border hover:border-foreground/20 hover:shadow-md",
+        done ? "border-success/25" : "border-border hover:border-foreground/20 hover:shadow-md",
       )}
     >
       {link || hasVersionSelector ? (
@@ -292,7 +292,7 @@ function RegistryCard(props: {
           className={cn(
             "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors",
             done
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              ? "border-success/30 bg-success/10 text-success"
               : "border-border/70 bg-muted text-muted-foreground group-hover:text-foreground",
           )}
         >
@@ -355,7 +355,7 @@ function RegistryCard(props: {
         className={cn(
           "mt-3 flex min-h-40px items-center",
           "rounded-lg border border-border/60 px-2.5 py-2 transition-colors",
-          done ? "bg-emerald-500/5" : "bg-muted/50",
+          done ? "bg-success/5" : "bg-muted/50",
         )}
       >
         {configureDraft?.commandPreview ? (
@@ -392,8 +392,7 @@ function RegistryCard(props: {
           }
           className={cn(
             "h-8 shrink-0 gap-1.5 rounded-lg",
-            done &&
-              "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            done && "border-success/30 bg-success/10 text-success",
           )}
           disabled={done || installing}
           onClick={(event) => {
@@ -708,8 +707,7 @@ function McpRegistryPreviewDrawer(props: {
             size="sm"
             className={cn(
               "h-9 flex-1 gap-1.5 rounded-xl",
-              installed &&
-                "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              installed && "border-success/30 bg-success/10 text-success",
             )}
             disabled={installed || installing}
             onClick={() => onInstall(data)}

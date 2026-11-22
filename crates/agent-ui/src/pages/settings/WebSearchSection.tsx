@@ -388,7 +388,7 @@ export function WebSearchSection({ kbrain }: { kbrain: KBrainSettingsAdapter }) 
             aria-hidden="true"
             className={cn(
               "mt-1.5 size-1.5 shrink-0 rounded-full",
-              status?.kind === "available" ? "bg-emerald-500" : "bg-amber-500",
+              status?.kind === "available" ? "bg-success" : "bg-warning",
             )}
           />
           <span className="break-words">{statusText}</span>

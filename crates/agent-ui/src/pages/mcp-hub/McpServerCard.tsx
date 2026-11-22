@@ -13,6 +13,7 @@ import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/Res
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { ConfirmDeletePopover } from "@liveagent/ui/components/ui/confirm-action-popover";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -340,16 +341,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
 
         <div className="grid shrink-0 grid-cols-mcp-actions items-center gap-1.5 @max-[520px]:ml-auto">
           <ToolPolicyToggle value={policy} ariaLabel={displayName} onChange={onPolicyChange} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onEdit}
-            title={t("settings.edit")}
-            className="text-muted-foreground"
-          >
+          <IconButton type="button" onClick={onEdit} label={t("settings.edit")}>
             <Settings className="size-3.5" />
-          </Button>
+          </IconButton>
           <ConfirmDeletePopover
             name={server.id || `Server ${idx + 1}`}
             onConfirm={() => {
@@ -375,16 +369,14 @@ export const McpServerCard = memo(function McpServerCard(props: {
             }}
           >
             {(open) => (
-              <Button
+              <IconButton
+                tone="destructive"
                 type="button"
-                variant="ghost"
-                size="icon-sm"
                 onClick={open}
-                className="text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                title={t("settings.delete")}
+                label={t("settings.delete")}
               >
                 <Trash2 className="size-3.5" />
-              </Button>
+              </IconButton>
             )}
           </ConfirmDeletePopover>
         </div>

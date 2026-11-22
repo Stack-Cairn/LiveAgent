@@ -37,6 +37,8 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "../../components/ui/dialog";
+import { SectionHeader } from "../../components/ui/section-header";
+import { StatusDot } from "../../components/ui/status-dot";
 import { ConfirmActionPopover } from "./shared";
 
 type CronTaskViewModalProps = {
@@ -97,11 +99,7 @@ function stringifyBody(body?: unknown) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-      {children}
-    </div>
-  );
+  return <SectionHeader size="xs">{children}</SectionHeader>;
 }
 
 function EmptyConfig({ t }: { t: (key: string) => string }) {
@@ -216,8 +214,8 @@ function LeftPanel({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1",
-                "text-xs font-medium text-amber-600 dark:text-amber-400",
+                "inline-flex items-center gap-1.5 rounded-lg bg-warning/10 px-2 py-1",
+                "text-xs font-medium text-warning",
               )}
             >
               <Clock3 className="size-3" />
@@ -226,17 +224,10 @@ function LeftPanel({
             <div
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium",
-                task.enabled
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground",
+                task.enabled ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
               )}
             >
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  task.enabled ? "bg-emerald-500" : "bg-muted-foreground/40",
-                )}
-              />
+              <StatusDot tone={task.enabled ? "success" : "muted"} />
               {task.enabled
                 ? t("settings.cronViewStatusEnabled")
                 : t("settings.cronViewStatusDisabled")}
@@ -245,10 +236,10 @@ function LeftPanel({
               className={cn(
                 "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium",
                 task.remainingExecutions === 0
-                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                  ? "bg-destructive/10 text-destructive"
                   : task.remainingExecutions == null
                     ? "bg-muted text-muted-foreground"
-                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                    : "bg-info/10 text-info",
               )}
               title={
                 task.remainingExecutions == null
@@ -294,8 +285,8 @@ function LeftPanel({
             <div
               className={cn(
                 "mt-3 flex items-start gap-1.5",
-                "rounded-lg border border-red-500/20 bg-red-500/[0.04] px-2.5 py-2",
-                "text-xs leading-relaxed text-red-700 dark:text-red-300",
+                "rounded-lg border border-destructive/20 bg-destructive/[0.04] px-2.5 py-2",
+                "text-xs leading-relaxed text-destructive",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -309,8 +300,8 @@ function LeftPanel({
             <div
               className={cn(
                 "mt-3 flex items-start gap-1.5",
-                "rounded-lg border border-red-500/20 bg-red-500/[0.04] px-2.5 py-2",
-                "text-xs leading-relaxed text-red-700 dark:text-red-300",
+                "rounded-lg border border-destructive/20 bg-destructive/[0.04] px-2.5 py-2",
+                "text-xs leading-relaxed text-destructive",
               )}
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -362,12 +353,12 @@ function LeftPanel({
                         <span
                           className={cn(
                             "flex size-5 shrink-0 items-center justify-center",
-                            "rounded-md bg-emerald-500/10 text-tiny font-bold text-emerald-600 dark:text-emerald-400",
+                            "rounded-md bg-success/10 text-tiny font-bold text-success",
                           )}
                         >
                           {i + 1}
                         </span>
-                        <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="rounded-md bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">
                           {req.method}
                         </span>
                         <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
@@ -378,9 +369,9 @@ function LeftPanel({
                         <div className="space-y-px bg-border/10">
                           {hasHeaders ? (
                             <div className="bg-background/60 p-2.5">
-                              <div className="mb-1 text-tiny font-semibold uppercase tracking-wider text-muted-foreground/60">
+                              <SectionHeader className="mb-1">
                                 {t("settings.cronViewHttpHeaders")}
-                              </div>
+                              </SectionHeader>
                               <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground/70">
                                 {headersText}
                               </pre>
@@ -388,9 +379,9 @@ function LeftPanel({
                           ) : null}
                           {hasBody ? (
                             <div className="bg-background/60 p-2.5">
-                              <div className="mb-1 text-tiny font-semibold uppercase tracking-wider text-muted-foreground/60">
+                              <SectionHeader className="mb-1">
                                 {t("settings.cronViewHttpBody")}
-                              </div>
+                              </SectionHeader>
                               <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground/70">
                                 {bodyText}
                               </pre>
@@ -605,8 +596,8 @@ function RightPanel({
           {logs.length > 0 ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5",
-                "text-tiny font-semibold leading-none text-emerald-600 dark:text-emerald-400",
+                "inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5",
+                "text-tiny font-semibold leading-none text-success",
               )}
             >
               <CheckCircle2 className="size-2.5" />
@@ -616,8 +607,8 @@ function RightPanel({
           {logs.length > 0 && failCount > 0 ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5",
-                "text-tiny font-semibold leading-none text-red-600 dark:text-red-400",
+                "inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5",
+                "text-tiny font-semibold leading-none text-destructive",
               )}
             >
               <XCircle className="size-2.5" />
@@ -627,8 +618,8 @@ function RightPanel({
           {runningCount > 0 ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-1.5 py-0.5",
-                "text-tiny font-semibold leading-none text-sky-600 dark:text-sky-400",
+                "inline-flex items-center gap-1 rounded-full bg-info/10 px-1.5 py-0.5",
+                "text-tiny font-semibold leading-none text-info",
               )}
             >
               <Loader2 className="size-2.5 animate-spin" />
@@ -653,8 +644,8 @@ function RightPanel({
           <div
             className={cn(
               "mb-3 flex items-start gap-1.5",
-              "rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2",
-              "text-xs leading-relaxed text-amber-700 dark:text-amber-300",
+              "rounded-lg border border-warning/20 bg-warning/[0.04] px-3 py-2",
+              "text-xs leading-relaxed text-warning",
             )}
           >
             <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -666,8 +657,8 @@ function RightPanel({
         {clearError ? (
           <div
             className={cn(
-              "mb-3 rounded-lg border border-red-500/20 bg-red-500/[0.03] px-3 py-2",
-              "text-xs text-red-700 dark:text-red-300",
+              "mb-3 rounded-lg border border-destructive/20 bg-destructive/[0.03] px-3 py-2",
+              "text-xs text-destructive",
             )}
           >
             {clearError}
@@ -687,10 +678,10 @@ function RightPanel({
                   className={cn(
                     "overflow-hidden rounded-xl border transition-colors",
                     isRunning
-                      ? "border-sky-500/20 bg-sky-500/[0.03]"
+                      ? "border-info/20 bg-info/[0.03]"
                       : log.success
                         ? "border-border/50 bg-muted/20"
-                        : "border-red-500/20 bg-red-500/[0.03]",
+                        : "border-destructive/20 bg-destructive/[0.03]",
                   )}
                 >
                   {/* Summary — fixed-width columns for vertical alignment */}
@@ -701,11 +692,11 @@ function RightPanel({
                   >
                     {/* Status icon */}
                     {isRunning ? (
-                      <Loader2 className="size-3.5 shrink-0 animate-spin text-sky-500" />
+                      <Loader2 className="size-3.5 shrink-0 animate-spin text-info" />
                     ) : log.success ? (
-                      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                      <CheckCircle2 className="size-3.5 shrink-0 text-success" />
                     ) : (
-                      <XCircle className="size-3.5 shrink-0 text-red-500" />
+                      <XCircle className="size-3.5 shrink-0 text-destructive" />
                     )}
                     {/* Timestamp — fixed width */}
                     <span className="w-130px shrink-0 font-mono text-xs text-foreground/70">
@@ -717,10 +708,10 @@ function RightPanel({
                         "w-36px shrink-0 text-center rounded-full px-1.5 py-0.5",
                         "text-tiny font-semibold leading-none",
                         isRunning
-                          ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                          ? "bg-info/10 text-info"
                           : log.success
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-red-500/10 text-red-600 dark:text-red-400",
+                            ? "bg-success/10 text-success"
+                            : "bg-destructive/10 text-destructive",
                       )}
                     >
                       {isRunning
@@ -762,9 +753,7 @@ function RightPanel({
                             <span
                               className={cn(
                                 "font-mono font-medium",
-                                log.exitCode === 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-red-600 dark:text-red-400",
+                                log.exitCode === 0 ? "text-success" : "text-destructive",
                               )}
                             >
                               {log.exitCode}
@@ -774,18 +763,18 @@ function RightPanel({
                       </div>
                       {log.output ? (
                         <div className="space-y-1">
-                          <div className="text-tiny font-semibold uppercase tracking-wider text-muted-foreground/50">
+                          <SectionHeader>
                             {task.type === "prompt"
                               ? t("settings.cronViewLogConclusion")
                               : t("settings.cronViewLogOutput")}
-                          </div>
+                          </SectionHeader>
                           <pre
                             className={cn(
                               "whitespace-pre-wrap break-all rounded-lg border px-2.5 py-2",
                               "font-mono text-xs leading-relaxed",
                               log.success
                                 ? "border-border/40 bg-background/60 text-foreground/70"
-                                : "border-red-500/15 bg-red-500/[0.03] text-red-700 dark:text-red-300",
+                                : "border-destructive/15 bg-destructive/[0.03] text-destructive",
                             )}
                           >
                             {log.output}

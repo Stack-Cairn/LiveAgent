@@ -172,9 +172,7 @@ export function DetectedProxyList(props: {
                   <span
                     className={cn(
                       "tabular-nums",
-                      test?.status === "done" && test.ok
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground",
+                      test?.status === "done" && test.ok ? "text-success" : "text-muted-foreground",
                     )}
                   >
                     ·{" "}
@@ -185,12 +183,12 @@ export function DetectedProxyList(props: {
                       : t("settings.systemProxyDetectTesting")}
                   </span>
                   {proxy.authRequired ? (
-                    <span className="rounded bg-background px-1 text-[11px] text-muted-foreground">
+                    <span className="rounded bg-background px-1 text-2xs text-muted-foreground">
                       {t("settings.systemProxyDetectAuth")}
                     </span>
                   ) : null}
                   {isCurrent ? (
-                    <span className="rounded bg-primary/10 px-1 text-[11px] text-primary">
+                    <span className="rounded bg-primary/10 px-1 text-2xs text-primary">
                       {t("settings.systemProxyDetectCurrent")}
                     </span>
                   ) : null}

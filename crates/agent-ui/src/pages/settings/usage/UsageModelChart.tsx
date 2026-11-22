@@ -102,7 +102,7 @@ export function UsageModelChart({ stats }: { stats: UsageStats }) {
               ))}
             </svg>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
-              <span className="max-w-full truncate text-[11px] text-muted-foreground">
+              <span className="max-w-full truncate text-2xs text-muted-foreground">
                 {focused ? label(focused) : t("settings.usage.chartTotal")}
               </span>
               <CompactAmount
@@ -110,7 +110,7 @@ export function UsageModelChart({ stats }: { stats: UsageStats }) {
                 locale={usageLocale}
                 className="text-lg font-semibold leading-6 text-foreground"
               />
-              <span className="text-[11px] text-muted-foreground">tokens</span>
+              <span className="text-2xs text-muted-foreground">tokens</span>
             </div>
           </div>
           <table className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-xs">
@@ -146,13 +146,13 @@ export function UsageModelChart({ stats }: { stats: UsageStats }) {
                           {label(slice)}
                         </div>
                         {slice.model === null ? (
-                          <div className="truncate text-[11px] text-muted-foreground">
+                          <div className="truncate text-2xs text-muted-foreground">
                             {fill(t("settings.usage.otherModelsCount"), {
                               count: formatInteger(slice.merged, usageLocale),
                             })}
                           </div>
                         ) : slice.provider ? (
-                          <div className="truncate text-[11px] text-muted-foreground">
+                          <div className="truncate text-2xs text-muted-foreground">
                             {slice.provider}
                           </div>
                         ) : null}

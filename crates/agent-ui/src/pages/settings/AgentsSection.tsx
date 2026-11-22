@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@liveagent/ui/components/ui/dialog";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";
+import { IconButton } from "@liveagent/ui/components/ui/icon-button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -184,39 +185,27 @@ export function AgentsSection(props: SettingsSectionProps) {
                           onToggle={() => handleToggleEnabled(template.id)}
                         />
                         <div className={cn("ml-1 flex items-center gap-0.5")}>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground"
+                          <IconButton
                             onClick={() => setViewingTemplate(template)}
-                            title={t("settings.agentsShowPrompt")}
-                            aria-label={t("settings.agentsShowPrompt")}
+                            label={t("settings.agentsShowPrompt")}
                           >
                             <Eye className="size-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => openEdit(template)}
-                            title={t("settings.edit")}
-                          >
+                          </IconButton>
+                          <IconButton onClick={() => openEdit(template)} label={t("settings.edit")}>
                             <SquarePen className="size-3.5" />
-                          </Button>
+                          </IconButton>
                           <ConfirmDeletePopover
                             name={template.name}
                             onConfirm={() => handleDelete(template.id)}
                           >
                             {(open) => (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className="text-muted-foreground hover:text-destructive"
+                              <IconButton
+                                tone="destructive"
                                 onClick={open}
-                                title={t("settings.delete")}
+                                label={t("settings.delete")}
                               >
                                 <Trash2 className="size-3.5" />
-                              </Button>
+                              </IconButton>
                             )}
                           </ConfirmDeletePopover>
                         </div>
@@ -299,27 +288,19 @@ export function AgentsSection(props: SettingsSectionProps) {
                           </span>
                         ) : null}
                         <div className={cn("ml-1 flex items-center gap-0.5")}>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground"
+                          <IconButton
                             disabled={!configured}
                             onClick={() => setViewingProject(project)}
-                            title={t("settings.agentsShowPrompt")}
-                            aria-label={t("settings.agentsShowPrompt")}
+                            label={t("settings.agentsShowPrompt")}
                           >
                             <Eye className="size-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground"
+                          </IconButton>
+                          <IconButton
                             onClick={() => setEditingProject(project)}
-                            title={t("settings.agentsProjectEdit")}
-                            aria-label={t("settings.agentsProjectEdit")}
+                            label={t("settings.agentsProjectEdit")}
                           >
                             <SquarePen className="size-3.5" />
-                          </Button>
+                          </IconButton>
                         </div>
                       </div>
                     </div>

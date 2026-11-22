@@ -176,7 +176,7 @@ export function HttpRequestListEditor({
                   "flex size-7 shrink-0 items-center justify-center",
                   plain
                     ? "text-xs font-medium text-muted-foreground"
-                    : "rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400",
+                    : "rounded-lg bg-success/10 text-xs font-bold text-success",
                 )}
               >
                 {index + 1}
