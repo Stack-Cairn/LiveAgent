@@ -43,9 +43,11 @@ export function AgentActivationSwitch(props: {
   title: string;
   disabled?: boolean;
   className?: string;
+  /** Stable hook for end-to-end tests. */
+  testId?: string;
   onToggle: () => void;
 }) {
-  const { checked, title, disabled = false, className, onToggle } = props;
+  const { checked, title, disabled = false, className, testId, onToggle } = props;
 
   return (
     <Switch
@@ -55,6 +57,7 @@ export function AgentActivationSwitch(props: {
       aria-label={title}
       onCheckedChange={onToggle}
       className={className}
+      data-testid={testId}
     />
   );
 }

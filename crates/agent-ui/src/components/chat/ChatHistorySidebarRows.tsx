@@ -914,6 +914,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
               isActive={isActive}
               ref={titleButtonRef}
               type="button"
+              data-testid="sidebar-conversation-title"
               draggable={!props.onReorderPointerDown && !onWorkbenchDragIntent && !item.isPending}
               onDragStart={handleNativeConversationDragStart}
               onDragEnd={clearActiveConversationReferenceDrag}

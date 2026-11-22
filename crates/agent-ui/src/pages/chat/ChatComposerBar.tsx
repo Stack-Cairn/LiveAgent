@@ -1528,6 +1528,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
         <div
           hidden={approvalBar != null}
+          data-testid="chat-composer"
           data-composer-draft={composerIsEmpty ? undefined : ""}
           ref={glassCardRef}
           data-file-upload-drop-zone=""
@@ -1917,6 +1918,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     }}
                     size="sm"
                     aria-label={primaryActionTitle}
+                    data-testid="composer-send"
+                    data-sending={isSending ? "true" : "false"}
                     style={
                       canQueueDraftWhileSending
                         ? {

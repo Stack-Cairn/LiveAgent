@@ -16,6 +16,7 @@ export function SidebarShortcutsSection({ settings, setSettings }: SettingsSecti
             control={
               <AgentActivationSwitch
                 checked={settings.customSettings.sidebarShortcuts[id]}
+                testId={`settings-sidebar-shortcut-${id}`}
                 title={t("settings.showSidebarShortcut").replace("{name}", t(labelKey))}
                 onToggle={() =>
                   setSettings((prev) =>

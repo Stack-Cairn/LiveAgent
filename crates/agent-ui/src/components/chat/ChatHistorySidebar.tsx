@@ -1619,6 +1619,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   type="button"
                   isActive={activeView === "chat"}
                   onClick={onNewConversation}
+                  data-testid="sidebar-new-conversation"
                   className={cn(
                     "sidebar-list-row w-full justify-start gap-2.5 rounded-md px-2.5",
                     "text-sm font-normal leading-5 shadow-none transition-colors",
