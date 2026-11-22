@@ -16,11 +16,17 @@
     "check:fast": "node scripts/check.mjs fast",
     "check:all": "node scripts/check.mjs all",
     "check:strict": "node scripts/check.mjs strict",
-    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs scripts/check-diff-hygiene.test.mjs scripts/release/release-version.test.mjs scripts/release/create-ai-release-notes.test.mjs scripts/release/build-kbrain-source.test.mjs scripts/release/prepare-kbrain.test.mjs scripts/release/verify-kbrain-packaging.test.mjs",
+    "check:script-tests": "node --test scripts/ui-boundary-declarations.test.mjs scripts/run-node-tests.test.mjs scripts/check-biome-changed.test.mjs scripts/check-diff-hygiene.test.mjs scripts/check-code-rules.test.mjs scripts/release/release-version.test.mjs scripts/release/create-ai-release-notes.test.mjs scripts/release/build-kbrain-source.test.mjs scripts/release/prepare-kbrain.test.mjs scripts/release/verify-kbrain-packaging.test.mjs",
     "prepare:kbrain": "node scripts/release/prepare-kbrain.mjs",
     "build:kbrain:source": "node scripts/release/build-kbrain-source.mjs",
     "prepare:kbrain:release": "node scripts/release/prepare-kbrain.mjs --release",
     "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
+    "check:bundle-size": "node scripts/check-bundle-size.mjs",
+    "check:file-size": "node scripts/check-file-size.mjs",
+    "check:knip": "node scripts/check-knip.mjs",
+    "check:perf-micro": "node scripts/check-perf-micro.mjs",
+    "smoke:bundle": "node scripts/smoke-frontend-bundle.mjs",
+    "perf:scenarios": "node crates/agent-gui/perf/run.mjs",
     "typecheck:ui": "pnpm --filter @liveagent/ui typecheck",
     "typecheck:virtual-core": "pnpm --filter @tanstack/virtual-core typecheck",
     "test:virtual-core": "pnpm --filter @tanstack/virtual-core test",
@@ -59,8 +65,9 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.15",
     "@babel/parser": "7.29.8",
-    "esbuild": "0.28.2"
+    "@biomejs/biome": "2.4.15",
+    "esbuild": "0.28.2",
+    "knip": "6.44.2"
   }
 }
