@@ -382,6 +382,25 @@ const SCENARIOS = {
     };
   },
 
+  // Project a 2000-message history (createTranscriptProjection) on a fresh
+  // page, then once more: the second load reuses the same message objects,
+  // the way a re-projection after a history refresh would.
+  async projection(client, baseUrl, throttle) {
+    await open(client, baseUrl, "transcript");
+    const result = await measured(client, throttle, async () => {
+      const first = await client.evaluate("window.__perf.load(2000, 1024, { agent: true })");
+      const again = await client.evaluate(
+        "window.__perf.load(2000, 1024, { agent: true, reuse: true })",
+      );
+      return {
+        items: first.items,
+        projectionMs: Math.round(first.projectionMs),
+        reprojectionMs: Math.round(again.projectionMs),
+      };
+    });
+    return result;
+  },
+
   // 2000 messages, scroll up 150px per frame for 240 frames.
   async scroll(client, baseUrl, throttle) {
     await open(client, baseUrl, "transcript");

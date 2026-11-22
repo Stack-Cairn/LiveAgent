@@ -303,8 +303,10 @@ function hashFnv1a32(input: string) {
       ? new TextEncoder().encode(input)
       : Uint8Array.from(input, (char) => char.charCodeAt(0) & 0xff);
   let hash = 0x811c9dc5;
-  for (const byte of bytes) {
-    hash ^= byte;
+  // An indexed loop: iterating a large typed array with for...of is several
+  // times slower, and user messages can be long pasted text.
+  for (let index = 0; index < bytes.length; index += 1) {
+    hash ^= bytes[index];
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return `fnv1a32:${hash.toString(16).padStart(8, "0")}`;
@@ -661,38 +663,49 @@ function readInjectedHistoryMessageRef(message: Message | undefined) {
   return ref as HistoryMessageRef;
 }
 
-function buildTimelineItemsForSlice(
+type TimelineGroupCacheEntry = {
+  segmentIndex: number;
+  segmentId: string;
+  isCompacted: boolean;
+  startMessageIndex: number;
+  messages: Message[];
+  // Set when an assistant item fell back to the slice's last message for its
+  // timestamp: the entry then also depends on that timestamp.
+  fallbackTimestamp: number | null;
+  items: RenderTimelineItem[];
+};
+
+const timelineGroupCache = new WeakMap<Message, TimelineGroupCacheEntry>();
+
+function getTimelineGroupItems(
   slice: TranscriptSegmentSlice,
   isCompacted: boolean,
-  options?: { includeSummary?: boolean },
+  groupStart: number,
+  groupEnd: number,
 ): RenderTimelineItem[] {
-  const items: RenderTimelineItem[] = [];
-
-  if (options?.includeSummary !== false && slice.startMessageIndex === 0 && slice.summary) {
-    const contextTokensAfter = slice.summary.summaryMeta.stats?.contextTokensAfter;
-    items.push({
-      kind: "summary",
-      key: `summary-${slice.segmentId}-${slice.summary.id}`,
-      segmentIndex: slice.segmentIndex,
-      summaryId: slice.summary.id,
-      content: slice.summary.content,
-      coveredMessageCount: slice.summary.summaryMeta.coveredMessageCount,
-      coversThroughMessageId: slice.summary.summaryMeta.coversThroughMessageId,
-      generatedBy: slice.summary.summaryMeta.generatedBy,
-      ...(typeof contextTokensAfter === "number" &&
-      Number.isFinite(contextTokensAfter) &&
-      contextTokensAfter > 0
-        ? { contextUsageTokens: Math.floor(contextTokensAfter) }
-        : {}),
-      timestamp: slice.summary.timestamp,
-      collapsed: true,
-    });
+  const first = slice.messages[groupStart] as Message;
+  const startMessageIndex = slice.startMessageIndex + groupStart;
+  const cached = timelineGroupCache.get(first);
+  if (
+    cached &&
+    cached.segmentIndex === slice.segmentIndex &&
+    cached.segmentId === slice.segmentId &&
+    cached.isCompacted === isCompacted &&
+    cached.startMessageIndex === startMessageIndex &&
+    cached.messages.length === groupEnd - groupStart &&
+    cached.messages.every((message, index) => message === slice.messages[groupStart + index]) &&
+    (cached.fallbackTimestamp === null ||
+      cached.fallbackTimestamp === getMessageTimestamp(slice.messages.at(-1)))
+  ) {
+    return cached.items;
   }
 
-  const uiMessages = buildUiMessages(slice.messages, slice.startMessageIndex);
-  for (const uiMessage of uiMessages) {
+  const groupMessages = slice.messages.slice(groupStart, groupEnd);
+  const items: RenderTimelineItem[] = [];
+  let fallbackTimestamp: number | null = null;
+  for (const uiMessage of buildUiMessages(groupMessages, startMessageIndex)) {
     if (uiMessage.role === "user") {
-      const absoluteMessageIndex = uiMessage.messageIndex ?? slice.startMessageIndex;
+      const absoluteMessageIndex = uiMessage.messageIndex ?? startMessageIndex;
       const source = slice.messages[absoluteMessageIndex - slice.startMessageIndex];
       const injectedRef = readInjectedHistoryMessageRef(source);
       const messageRef =
@@ -730,15 +743,87 @@ function buildTimelineItemsForSlice(
       continue;
     }
 
+    let timestamp = uiMessage.timestamp;
+    if (timestamp === undefined) {
+      timestamp = getMessageTimestamp(slice.messages.at(-1));
+      fallbackTimestamp = timestamp;
+    }
     items.push({
       kind: "assistant",
       key: `segment-${slice.segmentId}-${uiMessage.key}`,
       segmentIndex: slice.segmentIndex,
-      messageIndex: uiMessage.messageIndex ?? slice.startMessageIndex,
+      messageIndex: uiMessage.messageIndex ?? startMessageIndex,
       rounds: uiMessage.rounds ?? [],
-      timestamp: uiMessage.timestamp ?? getMessageTimestamp(slice.messages.at(-1)),
+      timestamp,
       isFromCompactedSegment: isCompacted,
     });
+  }
+
+  // A message without a timestamp is shown at the time it was projected; keep
+  // that behaviour by not caching such groups.
+  const hasTimestamp = (message: Message | undefined) => typeof message?.timestamp === "number";
+  if (
+    !groupMessages.every(hasTimestamp) ||
+    (fallbackTimestamp !== null && !hasTimestamp(slice.messages.at(-1)))
+  ) {
+    return items;
+  }
+  timelineGroupCache.set(first, {
+    segmentIndex: slice.segmentIndex,
+    segmentId: slice.segmentId,
+    isCompacted,
+    startMessageIndex,
+    messages: groupMessages,
+    fallbackTimestamp,
+    items,
+  });
+  return items;
+}
+
+function buildTimelineItemsForSlice(
+  slice: TranscriptSegmentSlice,
+  isCompacted: boolean,
+  options?: { includeSummary?: boolean },
+): RenderTimelineItem[] {
+  const items: RenderTimelineItem[] = [];
+
+  if (options?.includeSummary !== false && slice.startMessageIndex === 0 && slice.summary) {
+    const contextTokensAfter = slice.summary.summaryMeta.stats?.contextTokensAfter;
+    items.push({
+      kind: "summary",
+      key: `summary-${slice.segmentId}-${slice.summary.id}`,
+      segmentIndex: slice.segmentIndex,
+      summaryId: slice.summary.id,
+      content: slice.summary.content,
+      coveredMessageCount: slice.summary.summaryMeta.coveredMessageCount,
+      coversThroughMessageId: slice.summary.summaryMeta.coversThroughMessageId,
+      generatedBy: slice.summary.summaryMeta.generatedBy,
+      ...(typeof contextTokensAfter === "number" &&
+      Number.isFinite(contextTokensAfter) &&
+      contextTokensAfter > 0
+        ? { contextUsageTokens: Math.floor(contextTokensAfter) }
+        : {}),
+      timestamp: slice.summary.timestamp,
+      collapsed: true,
+    });
+  }
+
+  // Timeline items are built per message group (a user message, or the run
+  // of assistant / tool messages up to the next user message) and memoized
+  // on the group's first message object: projecting the same messages again
+  // (a re-opened subagent, a rebuilt view state) reuses the items by identity
+  // instead of rebuilding them and re-hashing every user message.
+  const { messages } = slice;
+  let groupStart = 0;
+  while (groupStart < messages.length) {
+    let groupEnd = groupStart + 1;
+    if (messages[groupStart]?.role !== "user") {
+      while (groupEnd < messages.length && messages[groupEnd]?.role !== "user") groupEnd += 1;
+    }
+    for (const item of getTimelineGroupItems(slice, isCompacted, groupStart, groupEnd)) {
+      items.push(item);
+    }
+    groupStart = groupEnd;
   }
 
   return items;

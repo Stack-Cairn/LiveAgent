@@ -11,6 +11,7 @@ import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
 import { DiffContent } from "@liveagent/ui/components/project-tools/git-review/DiffView";
 import { appendTextDeltaToRound, collapseThinking, updateLiveRound } from "@liveagent/ui/lib/chat/uiMessages";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import type { Message } from "@liveagent/ui/lib/chat/agentTypes";
 import type { GitDiffResponse } from "@liveagent/ui/lib/git/types";
 import { Profiler, useCallback, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -22,7 +23,7 @@ import {
 import type { LiveRound } from "../src/lib/chat/messages/uiMessages";
 import { useLiveTranscriptController } from "../src/pages/chat/hooks/useLiveTranscriptController";
 import { ChatTranscript } from "../src/pages/chat/transcript/ChatTranscript";
-import { buildMessages, editFixture, gitPatchFixture, streamingCorpus } from "./fixtures";
+import { buildAgentMessages, buildMessages, editFixture, gitPatchFixture, streamingCorpus } from "./fixtures";
 
 type CommitStats = { n: number; actual: number; max: number };
 
@@ -63,8 +64,20 @@ const params = new URLSearchParams(location.search);
 const mode = params.get("mode") ?? "transcript";
 const noop = () => {};
 
-function projectHistory(messageCount: number, assistantChars: number) {
-  const messages = buildMessages(messageCount, assistantChars);
+// The last loaded history, so a second load can re-project the same objects.
+let lastMessages: { key: string; messages: Message[] } | null = null;
+
+type LoadOptions = { agent?: boolean; reuse?: boolean };
+
+function projectHistory(messageCount: number, assistantChars: number, options: LoadOptions) {
+  const key = `${messageCount}:${assistantChars}:${options.agent === true}`;
+  const messages =
+    options.reuse && lastMessages?.key === key
+      ? lastMessages.messages
+      : options.agent
+        ? buildAgentMessages(messageCount)
+        : buildMessages(messageCount, assistantChars);
+  lastMessages = { key, messages };
   const started = performance.now();
   const projection = createTranscriptProjection({
     segments: [
@@ -94,8 +107,8 @@ function TranscriptHarness() {
   const controllerRef = useRef(controller);
   controllerRef.current = controller;
 
-  const load = useCallback((messageCount: number, assistantChars: number) => {
-    const { items, projectionMs } = projectHistory(messageCount, assistantChars);
+  const load = useCallback((messageCount: number, assistantChars: number, options: LoadOptions = {}) => {
+    const { items, projectionMs } = projectHistory(messageCount, assistantChars, options);
     flushSync(() => setHistoryItems(items));
     return { items: items.length, projectionMs };
   }, []);

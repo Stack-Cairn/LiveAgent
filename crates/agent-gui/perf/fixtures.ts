@@ -115,6 +115,71 @@ export function buildMessages(count: number, assistantChars = 2048, seed = 7): M
   return messages;
 }
 
+/**
+ * A tool-using conversation of `count` messages with ids: each turn is a user
+ * message and two assistant rounds (thinking, markdown, two tool calls), each
+ * followed by its two tool results.
+ */
+export function buildAgentMessages(count: number, seed = 5): Message[] {
+  const random = createRandom(seed);
+  const messages: Message[] = [];
+  let timestamp = 1_700_000_000_000;
+  let call = 0;
+  const usage = {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+  while (messages.length < count) {
+    timestamp += 1000;
+    messages.push({
+      id: `user-${messages.length}`,
+      role: "user",
+      content: paragraph(random) + paragraph(random),
+      timestamp,
+    } as Message);
+    for (let round = 0; round < 2; round += 1) {
+      const ids = [`call-${call++}`, `call-${call++}`];
+      timestamp += 1000;
+      messages.push({
+        id: `assistant-${messages.length}`,
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: paragraph(random) },
+          { type: "text", text: markdownDocument(random, 800) },
+          ...ids.map((id) => ({
+            type: "toolCall",
+            id,
+            name: "read_file",
+            arguments: { path: `src/${words(random, 1)}/${id}.ts` },
+          })),
+        ],
+        api: "fake",
+        provider: "fake",
+        model: "fake-model",
+        usage,
+        stopReason: "toolUse",
+        timestamp,
+      } as Message);
+      for (const id of ids) {
+        messages.push({
+          id: `result-${id}`,
+          role: "toolResult",
+          toolCallId: id,
+          toolName: "read_file",
+          content: [{ type: "text", text: markdownDocument(random, 2000) }],
+          isError: false,
+          timestamp,
+        } as Message);
+      }
+    }
+  }
+  return messages.slice(0, count);
+}
+
 /** The text the streaming scenario reveals, chunked like provider deltas. */
 export function streamingCorpus(chars: number, seed = 11) {
   return markdownDocument(createRandom(seed), chars).slice(0, chars);
