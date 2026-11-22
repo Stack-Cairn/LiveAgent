@@ -27,6 +27,7 @@ export const PROJECT_TOOL_SURFACE_KINDS = [
   "sshTunnel",
   "backgroundTasks",
   "browser",
+  "plugins",
 ] as const;
 
 export type ProjectToolSurfaceKind = (typeof PROJECT_TOOL_SURFACE_KINDS)[number];
@@ -51,6 +52,7 @@ export type BackgroundTasksWorkbenchSurface = Extract<
   { kind: "backgroundTasks" }
 >;
 export type BrowserWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "browser" }>;
+export type PluginsWorkbenchSurface = Extract<ProjectToolWorkbenchSurface, { kind: "plugins" }>;
 
 /** Tools backed by one window-wide resource: identity ignores the project. */
 export function isWindowScopedProjectToolKind(kind: ProjectToolSurfaceKind): boolean {
@@ -143,6 +145,7 @@ export function surfaceIdentityKey(surface: WorkbenchSurfaceSpec): string {
     case "sshTunnel":
     case "backgroundTasks":
     case "browser":
+    case "plugins":
       return projectToolSurfaceIdentityKey(surface.kind, surface.project.projectPathKey);
     case "localTerminal":
     case "sshTerminal":

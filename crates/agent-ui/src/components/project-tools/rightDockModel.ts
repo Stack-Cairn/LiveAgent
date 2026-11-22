@@ -128,13 +128,15 @@ export function orderRightDockVisibleTabs(
 }
 
 export function rightDockTabRequiresProject(kind: RightDockSingletonTabKind) {
-  return kind !== "tunnel" && kind !== "browser";
+  return kind !== "tunnel" && kind !== "browser" && kind !== "plugins";
 }
 
 /** Host capabilities for the tools that work without a project. */
 export type RightDockStandaloneToolAvailability = {
   tunnelAvailable: boolean;
   browserAvailable?: boolean;
+  /** Plugin panels or HTML previews can be shown (K-brain plugin_ui / html_previews). */
+  panelsAvailable?: boolean;
 };
 
 /**
@@ -147,6 +149,7 @@ export function rightDockStandaloneToolAvailable(
 ) {
   if (kind === "tunnel") return availability.tunnelAvailable;
   if (kind === "browser") return Boolean(availability.browserAvailable);
+  if (kind === "plugins") return Boolean(availability.panelsAvailable);
   return false;
 }
 
@@ -158,18 +161,24 @@ export function rightDockToolOffered(
   kind: RightDockSingletonTabKind,
   availability: RightDockStandaloneToolAvailability,
 ) {
+  if (kind === "plugins") return Boolean(availability.panelsAvailable);
   return kind !== "browser" || Boolean(availability.browserAvailable);
 }
 
 export function anyRightDockStandaloneToolAvailable(
   availability: RightDockStandaloneToolAvailability,
 ) {
-  return availability.tunnelAvailable || Boolean(availability.browserAvailable);
+  return (
+    availability.tunnelAvailable ||
+    Boolean(availability.browserAvailable) ||
+    Boolean(availability.panelsAvailable)
+  );
 }
 
 export function getRightDockVisibleTabs(options: {
   backgroundTasksVisible: boolean;
   browserAvailable?: boolean;
+  panelsAvailable?: boolean;
   /** Tools whose surface lives in a workbench pane: no dock tab for them. */
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   localSessions: TerminalSession[];
@@ -180,6 +189,7 @@ export function getRightDockVisibleTabs(options: {
   const {
     backgroundTasksVisible,
     browserAvailable = false,
+    panelsAvailable = false,
     leasedTools = NO_LEASED_RIGHT_DOCK_TOOLS,
     localSessions,
     projectPathKey,
@@ -196,6 +206,7 @@ export function getRightDockVisibleTabs(options: {
     if (!projectState.tools[kind]) continue;
     if (kind === "tunnel" && !tunnelAvailable) continue;
     if (kind === "browser" && !browserAvailable) continue;
+    if (kind === "plugins" && !panelsAvailable) continue;
     if (rightDockTabRequiresProject(kind) && !projectPathKey) continue;
     nextTabs.push({ id: rightDockSingletonTabId(kind), kind });
   }

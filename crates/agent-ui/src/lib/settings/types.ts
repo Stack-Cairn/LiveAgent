@@ -95,6 +95,7 @@ export const RIGHT_DOCK_TOOL_KINDS = [
   "tunnel",
   "sshTunnel",
   "browser",
+  "plugins",
 ] as const;
 
 export type RightDockToolKind = (typeof RIGHT_DOCK_TOOL_KINDS)[number];
@@ -172,6 +173,11 @@ export type ChatTranscriptSettings = {
    * single status line per running turn.
    */
   showDetailedProgress: boolean;
+  /**
+   * Render "html preview" blocks and written .html files as sandboxed previews when
+   * K-brain supports it (capability html_previews). On by default.
+   */
+  htmlPreviews: boolean;
 };
 
 /**

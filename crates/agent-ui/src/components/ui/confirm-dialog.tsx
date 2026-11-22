@@ -30,14 +30,25 @@ export type ConfirmDialogOptions = {
    * confirmations that do not delete or discard anything irreversible.
    */
   tone?: "destructive" | "default";
+  /**
+   * A second, broader confirmation (e.g. "Allow for this session") shown between cancel
+   * and confirm; only `choose` reports it separately, `confirm` treats it as confirmed.
+   */
+  secondaryConfirmLabel?: string;
 };
 
+export type ConfirmDialogChoice = "confirm" | "secondary" | "cancel";
+
 type PendingConfirmDialog = ConfirmDialogOptions & {
-  resolve: (confirmed: boolean) => void;
+  resolve: (choice: ConfirmDialogChoice) => void;
 };
 
 function ConfirmDialog(
-  props: ConfirmDialogOptions & { onCancel: () => void; onConfirm: () => void },
+  props: ConfirmDialogOptions & {
+    onCancel: () => void;
+    onConfirm: () => void;
+    onSecondaryConfirm: () => void;
+  },
 ) {
   const {
     title,
@@ -50,8 +61,10 @@ function ConfirmDialog(
     hideCancel = false,
     preferCancel = false,
     tone = "destructive",
+    secondaryConfirmLabel,
     onCancel,
     onConfirm,
+    onSecondaryConfirm,
   } = props;
 
   return (
@@ -112,6 +125,17 @@ function ConfirmDialog(
                 {cancelLabel}
               </AlertDialogClose>
             )}
+            {secondaryConfirmLabel ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8"
+                onClick={onSecondaryConfirm}
+                data-confirm-dialog-action="secondary"
+              >
+                {secondaryConfirmLabel}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant={preferCancel ? "ghost" : tone === "default" ? "default" : "destructive"}
@@ -141,25 +165,30 @@ export function useConfirmDialog() {
   const [pending, setPending] = useState<PendingConfirmDialog | null>(null);
   const pendingRef = useRef<PendingConfirmDialog | null>(null);
 
-  const close = useCallback((confirmed: boolean) => {
+  const close = useCallback((choice: ConfirmDialogChoice) => {
     const current = pendingRef.current;
     pendingRef.current = null;
     setPending(null);
-    current?.resolve(confirmed);
+    current?.resolve(choice);
   }, []);
 
-  const confirm = useCallback((options: ConfirmDialogOptions) => {
-    return new Promise<boolean>((resolve) => {
-      pendingRef.current?.resolve(false);
+  const choose = useCallback((options: ConfirmDialogOptions) => {
+    return new Promise<ConfirmDialogChoice>((resolve) => {
+      pendingRef.current?.resolve("cancel");
       const next = { ...options, resolve };
       pendingRef.current = next;
       setPending(next);
     });
   }, []);
 
+  const confirm = useCallback(
+    async (options: ConfirmDialogOptions) => (await choose(options)) !== "cancel",
+    [choose],
+  );
+
   useEffect(() => {
     return () => {
-      pendingRef.current?.resolve(false);
+      pendingRef.current?.resolve("cancel");
       pendingRef.current = null;
     };
   }, []);
@@ -176,10 +205,12 @@ export function useConfirmDialog() {
       hideCancel={pending.hideCancel}
       preferCancel={pending.preferCancel}
       tone={pending.tone}
-      onCancel={() => close(false)}
-      onConfirm={() => close(true)}
+      secondaryConfirmLabel={pending.secondaryConfirmLabel}
+      onCancel={() => close("cancel")}
+      onConfirm={() => close("confirm")}
+      onSecondaryConfirm={() => close("secondary")}
     />
   ) : null;
 
-  return { confirm, dialog };
+  return { confirm, choose, dialog };
 }

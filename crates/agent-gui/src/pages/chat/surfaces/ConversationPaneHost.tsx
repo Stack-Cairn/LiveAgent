@@ -10,6 +10,7 @@ import {
   type ForwardedRef,
   forwardRef,
   memo,
+  type ReactNode,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -29,6 +30,7 @@ import { KBrainGoalBarHost } from "../composer/KBrainGoalBarHost";
 import type { ConversationPaneHostHandle } from "../conversations/useConversationPaneHostBridge";
 import { useConversationSurfaceSnapshot } from "../conversations/useConversationSurfaceSnapshot";
 import { buildQueuedChatTurnPreview } from "../queue/chatTurnQueue";
+import { KBrainSandboxedUiTranscriptHost } from "../sandboxed/KBrainSandboxedUi";
 import {
   KBrainSubagentPaneHost,
   KBrainSubagentRunningChip,
@@ -37,6 +39,14 @@ import {
 const CheckpointRewindProvider = isKBrainBackendEnabled()
   ? KBrainCheckpointRewindProvider
   : DesktopCheckpointRewindProvider;
+
+// Sandboxed views (MCP Apps, HTML previews) only exist on a K-brain backend.
+function PlainTranscriptHost(props: { children: ReactNode }) {
+  return <>{props.children}</>;
+}
+const SandboxedTranscriptHost = isKBrainBackendEnabled()
+  ? KBrainSandboxedUiTranscriptHost
+  : PlainTranscriptHost;
 
 import { ChatTranscript } from "../transcript/ChatTranscript";
 import {
@@ -275,19 +285,24 @@ const RegisteredConversationPaneHostContent = forwardRef<
                 disabled={checkpointRewind.disabled}
                 onRewound={checkpointRewind.onRewound}
               >
-                <ChatTranscript
-                  {...transcript}
+                <SandboxedTranscriptHost
                   conversationId={snapshot.conversationId}
-                  followRef={scrollFollowRef}
-                  historyItems={historyItems}
-                  hasMoreHistory={runtime?.state.transcript.hasMoreBefore ?? false}
-                  isSending={isSending}
-                  isCompactionRunning={isCompactionRunning}
-                  bottomReservePx={composerOverlayHeight}
-                  composerCenterOffsetPx={composerCenterOffset}
-                  onQuoteSelection={handleQuoteSelection}
-                  onCommentSelection={handleCommentSelection}
-                />
+                  workdir={transcript.workspaceRoot}
+                >
+                  <ChatTranscript
+                    {...transcript}
+                    conversationId={snapshot.conversationId}
+                    followRef={scrollFollowRef}
+                    historyItems={historyItems}
+                    hasMoreHistory={runtime?.state.transcript.hasMoreBefore ?? false}
+                    isSending={isSending}
+                    isCompactionRunning={isCompactionRunning}
+                    bottomReservePx={composerOverlayHeight}
+                    composerCenterOffsetPx={composerCenterOffset}
+                    onQuoteSelection={handleQuoteSelection}
+                    onCommentSelection={handleCommentSelection}
+                  />
+                </SandboxedTranscriptHost>
               </CheckpointRewindProvider>
             </ChangedFilesActionsProvider>
           ),

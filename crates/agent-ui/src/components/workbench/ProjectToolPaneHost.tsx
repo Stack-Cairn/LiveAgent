@@ -22,6 +22,7 @@ import {
   RightDockToolContext,
   type RightDockToolContextValue,
 } from "../project-tools/RightDockContext";
+import { SandboxedPanelsPanel } from "../project-tools/SandboxedPanelsPanel";
 import { SshTunnelPanel } from "../project-tools/SshTunnelPanel";
 import { UnsupportedPaneSurface } from "./surfaces/UnsupportedPaneSurface";
 
@@ -270,6 +271,19 @@ export function ProjectToolPaneHost(props: ProjectToolPaneHostProps) {
         />
       );
       break;
+    case "plugins": {
+      const openFile = contextValue.fileTree.onOpenFile;
+      body = (
+        <SandboxedPanelsPanel
+          active
+          plugins={clients.plugins ?? null}
+          previews={clients.htmlPreviews ?? null}
+          workdir={cwd}
+          onOpenFile={openFile ? (path) => openFile(path) : undefined}
+        />
+      );
+      break;
+    }
   }
 
   return (

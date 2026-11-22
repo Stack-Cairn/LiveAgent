@@ -15,7 +15,9 @@ import type {
   PermissionRule,
   PermissionRuleList,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
+import { createKBrainFolderTrustClient } from "../lib/kbrain/folderTrust";
 import { getKBrainRuntimeConnection } from "../lib/kbrain/runtimeConnection";
+import { createKBrainPluginsClient } from "../lib/kbrain/sandboxedUi";
 
 /** A K-brain answer outside 2xx; `status` lets a caller tell "no such route" apart. */
 class KBrainHttpError extends Error {
@@ -126,6 +128,8 @@ function recordWebSearch(document: KBrainSettingsDocument): KBrainSettingsDocume
 
 export const kbrainSettingsAdapter: KBrainSettingsAdapter = {
   isKbrain: true,
+  plugins: createKBrainPluginsClient(),
+  folderTrust: createKBrainFolderTrustClient(),
   runtimeConnection: getKBrainRuntimeConnection,
   getConnection: getKBrainRuntimeConnection,
   getSettings: () => request<KBrainSettingsDocument>("/v1/settings").then(recordWebSearch),

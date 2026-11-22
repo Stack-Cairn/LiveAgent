@@ -16,6 +16,8 @@ import {
   type HostedSearchBlock,
   normalizeHostedSearchBlock,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import { type HtmlPreviewRecord, parseHtmlPreview } from "@liveagent/ui/lib/chat/htmlPreviews";
+import { withMcpUiResourceDetails } from "@liveagent/ui/lib/chat/mcpApps";
 import {
   MCP_ELICITATION_SYNTHETIC_ARG_PREFIX,
   type McpElicitationAction,
@@ -291,6 +293,11 @@ export type KBrainTurnParams = {
   ) => void;
   /** `elicitation.resolved`: exactly one per request; sensitive values already removed. */
   onElicitationResolved?: (toolCallId: string, record: McpElicitationRecord) => void;
+  /**
+   * K-brain saved an HTML preview (`preview.created`). Setting this also asks K-brain to
+   * save previews (option html_previews), when it can.
+   */
+  onPreviewCreated?: (preview: HtmlPreviewRecord) => void;
   applyConversationState?: (state: ConversationViewState) => void;
   getConversationState?: () => ConversationViewState;
   baseUrl?: string;
@@ -387,21 +394,24 @@ function toolResult(
     toolCallId: result.id,
     toolName: kbrainToolResultName(result.name),
     content: [{ type: "text", text: result.output }, ...images.content],
-    details: withMcpElicitationDetails(
-      withToolRunInfo(
-        result.name,
-        questionResultDetails(
+    details: withMcpUiResourceDetails(
+      withMcpElicitationDetails(
+        withToolRunInfo(
           result.name,
-          result.output,
-          call?.arguments,
-          isError,
-          result.question_answers,
-        ) ??
-          taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
-          displayImageResultDetails(result.name, images.images, isError),
-        result,
+          questionResultDetails(
+            result.name,
+            result.output,
+            call?.arguments,
+            isError,
+            result.question_answers,
+          ) ??
+            taskResultDetails(result.name, call?.arguments, result, runId, revision) ??
+            displayImageResultDetails(result.name, images.images, isError),
+          result,
+        ),
+        result.elicitations,
       ),
-      result.elicitations,
+      isError ? undefined : result.ui_resource,
     ),
     isError,
     timestamp: Date.now(),
@@ -676,9 +686,15 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
   };
   // Ask K-brain to relay MCP form elicitations only when this turn can show them; the client
   // drops the option unless the backend advertises the capability (older backends reject it).
-  const runOptions: KBrainRunOptions | undefined =
-    params.onElicitationRequest && !params.attachClientRequestId
-      ? { ...params.options, mcp_elicitation: true }
+  // HTML previews likewise: requested only when this turn can show them.
+  const runOptions: KBrainRunOptions | undefined = params.attachClientRequestId
+    ? params.options
+    : params.onElicitationRequest || params.onPreviewCreated
+      ? {
+          ...params.options,
+          ...(params.onElicitationRequest ? { mcp_elicitation: true } : {}),
+          ...(params.onPreviewCreated ? { html_previews: true } : {}),
+        }
       : params.options;
   const startRun = async () => {
     if (params.attachClientRequestId) return attachRun();
@@ -1108,6 +1124,11 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
                 content,
               );
         onElicitationRequest(request, answer, controller.signal);
+        break;
+      }
+      case "preview.created": {
+        const preview = parseHtmlPreview(eventPayload<unknown>(event));
+        if (preview) params.onPreviewCreated?.(preview);
         break;
       }
       case "elicitation.resolved": {

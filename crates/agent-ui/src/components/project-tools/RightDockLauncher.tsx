@@ -49,6 +49,7 @@ type RightDockCreateMenuProps = RightDockLauncherActions & {
   projectReady: boolean;
   tunnelAvailable: boolean;
   browserAvailable?: boolean;
+  panelsAvailable?: boolean;
   creating: boolean;
 };
 
@@ -60,6 +61,7 @@ type RightDockChooserProps = RightDockLauncherActions & {
   projectReady: boolean;
   tunnelAvailable: boolean;
   browserAvailable?: boolean;
+  panelsAvailable?: boolean;
   creating: boolean;
   loading: boolean;
   error: string | null;
@@ -86,6 +88,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
     projectReady,
     tunnelAvailable,
     browserAvailable = false,
+    panelsAvailable = false,
     creating,
     onCreateTerminal,
     onOpenNewTerminalInWorkbench,
@@ -93,7 +96,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
     onOpenBackgroundTasks,
   } = props;
   const { t } = useLocale();
-  const availability = { tunnelAvailable, browserAvailable };
+  const availability = { tunnelAvailable, browserAvailable, panelsAvailable };
 
   const terminalItem =
     shellOptions.length > 1 ? (
@@ -197,6 +200,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
     projectReady,
     tunnelAvailable,
     browserAvailable = false,
+    panelsAvailable = false,
     creating,
     loading,
     error,
@@ -208,7 +212,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
   } = props;
   const { t } = useLocale();
   const terminalTileDisabled = !terminalReady || creating;
-  const availability = { tunnelAvailable, browserAvailable };
+  const availability = { tunnelAvailable, browserAvailable, panelsAvailable };
   // Drag-out arms on primary-button mouse/pen only; touch keeps scrolling the
   // chooser (same rule as the terminal tile and dock tab drag-out).
   const toolDragHandler = (kind: RightDockLeasedToolKind, disabled: boolean) =>

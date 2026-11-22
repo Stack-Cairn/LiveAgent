@@ -555,6 +555,7 @@ function syncableCustomSettings(
       width: DEFAULT_CHAT_TRANSCRIPT_WIDTH,
       expandProcessByDefault: false,
       showDetailedProgress: false,
+      htmlPreviews: true,
     },
     runNotifications: true,
     runCompletionSound: false,

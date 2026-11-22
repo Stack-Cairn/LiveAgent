@@ -2487,6 +2487,13 @@ export function updateShowDetailedProgress(prev: AppSettings, enabled: boolean):
   });
 }
 
+export function updateHtmlPreviews(prev: AppSettings, enabled: boolean): AppSettings {
+  if (prev.customSettings.chatTranscript.htmlPreviews === enabled) return prev;
+  return updateCustomSettings(prev, {
+    chatTranscript: { ...prev.customSettings.chatTranscript, htmlPreviews: enabled },
+  });
+}
+
 export function updateRunNotifications(prev: AppSettings, enabled: boolean): AppSettings {
   if (prev.customSettings.runNotifications === enabled) return prev;
   return updateCustomSettings(prev, { runNotifications: enabled });

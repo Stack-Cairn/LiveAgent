@@ -44,6 +44,7 @@ export const SETTINGS_SEARCH_SECTION_LABEL_KEYS: Readonly<Record<string, string>
   usage: "settings.navUsage",
   skills: "settings.navSkills",
   mcp: "settings.navMcp",
+  plugins: "sandboxedUi.plugins.nav",
   planning: "settings.navPlanning",
   memory: "settings.navMemory",
   systemTools: "settings.navSystemTools",
@@ -92,6 +93,13 @@ const STATIC_ENTRIES: readonly SettingsSearchEntry[] = [
     labelKey: "settings.expandProcessByDefault",
     descriptionKey: "settings.expandProcessByDefaultDesc",
     keywords: ["thinking", "tool calls", "collapse", "expand"],
+  },
+  {
+    section: "system",
+    anchor: "html-previews",
+    labelKey: "settings.htmlPreviews",
+    descriptionKey: "settings.htmlPreviewsDesc",
+    keywords: ["html", "preview", "sandbox", "page"],
   },
   {
     section: "system",
@@ -162,6 +170,14 @@ const STATIC_ENTRIES: readonly SettingsSearchEntry[] = [
     labelKey: "settings.skillsHubTitle",
     descriptionKey: "settings.skillsHubSubtitle",
     keywords: ["skill", "install", "store"],
+  },
+  // Plugins
+  {
+    section: "plugins",
+    anchor: "plugins",
+    labelKey: "sandboxedUi.plugins.title",
+    descriptionKey: "sandboxedUi.plugins.description",
+    keywords: ["plugin", "extension", "panel", "install"],
   },
   {
     section: "mcp",

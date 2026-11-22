@@ -9,6 +9,7 @@ import {
   kbrainQuestionAnswerPayload,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { ComposerTurnCommand } from "@liveagent/ui/lib/chat/composerCommands";
+import { recordHtmlPreviews } from "@liveagent/ui/lib/chat/htmlPreviews";
 import {
   MCP_ELICITATION_DETAILS_KEY,
   MCP_ELICITATION_SYNTHETIC_ARG_KEYS,
@@ -45,6 +46,7 @@ import { getKBrainHistoryWindow } from "../../../lib/kbrain/history";
 import { mergeUnacceptedKBrainInputs, protectKBrainInput } from "../../../lib/kbrain/historySync";
 import { getKBrainSessionId } from "../../../lib/kbrain/mapping";
 import { kbrainRunMcpServerIds } from "../../../lib/kbrain/mcp";
+import { isKBrainHtmlPreviewsPreferred } from "../../../lib/kbrain/sandboxedUiPreferences";
 import { canonicalKBrainToolPolicies } from "../../../lib/kbrain/toolPolicies";
 import { type KBrainPermissionAutoResolved, runKBrainTurn } from "../../../lib/kbrain/turn";
 import type {
@@ -541,6 +543,12 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           recordMcpElicitationResolution(params.conversationId, toolCallId, record);
           syncElicitationCall(toolCallId);
         },
+        // The client drops html_previews unless the backend advertises it.
+        ...(isKBrainHtmlPreviewsPreferred()
+          ? {
+              onPreviewCreated: (preview) => recordHtmlPreviews(params.conversationId, [preview]),
+            }
+          : {}),
         onSubagentEvent: (event) =>
           ingestKBrainSubagentEvent(params.conversationId, event.conversation_id, event),
         onSubagent: (subagent) => {
