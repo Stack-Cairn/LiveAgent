@@ -387,23 +387,49 @@ const SCENARIOS = {
     await open(client, baseUrl, "transcript");
     await client.evaluate("window.__perf.load(2000, 1024)");
     await delay(3000);
-    const result = await measured(client, throttle, () =>
-      client.evaluate(`(async () => {
-        const viewport = document.querySelector("[data-scroll-viewport]");
-        viewport.scrollTop = viewport.scrollHeight;
-        await new Promise((r) => setTimeout(r, 300));
-        const frames = [];
+    // Wheel input (programmatic scrollTop is re-pinned by follow mode, a
+    // wheel breaks it like a user would): 240 notches of 150px upwards, about
+    // one per frame, while the page records its frame intervals.
+    const center = await client.evaluate(`(() => {
+      const viewport = [...document.querySelectorAll("[data-scroll-viewport]")].sort(
+        (a, b) => b.scrollHeight - a.scrollHeight,
+      )[0];
+      window.__scrollViewport = viewport;
+      window.__scrollStart = viewport.scrollTop;
+      const rect = viewport.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    })()`);
+    const result = await measured(client, throttle, async () => {
+      await client.evaluate(`(() => {
+        window.__frames = [];
+        window.__recording = true;
         let last = performance.now();
-        for (let i = 0; i < 240; i += 1) {
-          viewport.scrollTop -= 150;
-          await new Promise((r) => requestAnimationFrame(r));
-          const now = performance.now();
-          frames.push(now - last);
+        const tick = (now) => {
+          window.__frames.push(now - last);
           last = now;
-        }
-        return { frames };
-      })()`),
-    );
+          if (window.__recording) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      for (let index = 0; index < 240; index += 1) {
+        await client.request("Input.dispatchMouseEvent", {
+          type: "mouseWheel",
+          x: center.x,
+          y: center.y,
+          deltaX: 0,
+          deltaY: -150,
+        });
+        await delay(16);
+      }
+      await delay(300);
+      return client.evaluate(`(() => {
+        window.__recording = false;
+        return {
+          frames: window.__frames.slice(1),
+          scrolledPx: Math.round(window.__scrollStart - window.__scrollViewport.scrollTop),
+        };
+      })()`);
+    });
     const frames = result.frames;
     delete result.frames;
     return {

@@ -194,7 +194,7 @@ export function GatewayAppView({
   const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();
   const {
-    activeFloorKey,
+    activeFloorStore,
     activeSelectedModel,
     activeView,
     activeWorkspaceProject,
@@ -380,7 +380,6 @@ export function GatewayAppView({
     selectedValue,
     selectionForConversation,
     sendChat,
-    setActiveFloorKey,
     setCachedComposerDraft,
     setPendingUploadsForConversation,
     setProjectPickerOpen,
@@ -1032,7 +1031,7 @@ export function GatewayAppView({
           <FloorNavRail
             conversationId={displayedConversationId}
             floors={transcriptFloors}
-            activeRowKey={activeFloorKey}
+            activeRowKeyStore={activeFloorStore}
             bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
             scrollViewport={transcriptViewport}
             onJump={handleFloorJump}
@@ -1050,7 +1049,7 @@ export function GatewayAppView({
     viewportFollowing: transcriptFollowing,
     onJumpToBottom: transcriptFollow.jumpToBottom,
     navRef: transcriptNavRef,
-    onAnchorUserRowChange: setActiveFloorKey,
+    onAnchorUserRowChange: activeFloorStore.set,
     onResendFromEdit: handleResendFromEdit,
     onBranchConversation: handleBranchConversation,
     branchPendingMessageId,
@@ -1971,7 +1970,7 @@ export function GatewayAppView({
                                             isViewportFollowing={transcriptFollow.isFollowing}
                                             viewportFollowing={transcriptFollowing}
                                             navRef={transcriptNavRef}
-                                            onAnchorUserRowChange={setActiveFloorKey}
+                                            onAnchorUserRowChange={activeFloorStore.set}
                                             error={transcriptError}
                                             toolStatus={transcriptToolStatus}
                                             toolStatusIsCompaction={
@@ -2026,7 +2025,7 @@ export function GatewayAppView({
                                       <FloorNavRail
                                         conversationId={displayedConversationId}
                                         floors={transcriptFloors}
-                                        activeRowKey={activeFloorKey}
+                                        activeRowKeyStore={activeFloorStore}
                                         bottomOffset="calc(var(--gateway-chat-composer-overlay-height, var(--spacing-176px)) + var(--spacing-12px))"
                                         scrollViewport={transcriptViewport}
                                         onJump={handleFloorJump}
