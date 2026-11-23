@@ -295,11 +295,27 @@ for (const mode of ["drop", "auth", "stop-before-output"]) {
     if (mode === "drop") {
       assert.equal(text, "Here is the first part ");
       assert.equal(turnErrorOf(reply.rounds), "unexpected EOF");
+      // Reopening the conversation later in this app session reads the same history.
+      const { getKBrainHistoryWindow } = turnLoader.loadModule("src/lib/kbrain/history.ts");
+      const reread = (await getKBrainHistoryWindow(`failed-${mode}`)).segments.at(-1).messages.at(-1);
+      assert.deepEqual(reread.content, [{ type: "text", text: "Here is the first part " }]);
+      assert.equal(reread.errorMessage, "unexpected EOF");
     } else if (mode === "auth") {
       assert.equal(text, "", "the raw error is not reply markdown");
       assert.equal(turnErrorOf(reply.rounds), AUTH_ERROR);
     } else {
       assert.equal(lastRound.meta?.stopReason, "aborted");
+      // Reopening the conversation later in this app session still shows it stopped.
+      const { getKBrainHistoryWindow } = turnLoader.loadModule("src/lib/kbrain/history.ts");
+      const { buildConversationStateFromWindow } = turnLoader.loadModule("src/lib/chat/history/chatHistory.ts");
+      const { mergeUnacceptedKBrainInputs } = turnLoader.loadModule("src/lib/kbrain/historySync.ts");
+      const reopened = mergeUnacceptedKBrainInputs(
+        `failed-${mode}`,
+        buildConversationStateFromWindow(await getKBrainHistoryWindow(`failed-${mode}`)),
+      );
+      const reopenedReply = reopened.transcript.items.at(-1);
+      assert.equal(reopenedReply?.kind, "assistant");
+      assert.equal(reopenedReply.rounds.at(-1).meta?.stopReason, "aborted");
     }
   });
 }

@@ -59,6 +59,7 @@ import type {
   KBrainSession,
   KBrainToolCall,
 } from "./types";
+import { restoredReplyContent } from "./unpersistedReply";
 import { kbrainUsage } from "./usage";
 
 const KBRAIN_API = "kbrain.agent.v1" as AssistantMessage["api"];
@@ -278,6 +279,8 @@ function toMessage(
   const errorMessage = isKBrainErrorMessageId(message.id)
     ? message.content?.find((block) => block.type === "text")?.text?.trim() || "K-brain run failed"
     : undefined;
+  // K-brain drops what such a run streamed; this app session may still hold it.
+  if (errorMessage && message.id) content.push(...(restoredReplyContent(message.id) ?? []));
   for (const block of errorMessage ? [] : (message.content ?? [])) {
     if (block.type === "text" && block.text) content.push({ type: "text", text: block.text });
     if (block.type === "thinking" && block.text)

@@ -23,10 +23,7 @@ import {
   approvalPreviewFromToolCall,
   clampApprovalText,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
-import {
-  appendMessagesToConversation,
-  appendRenderOnlyMessagesToConversation,
-} from "../../../lib/chat/conversation/conversationState";
+import { appendMessagesToConversation } from "../../../lib/chat/conversation/conversationState";
 import { buildConversationStateFromWindow } from "../../../lib/chat/history/chatHistory";
 import {
   appendTextDeltaToRound,
@@ -656,12 +653,10 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
           await getKBrainHistoryWindow(params.conversationId),
           projected,
         );
-        const authority = buildConversationStateFromWindow(restored.window);
+        // A stopped reply with no stored message is added back by the merge.
         state = mergeUnacceptedKBrainInputs(
           params.conversationId,
-          restored.renderOnly
-            ? appendRenderOnlyMessagesToConversation(authority, [restored.renderOnly])
-            : authority,
+          buildConversationStateFromWindow(restored.window),
         );
       } catch (error) {
         gatewayBridgeEvents.emitError(
