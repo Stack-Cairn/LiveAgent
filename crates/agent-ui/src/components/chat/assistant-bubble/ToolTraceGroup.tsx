@@ -7,6 +7,7 @@ import {
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { isPermissionDeniedToolResult } from "@liveagent/ui/lib/chat/toolPermissionDenied";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { Fragment, memo, type ReactNode, useMemo } from "react";
 import {
@@ -52,6 +53,7 @@ function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]
   let failed = 0;
   let completed = 0;
   let waiting = 0;
+  let denied = 0;
 
   for (const item of items) {
     if (item.toolCall.id && runningIds.has(item.toolCall.id)) {
@@ -60,6 +62,11 @@ function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]
     }
     if (!item.toolResult) {
       waiting += 1;
+      continue;
+    }
+    // A call the user denied never ran: it neither failed nor completed.
+    if (isPermissionDeniedToolResult(item.toolResult)) {
+      denied += 1;
       continue;
     }
     // A shell command that exited non-zero or timed out failed even when the
@@ -72,7 +79,7 @@ function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]
     completed += 1;
   }
 
-  return { running, failed, completed, waiting };
+  return { running, failed, completed, waiting, denied };
 }
 
 export function getToolBatchCounts(items: ToolTraceItem[]) {
@@ -193,7 +200,13 @@ function ToolTraceGroupInner(props: {
     () => getToolGroupCounts(items, runningToolCallIds),
     [items, runningToolCallIds],
   );
-  const batchCounts = useMemo(() => getToolBatchCounts(items), [items]);
+  // Denied calls did nothing, so the batch is named after the calls that ran; a batch
+  // of denied calls only reads "Denied".
+  const deniedOnly = counts.denied > 0 && counts.denied === items.length;
+  const batchCounts = useMemo(() => {
+    const ran = items.filter((item) => !isPermissionDeniedToolResult(item.toolResult));
+    return getToolBatchCounts(ran.length > 0 ? ran : items);
+  }, [items]);
   const activeCategories = useMemo(
     () => getActiveToolCategories(items, runningToolCallIds),
     [items, runningToolCallIds],
@@ -224,20 +237,24 @@ function ToolTraceGroupInner(props: {
           : `${counts.running} ${t("chat.tool.running")}`
         : counts.waiting > 0
           ? `${counts.waiting} ${t("chat.tool.waiting")}`
-          : t("chat.tool.success");
+          : counts.denied > 0 && !deniedOnly
+            ? `${counts.denied} ${t("chat.tool.denied")}`
+            : t("chat.tool.success");
 
   // A category with a call still running reads in the present tense ("正在运行命令"),
   // and switches to the past tense once its calls are done. Calls without a result
   // that are not running belong to a settled or interrupted turn, so they read as past.
   // 中文标签之间没有天然的词边界（"读取了文件运行了命令"会黏成一句），
   // 用全角竖线分隔；全角字符自带留白，两侧不再加空格。
-  const countLabel = batchCounts
-    .map(({ category }) =>
-      activeCategories.has(category)
-        ? t(`chat.tool.batch.${category}.running`)
-        : t(`chat.tool.batch.${category}`),
-    )
-    .join(locale === "zh-CN" ? "｜" : " | ");
+  const countLabel = deniedOnly
+    ? t("chat.tool.denied")
+    : batchCounts
+        .map(({ category }) =>
+          activeCategories.has(category)
+            ? t(`chat.tool.batch.${category}.running`)
+            : t(`chat.tool.batch.${category}`),
+        )
+        .join(locale === "zh-CN" ? "｜" : " | ");
   // Collapsed, the header stands in for the batch: it names the call that is running
   // and carries the batch status. Expanded, every call shows its own row with its
   // running or failed status, so the header only labels the batch; repeating the
@@ -254,7 +271,10 @@ function ToolTraceGroupInner(props: {
     statusLabel !== null &&
     (open
       ? counts.failed === 0 && counts.running === 0 && counts.waiting > 0
-      : counts.failed > 0 || counts.running > 0 || counts.waiting > 0);
+      : counts.failed > 0 ||
+        counts.running > 0 ||
+        counts.waiting > 0 ||
+        (counts.denied > 0 && !deniedOnly));
   const visibleReasoning = redactToolContent ? EMPTY_REASONING : reasoning;
   const renderReasoningBefore = (index: number): ReactNode =>
     visibleReasoning

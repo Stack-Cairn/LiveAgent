@@ -18,19 +18,14 @@ export type StreamPreviewMeta = {
   fields: Record<string, PreviewFieldMetrics>;
 };
 
+/** Lines of text; a final line break ends the last line instead of starting another (as `wc -l` and diffs count). */
 export function countTextLines(input: string) {
   if (input.length === 0) return 0;
   let lines = 1;
   for (let index = 0; index < input.length; index += 1) {
     const code = input.charCodeAt(index);
-    if (code === 13) {
-      lines += 1;
-      if (input.charCodeAt(index + 1) === 10) {
-        index += 1;
-      }
-    } else if (code === 10) {
-      lines += 1;
-    }
+    if (code === 13 && input.charCodeAt(index + 1) === 10) index += 1;
+    if ((code === 13 || code === 10) && index < input.length - 1) lines += 1;
   }
   return lines;
 }

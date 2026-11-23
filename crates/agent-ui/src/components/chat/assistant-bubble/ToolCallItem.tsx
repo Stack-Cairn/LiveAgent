@@ -47,6 +47,7 @@ import {
   KBRAIN_SUBAGENT_FOLLOWUP_TOOL_NAME,
   subagentControlAction,
 } from "@liveagent/ui/lib/chat/subagentControlTools";
+import { isPermissionDeniedToolResult } from "@liveagent/ui/lib/chat/toolPermissionDenied";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "../../IconSet";
@@ -153,6 +154,8 @@ function ToolCallItem({
   const shellSessionStatus = shellSessionDetails?.status;
   const shellSessionFailed = shellSessionStatus === "failed" || shellSessionStatus === "timed_out";
   const displayIsRunning = Boolean(isRunning);
+  // The user (or a policy) refused the call, so it never ran: no failure, no change.
+  const permissionDenied = isPermissionDeniedToolResult(result);
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
   const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
@@ -275,10 +278,10 @@ function ToolCallItem({
   const fileChangeArgsFinal = fileChangeArgsDefinitive || quiescentArgs === item.toolCall.arguments;
   const fileChangeStats = useMemo(
     () =>
-      isRedactedToolContent
+      isRedactedToolContent || permissionDenied
         ? undefined
         : deriveFileChangeStats(item.toolCall, { preferEstimate: !fileChangeArgsFinal }),
-    [fileChangeArgsFinal, isRedactedToolContent, item.toolCall],
+    [fileChangeArgsFinal, isRedactedToolContent, item.toolCall, permissionDenied],
   );
   const fileOperation = useMemo(() => getFileOperationDisplay(item), [item]);
   const mcpServerLabel = useMcpServerLabel(item.toolCall.name);
@@ -305,11 +308,13 @@ function ToolCallItem({
       ? { name: t("chat.planMode.cardTitle"), action: "" }
       : isRedactedToolContent
         ? { name: getToolDisplayName(item.toolCall.name, mcpServerLabel), action: "" }
-        : localizedFileOperationTitle
-          ? { name: localizedFileOperationTitle, action: "" }
-          : localizedActivityTitle
-            ? { name: localizedActivityTitle, action: "" }
-            : getToolDisplayTitle(item.toolCall, mcpServerLabel);
+        : permissionDenied
+          ? { name: t("chat.tool.denied"), action: "" }
+          : localizedFileOperationTitle
+            ? { name: localizedFileOperationTitle, action: "" }
+            : localizedActivityTitle
+              ? { name: localizedActivityTitle, action: "" }
+              : getToolDisplayTitle(item.toolCall, mcpServerLabel);
 
   // Successful/running path-based file operations are deliberately a single
   // IDE link row. Failed operations retain the disclosure so the error stays
@@ -344,7 +349,7 @@ function ToolCallItem({
   const statusLabel = subagentControl?.outcome?.text ?? genericStatusLabel;
 
   const statusTextClass =
-    result?.isError || shellSessionFailed || subagentControl?.outcome?.failed
+    (result?.isError && !permissionDenied) || shellSessionFailed || subagentControl?.outcome?.failed
       ? "text-destructive"
       : "text-foreground/45";
 
@@ -474,7 +479,10 @@ function ToolCallItem({
       )}
 
       <ToolPermissionMarker marker={permissionAutoResolved} />
-      {displayIsRunning || result?.isError || shellSessionFailed || subagentControl?.outcome ? (
+      {displayIsRunning ||
+      (result?.isError && !permissionDenied) ||
+      shellSessionFailed ||
+      subagentControl?.outcome ? (
         <span className={cn("shrink-0 text-tiny", statusTextClass)}>{statusLabel}</span>
       ) : null}
     </>
@@ -522,7 +530,7 @@ function ToolCallItem({
           >
             {statusLabel}
           </AssistantStatus>
-        ) : (
+        ) : permissionDenied ? null : (
           <span className={cn("text-xs", statusTextClass)}>{statusLabel}</span>
         )}
         {canExpand ? (
@@ -563,7 +571,13 @@ function ToolCallItem({
           // collapsed "view return" toggle.
           if (result.isError) {
             return (
-              <ToolScrollablePre className="max-h-56 bg-destructive/10 text-destructive">
+              <ToolScrollablePre
+                className={
+                  permissionDenied
+                    ? "max-h-56 bg-surface-subtle text-muted-foreground"
+                    : "max-h-56 bg-destructive/10 text-destructive"
+                }
+              >
                 <TruncatedPreviewText text={resultText} maxChars={6000} />
               </ToolScrollablePre>
             );

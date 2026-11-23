@@ -806,6 +806,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
         pending={pendingToolApprovals}
+        workdir={workdir}
         onDecide={(toolCallId, decision, options) =>
           submitToolApprovalDecision(toolCallId, decision, conversationId, options)
         }

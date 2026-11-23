@@ -10,9 +10,17 @@ import {
 type PendingToolApprovalBarProps = {
   conversationId: string;
   approvals?: PendingToolApprovalSummary[];
+  /** The conversation's workspace; the card shows paths inside it relative to it. */
+  workdir?: string;
 };
 
-function SubscribedPendingToolApprovalBar({ conversationId }: { conversationId: string }) {
+function SubscribedPendingToolApprovalBar({
+  conversationId,
+  workdir,
+}: {
+  conversationId: string;
+  workdir?: string;
+}) {
   const subscribe = useCallback(
     (listener: () => void) => subscribeToolApprovalsForConversation(conversationId, listener),
     [conversationId],
@@ -22,19 +30,27 @@ function SubscribedPendingToolApprovalBar({ conversationId }: { conversationId: 
     [conversationId],
   );
   const pending = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return <PendingToolApprovalBarContent conversationId={conversationId} pending={pending} />;
+  return (
+    <PendingToolApprovalBarContent
+      conversationId={conversationId}
+      pending={pending}
+      workdir={workdir}
+    />
+  );
 }
 
 function PendingToolApprovalBarContent(props: {
   conversationId: string;
   pending: PendingToolApprovalSummary[];
+  workdir?: string;
 }) {
-  const { conversationId, pending } = props;
+  const { conversationId, pending, workdir } = props;
   if (pending.length === 0) return null;
 
   return (
     <ToolApprovalBar
       pending={pending}
+      workdir={workdir}
       onDecide={(toolCallId, decision, options) =>
         Promise.resolve(answerToolApproval(toolCallId, decision, { conversationId, ...options }))
       }
@@ -48,9 +64,15 @@ function PendingToolApprovalBarContent(props: {
 }
 
 export function PendingToolApprovalBar(props: PendingToolApprovalBarProps) {
-  const { conversationId, approvals } = props;
+  const { conversationId, approvals, workdir } = props;
   if (approvals) {
-    return <PendingToolApprovalBarContent conversationId={conversationId} pending={approvals} />;
+    return (
+      <PendingToolApprovalBarContent
+        conversationId={conversationId}
+        pending={approvals}
+        workdir={workdir}
+      />
+    );
   }
-  return <SubscribedPendingToolApprovalBar conversationId={conversationId} />;
+  return <SubscribedPendingToolApprovalBar conversationId={conversationId} workdir={workdir} />;
 }

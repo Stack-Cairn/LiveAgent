@@ -911,6 +911,31 @@ test("failed file operations keep an expandable error disclosure", () => {
   assert.doesNotMatch(html, /data-chat-file-link/);
 });
 
+test("a denied write reads Denied, with no failure status and no change count", () => {
+  const renderToolCallItem = createToolCallItemRenderer();
+  const content = "line 1\nline 2\n";
+  const html = renderToolCallItem(
+    { type: "toolCall", id: "write-denied", name: "Write", arguments: { path: "notes/a.txt", content } },
+    {
+      result: {
+        role: "toolResult",
+        toolCallId: "write-denied",
+        toolName: "Write",
+        content: [{ type: "text", text: "Error: Permission denied: the user rejected this action" }],
+        details: {},
+        isError: true,
+      },
+      compactChip: true,
+      onOpenFileLink() {},
+    },
+  );
+
+  assert.match(html, /chat\.tool\.denied/);
+  assert.doesNotMatch(html, /chat\.tool\.file\.create\.failed|chat\.tool\.failed/);
+  assert.doesNotMatch(html, /text-destructive/);
+  assert.doesNotMatch(html, /\+2/);
+});
+
 test("generic results show K-brain run info as one line instead of raw details JSON", () => {
   const renderToolDisplay = createToolArgsRenderer();
   const toolCall = { type: "toolCall", id: "native-bash", name: "bash", arguments: { command: "exit 3" } };

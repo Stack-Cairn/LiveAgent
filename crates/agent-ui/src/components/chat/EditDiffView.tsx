@@ -561,8 +561,10 @@ export function EditDiffView(props: {
   filePath?: string;
   /** A diff the backend computed; when set it is shown instead of diffing the two texts. */
   diffText?: string;
+  /** Span the container (the approval card) instead of the transcript's compact width. */
+  fullWidth?: boolean;
 }) {
-  const { beforeText, afterText, filePath, diffText } = props;
+  const { beforeText, afterText, filePath, diffText, fullWidth = false } = props;
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const diff = useThrottledDiff({ beforeText, afterText, filePath, diffText });
@@ -607,7 +609,8 @@ export function EditDiffView(props: {
   return (
     <figure
       className={cn(
-        "edit-tool-diff-view w-full max-w-420px overflow-hidden",
+        "edit-tool-diff-view w-full overflow-hidden",
+        !fullWidth && "max-w-420px",
         "rounded-xl border border-border/65 bg-card/85 shadow-ui-editdiffview-5",
       )}
       aria-label={`Diff for ${displayPath}`}

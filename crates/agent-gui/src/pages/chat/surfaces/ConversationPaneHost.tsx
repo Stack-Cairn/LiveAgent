@@ -351,6 +351,7 @@ const RegisteredConversationPaneHostContent = forwardRef<
                   <PendingToolApprovalBar
                     conversationId={snapshot.conversationId}
                     approvals={snapshot.approvals}
+                    workdir={transcript.workspaceRoot}
                   />
                 ) : null
               }
