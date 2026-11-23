@@ -182,8 +182,13 @@ export function reconcileSidebarConversations(
   const preserveUpdatedAtConversationIds = toTrimmedIdSet(
     options?.preserveUpdatedAtConversationIds,
   );
-  const currentById = new Map(currentConversations.map((item) => [item.id, item]));
+  // Keyed by trimmed id on both sides: a padded id from one source must not
+  // become a second row for the same conversation after a resync.
+  const currentById = new Map(currentConversations.map((item) => [item.id.trim(), item]));
   const authoritativeIds = new Set<string>();
+  // Sessions the authoritative list already shows; a retained row of the same
+  // session under an older key would otherwise render as a duplicate.
+  const authoritativeSessions = new Set<string>();
   const merged: SidebarConversation[] = [];
 
   for (const authoritative of authoritativeConversations) {
@@ -192,11 +197,18 @@ export function reconcileSidebarConversations(
       continue;
     }
     authoritativeIds.add(id);
+    authoritativeSessions.add(id);
+    const sessionId = authoritative.sessionId?.trim();
+    if (sessionId) authoritativeSessions.add(sessionId);
     merged.push(
-      mergeSidebarConversation(currentById.get(authoritative.id), authoritative, {
-        preserveExistingTitle: preserveTitleConversationIds.has(id),
-        preserveExistingUpdatedAt: preserveUpdatedAtConversationIds.has(id),
-      }),
+      mergeSidebarConversation(
+        currentById.get(id),
+        authoritative.id === id ? authoritative : { ...authoritative, id },
+        {
+          preserveExistingTitle: preserveTitleConversationIds.has(id),
+          preserveExistingUpdatedAt: preserveUpdatedAtConversationIds.has(id),
+        },
+      ),
     );
   }
 
@@ -209,7 +221,11 @@ export function reconcileSidebarConversations(
       : null;
 
   for (const current of currentConversations) {
-    if (authoritativeIds.has(current.id)) {
+    const currentSessionId = current.sessionId?.trim();
+    if (
+      authoritativeIds.has(current.id.trim()) ||
+      (currentSessionId && authoritativeSessions.has(currentSessionId))
+    ) {
       continue;
     }
     if (

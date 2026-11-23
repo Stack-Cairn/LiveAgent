@@ -24,6 +24,7 @@ function conversation(id, overrides = {}) {
     pinnedAt: overrides.pinnedAt,
     isShared: overrides.isShared,
     isPending: overrides.isPending,
+    sessionId: overrides.sessionId,
   };
 }
 
@@ -165,4 +166,45 @@ test("scope matching: workdir, unscoped, none", () => {
 test("scope filter preserves identity when everything matches", () => {
   const items = [conversation("a", { cwd: "/p" }), conversation("b", { cwd: "/p" })];
   assert.equal(scope.filterConversationsForScope(items, { kind: "workdir", cwd: "/p" }), items);
+});
+
+test("a resync never lists the same conversation twice (padded ids)", () => {
+  // After a reconnect the snapshot may carry an id with stray whitespace while
+  // the live row was stored trimmed; both describe one conversation.
+  const current = [conversation("conv-1", { updatedAt: 5 }), conversation("conv-2", { updatedAt: 4 })];
+  const next = reconcile.reconcileSidebarConversations(current, [
+    conversation(" conv-1 ", { updatedAt: 6 }),
+    conversation("conv-2", { updatedAt: 4 }),
+  ]);
+  assert.deepEqual(
+    next.map((item) => item.id),
+    ["conv-1", "conv-2"],
+  );
+});
+
+test("a retained row of a session the snapshot already lists is dropped", () => {
+  // The live row was keyed by its session before the reconnect; the snapshot
+  // lists the same session under its conversation id.
+  const current = [
+    conversation("session-9", { sessionId: "session-9", isPending: true, updatedAt: 9 }),
+    conversation("conv-2", { updatedAt: 4 }),
+  ];
+  const next = reconcile.reconcileSidebarConversations(
+    current,
+    [conversation("conv-9", { sessionId: "session-9", updatedAt: 9 }), conversation("conv-2", { updatedAt: 4 })],
+    { retainConversationIds: ["session-9"] },
+  );
+  assert.deepEqual(
+    next.map((item) => item.id),
+    ["conv-9", "conv-2"],
+  );
+  // Pending drafts without a session are still kept until they bind.
+  const withDraft = reconcile.reconcileSidebarConversations(
+    [conversation("draft-1", { isPending: true, updatedAt: 10 })],
+    [conversation("conv-2", { updatedAt: 4 })],
+  );
+  assert.deepEqual(
+    withDraft.map((item) => item.id),
+    ["draft-1", "conv-2"],
+  );
 });
