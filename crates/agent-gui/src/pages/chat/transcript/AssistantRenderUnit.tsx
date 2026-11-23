@@ -1,10 +1,11 @@
 import {
   GenerationStoppedNotice,
+  isInterruptedByShutdown,
   isStoppedReply,
 } from "@liveagent/ui/components/chat/AssistantStatus";
 import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { TurnErrorNotice } from "@liveagent/ui/components/chat/TurnErrorNotice";
-import { turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
+import { turnErrorDetailOf, turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
 import { collectChangedFiles } from "@liveagent/ui/lib/chat/changedFiles";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
@@ -73,11 +74,17 @@ const AssistantFooterUnit = memo(function AssistantFooterUnit(props: {
       data-assistant-row
       className={cn("group/assistant w-full max-w-full", compacted && "opacity-70")}
     >
-      {isStoppedReply(unit.rounds) ? <GenerationStoppedNotice className="mb-1" /> : null}
+      {isStoppedReply(unit.rounds) ? (
+        <GenerationStoppedNotice
+          className="mb-1"
+          interrupted={isInterruptedByShutdown(unit.rounds)}
+        />
+      ) : null}
       {turnError ? (
         <TurnErrorNotice
           className="mb-1"
           error={turnError}
+          errorDetail={turnErrorDetailOf(unit.rounds)}
           retryDisabled={isSending}
           onRetry={
             retryTarget && retryRef

@@ -1,4 +1,5 @@
 import type { HostedSearchBlock } from "./hostedSearch";
+import type { TurnErrorDetail } from "./turnError";
 
 export type Api = string;
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -96,6 +97,10 @@ export interface AssistantMessage {
   usage: Usage;
   stopReason: StopReason;
   errorMessage?: string;
+  /** The backend's structured classification of a failed reply's error. */
+  errorDetail?: TurnErrorDetail;
+  /** Why a cancelled reply stopped ("shutdown": the backend restarted). */
+  cancelReason?: string;
   rawStopReason?: string;
   timestamp: number;
 }

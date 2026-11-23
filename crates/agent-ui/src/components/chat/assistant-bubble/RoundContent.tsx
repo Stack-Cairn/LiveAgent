@@ -12,7 +12,11 @@ import { StreamingSplitMarkdown } from "@liveagent/ui/components/chat/StreamingS
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
-import { isStoppedReply, normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
+import {
+  isInterruptedByShutdown,
+  isStoppedReply,
+  normalizeLiveToolStatus,
+} from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -477,7 +481,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
 
       {layout.interaction.map((entry) => renderEntry(entry, true))}
       {layout.answer.map((entry) => renderEntry(entry, false))}
-      {stopped ? <GenerationStoppedNotice /> : null}
+      {stopped ? <GenerationStoppedNotice interrupted={isInterruptedByShutdown(rounds)} /> : null}
       {/* The turn's one live status row: phase, elapsed time, nothing else. */}
       {running ? (
         <LiveAssistantStatus

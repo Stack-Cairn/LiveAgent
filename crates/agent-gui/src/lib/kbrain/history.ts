@@ -13,7 +13,7 @@ import { withMcpUiResourceDetails } from "@liveagent/ui/lib/chat/mcpApps";
 import { withMcpElicitationDetails } from "@liveagent/ui/lib/chat/mcpElicitation";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
-import { isKBrainErrorMessageId } from "@liveagent/ui/lib/chat/turnError";
+import { isKBrainErrorMessageId, readTurnErrorDetail } from "@liveagent/ui/lib/chat/turnError";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import type { SidebarExternalRun } from "@liveagent/ui/lib/sidebar/types";
@@ -128,6 +128,19 @@ function historyStopReason(reason: string | undefined): AssistantMessage["stopRe
     default:
       return "stop";
   }
+}
+
+/** The structured failure detail and cancel reason a newer backend saves on a reply. */
+function historyOutcome(
+  message: KBrainMessage,
+  failed: boolean,
+): Pick<AssistantMessage, "errorDetail" | "cancelReason"> {
+  const errorDetail = failed ? readTurnErrorDetail(message.error_detail) : undefined;
+  const cancelReason = message.cancel_reason?.trim();
+  return {
+    ...(errorDetail ? { errorDetail } : {}),
+    ...(cancelReason ? { cancelReason } : {}),
+  };
 }
 
 function toHostedSearch(value: KBrainMessage["hosted_search"]): HostedSearchBlock[] {
@@ -276,12 +289,17 @@ function toMessage(
   if (message.role !== "assistant") return null;
   const content: AssistantMessage["content"] = [];
   // A run that failed before the model replied: the message text is the error.
-  const errorMessage = isKBrainErrorMessageId(message.id)
+  const failedBeforeReply = isKBrainErrorMessageId(message.id);
+  const errorMessage = failedBeforeReply
     ? message.content?.find((block) => block.type === "text")?.text?.trim() || "K-brain run failed"
-    : undefined;
-  // K-brain drops what such a run streamed; this app session may still hold it.
-  if (errorMessage && message.id) content.push(...(restoredReplyContent(message.id) ?? []));
-  for (const block of errorMessage ? [] : (message.content ?? [])) {
+    : message.stop_reason === "error"
+      ? message.error?.trim() || undefined
+      : undefined;
+  // Older backends drop what such a run streamed; this app session may still hold it.
+  if (failedBeforeReply && message.id) {
+    content.push(...(restoredReplyContent(message.id) ?? []));
+  }
+  for (const block of failedBeforeReply ? [] : (message.content ?? [])) {
     if (block.type === "text" && block.text) content.push({ type: "text", text: block.text });
     if (block.type === "thinking" && block.text)
       content.push({ type: "thinking", thinking: block.text });
@@ -308,6 +326,7 @@ function toMessage(
     usage: kbrainUsage(message.usage),
     stopReason: errorMessage ? "error" : historyStopReason(message.stop_reason),
     ...(errorMessage ? { errorMessage } : {}),
+    ...historyOutcome(message, Boolean(errorMessage)),
     timestamp,
   };
 }

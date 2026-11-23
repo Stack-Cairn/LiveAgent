@@ -1,15 +1,30 @@
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/index";
+import "@liveagent/ui/i18n/namespaces/turnErrors";
 import { VIBING_STATUS } from "../../lib/chat/assistantStatus";
 import { cn } from "../../lib/shared/utils";
 import { Loader2, Square } from "../IconSet";
 import { CompactionBand } from "./CompactionBand";
 import { LiveTurnStatus } from "./LiveTurnStatus";
 
-export { isStoppedReply, VIBING_STATUS } from "../../lib/chat/assistantStatus";
+export {
+  isInterruptedByShutdown,
+  isStoppedReply,
+  VIBING_STATUS,
+} from "../../lib/chat/assistantStatus";
 
-/** Settled marker for a reply the user stopped, in place of any transport abort text. */
-export function GenerationStoppedNotice({ className }: { className?: string }) {
+/**
+ * Settled marker for a reply the user stopped, in place of any transport abort
+ * text. A reply cut off by a backend restart says so instead.
+ */
+export function GenerationStoppedNotice({
+  className,
+  interrupted = false,
+}: {
+  className?: string;
+  /** The backend shut down mid-turn (cancel_reason "shutdown"). */
+  interrupted?: boolean;
+}) {
   const { t } = useLocale();
   return (
     <span
@@ -17,10 +32,12 @@ export function GenerationStoppedNotice({ className }: { className?: string }) {
         "inline-flex min-h-5 min-w-0 max-w-full items-center gap-1.5 text-sm font-normal text-muted-foreground",
         className,
       )}
-      data-generation-stopped=""
+      data-generation-stopped={interrupted ? "shutdown" : ""}
     >
       <Square aria-hidden="true" className="size-3 shrink-0" />
-      <span className="min-w-0 truncate whitespace-nowrap">{t("chat.generationStopped")}</span>
+      <span className="min-w-0 truncate whitespace-nowrap">
+        {t(interrupted ? "chat.turnStopped.shutdown" : "chat.generationStopped")}
+      </span>
     </span>
   );
 }

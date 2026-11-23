@@ -68,6 +68,13 @@ export type KBrainContentBlock = {
   mime_type?: string;
 };
 
+/** `error_detail` of `run.failed` and of a saved failure message. */
+export type KBrainErrorDetail = {
+  kind: string;
+  upstream_status?: number;
+  provider_message?: string;
+};
+
 export type KBrainMessage = {
   id?: string;
   role: "system" | "developer" | "user" | "assistant" | "tool";
@@ -80,6 +87,12 @@ export type KBrainMessage = {
   usage?: KBrainUsage;
   hosted_search?: KBrainHostedSearch[];
   stop_reason?: string;
+  /** A reply saved when its stream failed mid-way (stop_reason "error"): the failure. */
+  error?: string;
+  /** Structured classification of a failed run (newer backends; snake_case as sent). */
+  error_detail?: KBrainErrorDetail;
+  /** "shutdown" when the backend stopped the turn while shutting down. */
+  cancel_reason?: string;
   created_at?: string;
   /** "background" on a user-role notice K-brain delivered on its own (a wait result, a process exit). */
   origin?: string;
