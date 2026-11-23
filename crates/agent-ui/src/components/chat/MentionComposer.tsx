@@ -1942,13 +1942,13 @@ export const MentionComposer = memo(
             setHighlightIdx((p) => (p - 1 + suggestions.length) % suggestions.length);
             return;
           }
-          if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-            e.preventDefault();
-            if (suggestions[highlightIdx]) {
-              selectSuggestion(suggestions[highlightIdx]);
-            }
-            return;
-          }
+        }
+        // An open popup owns Enter even with no row to pick (no match, loading,
+        // index error); sending here would submit the half-typed "@READ".
+        if (popupVisible && (e.key === "Tab" || (isEnter && !e.shiftKey))) {
+          e.preventDefault();
+          if (suggestions[highlightIdx]) selectSuggestion(suggestions[highlightIdx]);
+          return;
         }
         if (popupVisible && e.key === "Escape") {
           e.preventDefault();
