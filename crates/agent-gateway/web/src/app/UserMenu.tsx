@@ -11,14 +11,24 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 
+type UserMenuAgentStatus = "online" | "offline" | "reconnecting" | "unknown";
+
+/** "reconnecting" while the Gateway connection is down: the last agent state is stale. */
+export function userMenuAgentStatus(
+  status: { online?: boolean } | null,
+  gatewayDisconnected: boolean,
+): UserMenuAgentStatus {
+  if (gatewayDisconnected) return "reconnecting";
+  if (status === null) return "unknown";
+  return status.online ? "online" : "offline";
+}
+
 type UserMenuProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userMenuLabel: string;
   userAvatarLabel: string;
-  // "reconnecting": the Gateway connection itself is down, so the last known
-  // agent state is stale and must not be shown as online.
-  agentStatus: "online" | "offline" | "reconnecting" | "unknown";
+  agentStatus: UserMenuAgentStatus;
   agentSelector?: ReactNode;
   onLogout: () => void;
 };

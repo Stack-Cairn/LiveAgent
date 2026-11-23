@@ -20,6 +20,9 @@ export const GATEWAY_WEB_TRANSLATIONS = {
     "gatewayWeb.connection.retryNow": "立即重试",
     "gatewayWeb.connection.reconnecting": "正在重新连接…",
     "gatewayWeb.connection.sendBlocked": "正在重新连接…草稿会保留，连接恢复后即可发送",
+    "gatewayWeb.target.offlineWithAlternative": "{name} 已离线",
+    "gatewayWeb.target.offline": "{name} 已离线。在那台电脑上打开 LiveAgent 后即可继续聊天。",
+    "gatewayWeb.target.switchTo": "切换到 {name}",
   },
   "en-US": {
     "gatewayWeb.gatewayNotConnected": "The Gateway is not connected yet.",
@@ -43,5 +46,9 @@ export const GATEWAY_WEB_TRANSLATIONS = {
     "gatewayWeb.connection.reconnecting": "Reconnecting…",
     "gatewayWeb.connection.sendBlocked":
       "Reconnecting… Your draft is kept and can be sent once the connection is back",
+    "gatewayWeb.target.offlineWithAlternative": "{name} is offline",
+    "gatewayWeb.target.offline":
+      "{name} is offline. Open LiveAgent on that computer to keep chatting.",
+    "gatewayWeb.target.switchTo": "Switch to {name}",
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

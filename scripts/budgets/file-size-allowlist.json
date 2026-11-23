@@ -3,10 +3,10 @@
   "limit": 1500,
   "files": {
     "crates/agent-gateway/web/src/app/GatewayApp.tsx": 2614,
-    "crates/agent-gateway/web/src/app/GatewayAppView.tsx": 2540,
+    "crates/agent-gateway/web/src/app/GatewayAppView.tsx": 2527,
     "crates/agent-gateway/web/src/lib/chat/transcript/transcriptStore.ts": 1535,
     "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts": 1609,
-    "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts": 1550,
+    "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts": 1540,
     "crates/agent-gateway/web/src/lib/gatewaySocketV2/adapters.ts": 2448,
     "crates/agent-gateway/web/src/pages/StatusDashboardPage.tsx": 1634,
     "crates/agent-gui/src-tauri/src/commands/app/system.rs": 4564,
@@ -48,7 +48,7 @@
     "crates/agent-ui/src/i18n/translations/zhCNCommon.ts": 1566,
     "crates/agent-ui/src/lib/chat/uiMessages.ts": 1648,
     "crates/agent-ui/src/lib/settings/index.ts": 2730,
-    "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": 2097,
+    "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": 2089,
     "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2088,
     "crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx": 1950,
     "crates/virtual-core/src/index.ts": 2505

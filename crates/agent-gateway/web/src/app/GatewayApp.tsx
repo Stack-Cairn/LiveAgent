@@ -74,13 +74,13 @@ import { registerPlanDecisionHandler } from "@/lib/chat/planModeBridge";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
   ChatCommandPipeline,
+  type ChatCommandPipelineHooks,
   type PendingChatCommand,
 } from "@/lib/chat/stream/chatCommandPipeline";
 import type { ChatCommandUpdate } from "@/lib/chat/stream/streamTypes";
 import { createTranscriptStoreRegistry } from "@/lib/chat/stream/useConversationChat";
 import { registerToolApprovalDecisionHandler } from "@/lib/chat/toolApprovalBridge";
 import { transcriptRowsToJumpCandidates } from "@/lib/chat/transcript/searchJumpCandidates";
-import { isGatewayTransportFailure } from "@/lib/gatewayTransportErrors";
 import type {
   AgentStatus,
   ChatEvent,
@@ -423,14 +423,9 @@ function useGatewayAppController() {
   const pipelineOnQueuedInGuiRef = useRef<
     (update: ChatCommandUpdate, pending: PendingChatCommand) => void
   >(() => undefined);
-  const pipelineOnFailedRef = useRef<
-    (
-      pending: PendingChatCommand,
-      errorCode: string | null,
-      message: string,
-      transport: boolean,
-    ) => void
-  >(() => undefined);
+  const pipelineOnFailedRef = useRef<NonNullable<ChatCommandPipelineHooks["onFailed"]>>(
+    () => undefined,
+  );
   const chatCommandPipeline = useMemo(
     () =>
       new ChatCommandPipeline({
@@ -438,11 +433,9 @@ function useGatewayAppController() {
           transcriptStoreRegistry.get(targetConversationId),
         onBound: (update, pending) => pipelineOnBoundRef.current(update, pending),
         onQueuedInGui: (update, pending) => pipelineOnQueuedInGuiRef.current(update, pending),
-        onFailed: (pending, errorCode, message, transport) =>
-          pipelineOnFailedRef.current(pending, errorCode, message, transport),
+        onFailed: (...args) => pipelineOnFailedRef.current(...args),
         onPendingChanged: () => setPendingCommandRevision((current) => current + 1),
         describeFailure,
-        isTransportFailure: isGatewayTransportFailure,
       }),
     [describeFailure, transcriptStoreRegistry],
   );
@@ -1177,8 +1170,6 @@ function useGatewayAppController() {
       // transcript keeps the pipeline's error entry.
       sidebarStore.removeLocal(conversationIdValue);
     }
-    // A dropped connection is reported by the connection banner and the
-    // sender keeps the draft; it is not an error of this conversation.
     if (!transport && !pending.waitForStart && isDisplayedConversation(conversationIdValue)) {
       setChatError(message);
     }

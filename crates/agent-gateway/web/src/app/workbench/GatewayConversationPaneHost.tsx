@@ -102,6 +102,7 @@ import {
 } from "../constants";
 import { isLocalDraftConversationId } from "../gatewayLocalDraft";
 import type { SendChatFn } from "../types";
+import { restoreUnsentComposerDraft } from "../unsentComposerDraft";
 import { WebGoalBarHost } from "../WebGoalBarHost";
 import { resolveWorkbenchComposerInputDisabled } from "./composerInputState";
 
@@ -649,10 +650,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           context.updatePendingUploads(conversationId, (current) =>
             mergePendingUploadedFiles(current, uploadedFiles),
           );
-          const currentComposer = composerRef.current;
-          if (draft && currentComposer && !currentComposer.hasContent()) {
-            currentComposer.setDraft(draft);
-          }
+          restoreUnsentComposerDraft(composerRef.current, draft);
         };
         try {
           const outcome = await context.sendChat(text, {

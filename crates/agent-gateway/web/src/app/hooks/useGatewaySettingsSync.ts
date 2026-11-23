@@ -106,12 +106,18 @@ export function projectPromptSettingsUpdate(
   }
 }
 
+// A target that answers slowly (or never, while offline) must not hold the UI
+// on the sync screen: after this long the app renders with local settings and
+// the snapshot still applies when it lands.
+export const SETTINGS_SYNC_SCREEN_MAX_MS = 2_500;
+
 export function useGatewaySettingsSync(params: {
   token: string;
   api: GatewayWebSocketClientLike | null;
   activeAgentId: string;
+  syncScreenMaxMs?: number;
 }) {
-  const { token, api, activeAgentId } = params;
+  const { token, api, activeAgentId, syncScreenMaxMs = SETTINGS_SYNC_SCREEN_MAX_MS } = params;
   // Queued saves and their callbacks belong to the device that originated them.
   const saveScope = useMemo(() => ({ api, token, activeAgentId }), [api, token, activeAgentId]);
   const saveScopeRef = useRef<typeof saveScope | null>(saveScope);
@@ -527,6 +533,9 @@ export function useGatewaySettingsSync(params: {
         .catch(() => undefined);
     });
 
+    const syncScreenTimer = setTimeout(() => {
+      if (!cancelled) setSettingsSyncReady(true);
+    }, syncScreenMaxMs);
     void api
       .getSettings()
       .then(async (payload) => {
@@ -566,11 +575,20 @@ export function useGatewaySettingsSync(params: {
 
     return () => {
       cancelled = true;
+      clearTimeout(syncScreenTimer);
       unsubscribe();
       unsubscribeConnection();
       clearEchoTimers();
     };
-  }, [api, activeAgentId, applyGatewaySettings, clearEchoTimers, resetEchoGuard, token]);
+  }, [
+    api,
+    activeAgentId,
+    applyGatewaySettings,
+    clearEchoTimers,
+    resetEchoGuard,
+    syncScreenMaxMs,
+    token,
+  ]);
 
   return {
     settings,

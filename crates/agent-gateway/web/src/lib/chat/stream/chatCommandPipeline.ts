@@ -1,3 +1,4 @@
+import { isGatewayTransportFailure } from "../../gatewayTransportErrors";
 import type { HistoryMessageRef } from "../conversationState";
 import type { TranscriptStore } from "../transcript/transcriptStore";
 import type { ChatCommandAccepted, ChatCommandUpdate } from "./streamTypes";
@@ -70,7 +71,8 @@ export type ChatCommandPipelineHooks = {
   onPendingChanged?(): void;
   // Text shown for a failed command: lets the app localize known error codes.
   describeFailure?(errorCode: string | null, message: string): string;
-  // True for connection-level failures (socket closed, connect timeout).
+  // True for connection-level failures (socket closed, connect timeout);
+  // defaults to the Gateway WebSocket classification.
   isTransportFailure?(message: string): boolean;
 };
 
@@ -333,7 +335,8 @@ export class ChatCommandPipeline {
     errorCode: string | null,
     message: string,
   ): Extract<ChatCommandOutcome, { kind: "failed" }> {
-    const transport = errorCode === null && this.hooks.isTransportFailure?.(message) === true;
+    const isTransportFailure = this.hooks.isTransportFailure ?? isGatewayTransportFailure;
+    const transport = errorCode === null && isTransportFailure(message);
     message = this.hooks.describeFailure?.(errorCode, message) ?? message;
     const outcome = transport
       ? { kind: "failed" as const, errorCode, message, transport }

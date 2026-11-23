@@ -1937,6 +1937,26 @@ test("GatewayWebSocketClient applies pushed status frames and polls slowly as fa
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient does not replay the previous Agent's status after a switch", async () => {
+  // Switching away from an offline Agent must not paint the new target offline
+  // with the old Agent's cached status until the new one reports.
+  const timers = createManualTimers();
+  installBrowser({ ...timers });
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  client.subscribeStatus(() => {});
+  const socket = await connectAndAuth(codec);
+  socket.receiveBinary(codec.encodeServerFrame({ status: { online: false } }));
+
+  client.setActiveAgent("agent-other");
+  const replayed = [];
+  client.subscribeStatus((status, error) => replayed.push({ status, error }));
+  assert.deepEqual(replayed, [], "no cached status of the previous Agent is replayed");
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient defers offline verdicts while hidden and reconciles on wake", async () => {
   const timers = createManualTimers();
   installBrowser({ ...timers });

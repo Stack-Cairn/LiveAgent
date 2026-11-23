@@ -48,7 +48,7 @@ function relaySnapshot(settings, browserLocalSettings = ["locale", "theme"]) {
   return payload;
 }
 
-async function harness(t, { getSettings, rejectUnsupported = true }) {
+async function harness(t, { getSettings, rejectUnsupported = true, syncScreenMaxMs }) {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
   const cleanups = [];
   t.after(async () => {
@@ -78,7 +78,7 @@ async function harness(t, { getSettings, rejectUnsupported = true }) {
     subscribeSettings: () => () => {},
     subscribeConnection: () => () => {},
     async getSettings() {
-      return structuredClone(getSettings);
+      return typeof getSettings === "function" ? getSettings() : structuredClone(getSettings);
     },
     async updateSettings(payload) {
       updates.push(structuredClone(payload));
@@ -125,7 +125,12 @@ async function harness(t, { getSettings, rejectUnsupported = true }) {
   const { useGatewaySettingsSync } = loader.loadModule("src/app/hooks/useGatewaySettingsSync.ts");
   const state = { current: null };
   function Probe() {
-    state.current = useGatewaySettingsSync({ token: "token", api, activeAgentId: "agent" });
+    state.current = useGatewaySettingsSync({
+      token: "token",
+      api,
+      activeAgentId: "agent",
+      syncScreenMaxMs,
+    });
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -220,4 +225,15 @@ test("desktop: the language keeps syncing when the target persists it", async (t
   assert.equal(h.updates.length, 1);
   assert.equal(h.updates[0].locale, "zh-CN");
   assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
+});
+
+test("a target that never answers the settings request does not hold the sync screen", async (t) => {
+  // An offline or stalled target used to keep "Syncing desktop settings" up
+  // until settings.get timed out (about 14 s on a fresh browser).
+  const h = await harness(t, { getSettings: () => new Promise(() => {}), syncScreenMaxMs: 40 });
+  assert.equal(h.current.settingsSyncReady, false);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  await h.update((prev) => prev);
+  assert.equal(h.current.settingsSyncReady, true);
+  assert.equal(h.current.settingsSyncError, null, "a slow target is not reported as a failure");
 });

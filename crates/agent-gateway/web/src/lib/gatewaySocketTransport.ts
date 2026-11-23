@@ -91,6 +91,8 @@ import type {
   GatewayHistorySyncStatus,
 } from "./gatewayTypes";
 
+const ACTIVE_AGENT_SWITCHED = "active agent switched";
+
 export class GatewayWebSocketTransport {
   readonly terminalStream: BrowserGatewayTerminalStreamClient;
   protected socket: WebSocket | null = null;
@@ -181,8 +183,10 @@ export class GatewayWebSocketTransport {
     }
     this.activeAgentId = agentId;
     persistActiveAgent(agentId);
+    // The cached status is the previous Agent's: drop it, the reconnect reads the new one.
+    if (this.lastStatus || this.lastStatusError) this.emitStatus(null, null);
     if (reconnect && this.socket && this.authenticated) {
-      this.handleDisconnect(new Error("active agent switched"));
+      this.handleDisconnect(new Error(ACTIVE_AGENT_SWITCHED));
     } else if (!reconnect && this.socket && this.authenticated) {
       this.flushPendingAgentEvents(agentId);
       this.conversationStreams.handleConnected();
@@ -684,15 +688,7 @@ export class GatewayWebSocketTransport {
         this.offlineReassessmentPending = true;
         return;
       }
-      this.emitStatus(
-        this.lastStatus
-          ? {
-              ...this.lastStatus,
-              online: false,
-            }
-          : null,
-        GATEWAY_RECONNECTING_NOTICE,
-      );
+      this.emitStatus(this.offlineLastStatus(), GATEWAY_RECONNECTING_NOTICE);
     }, RECONNECT_NOTICE_DELAY_MS);
   }
 
@@ -803,11 +799,16 @@ export class GatewayWebSocketTransport {
       return;
     }
     this.statusRefreshInFlight = true;
+    // A read for an Agent the user switched away from says nothing about the new one.
+    const agentId = this.activeAgentId;
+    const switchedAway = () => agentId !== "" && agentId !== this.activeAgentId;
     try {
       const status = await this.getStatus();
+      if (switchedAway()) return;
       this.clearReconnectNoticeTimer();
       this.emitStatus(status, null);
     } catch (error) {
+      if (switchedAway()) return;
       if (isRecoverableGatewayTransportError(error) && this.shouldMaintainConnection()) {
         this.scheduleReconnect();
         this.scheduleReconnectNotice();
@@ -824,19 +825,17 @@ export class GatewayWebSocketTransport {
         return;
       }
       const message = asErrorMessage(error, "status request failed");
-      const offlineStatus =
-        this.lastStatus !== null
-          ? {
-              ...this.lastStatus,
-              online: false,
-            }
-          : null;
+      const offlineStatus = this.offlineLastStatus();
       this.lastStatus = offlineStatus;
       this.lastStatusError = message;
       this.emitStatus(offlineStatus, message);
     } finally {
       this.statusRefreshInFlight = false;
     }
+  }
+
+  protected offlineLastStatus(): AgentStatus | null {
+    return this.lastStatus ? { ...this.lastStatus, online: false } : null;
   }
 
   protected emitStatus(status: AgentStatus | null, error: string | null) {
@@ -1455,21 +1454,17 @@ export class GatewayWebSocketTransport {
     // with their seq cursors when the socket re-authenticates.
     this.conversationStreams.handleDisconnected();
 
-    if (!this.disposed && this.statusListeners.size > 0) {
+    if (
+      !this.disposed &&
+      this.statusListeners.size > 0 &&
+      error.message !== ACTIVE_AGENT_SWITCHED
+    ) {
       if (isRecoverableGatewayTransportError(error) && this.shouldMaintainConnection()) {
         this.scheduleReconnectNotice();
       } else if (isDocumentHidden()) {
         this.offlineReassessmentPending = true;
       } else {
-        this.emitStatus(
-          this.lastStatus
-            ? {
-                ...this.lastStatus,
-                online: false,
-              }
-            : null,
-          error.message,
-        );
+        this.emitStatus(this.offlineLastStatus(), error.message);
       }
     }
     this.lastInboundAt = 0;

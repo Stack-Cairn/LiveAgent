@@ -116,6 +116,7 @@ import {
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
 import { useComposerShortcuts } from "../../lib/shortcuts/useComposerShortcuts";
+import { draftHasClarifiableText, prefersReducedMotion } from "./chatComposerBarUtils";
 import { useComposerStt } from "./useComposerStt";
 
 function useComposerUploadedImagePreview(
@@ -237,18 +238,6 @@ const MODE_CYCLE_NOTICE_MS = 1500;
 const unavailableClarifyTurn: RunClarifyTurn = () =>
   Promise.reject(new Error("runClarifyTurn is not provided"));
 
-/** 可澄清文本 = 草稿中存在非空白纯文本段。提及/附件 token 与大段粘贴不算：
- * 澄清的输入是用户写的提示词文本，只有 chip/附件时按钮应禁用而非点击空转。
- * 只在事件处理器里调用（读 DOM），渲染路径零调用。 */
-function draftHasClarifiableText(composer: MentionComposerHandle | null): boolean {
-  return (
-    composer
-      ?.getDraft()
-      .segments.some((segment) => segment.type === "text" && segment.text.trim().length > 0) ??
-    false
-  );
-}
-
 /** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
 export type ContextUsageTokensSource = {
   subscribe: (listener: () => void) => () => void;
@@ -282,13 +271,6 @@ function ComposerContextUsageRing(props: {
       // 环在 "ring" / "both" 展示模式下渲染（见 contextDisplayMode），必须 0% 起
       // 常显——"ring" 模式它是唯一占用读数，不再挂低占用隐藏门槛。
     />
-  );
-}
-
-function prefersReducedMotion() {
-  return (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 }
 

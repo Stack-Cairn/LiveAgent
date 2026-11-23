@@ -153,7 +153,7 @@ import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
 import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
-import { GatewayConnectionBanner } from "./GatewayConnectionBanner";
+import { GatewayChatStatusBanners, useGatewayTargetOffline } from "./GatewayChatStatusBanners";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
 import { useGatewayImageStudio } from "./hooks/useGatewayImageStudio";
@@ -168,7 +168,8 @@ import {
 } from "./lazySurfaces";
 import { sendComposerCommandTurn } from "./sendComposerCommandTurn";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
-import { UserMenu } from "./UserMenu";
+import { UserMenu, userMenuAgentStatus } from "./UserMenu";
+import { restoreUnsentComposerDraft } from "./unsentComposerDraft";
 import { WebGoalBarHost } from "./WebGoalBarHost";
 import { createWebComposerCommandHost } from "./webComposerCommandHost";
 import {
@@ -468,14 +469,12 @@ export function GatewayAppView({
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
-  // The Gateway connection is down: shown by the connection banner (never as
-  // raw close text), the avatar dot turns grey and sends wait for recovery.
+  // Connection down: banner instead of raw close text, grey dot, sends wait.
   const gatewayDisconnected = gatewayConnectionLost || isGatewayTransportFailure(statusError);
-  const visibleStatusError =
-    gatewayDisconnected && isGatewayTransportFailure(statusError) ? null : statusError;
   const sendBlockedReason = gatewayDisconnected
     ? translate("gatewayWeb.connection.sendBlocked", settings.locale)
     : null;
+  const targetOffline = useGatewayTargetOffline(api, status, gatewayDisconnected);
   // SSHManager rows name hosts by their configured name rather than the opaque id.
   rememberSshHostNames(settings.ssh.hosts);
   const overlayModalRef = useSettingsOverlayModal(translate("settings.title", settings.locale));
@@ -728,22 +727,12 @@ export function GatewayAppView({
           composerRef.current?.clear();
         }
         setPendingUploadsForConversation(sendConversationId, []);
-        // The composer is cleared optimistically; a send that was never
-        // accepted (connection dropped, rejected, already pending) puts the
-        // draft and attachments back so nothing typed is lost.
         const restoreDraft = () => {
           updatePendingUploadsForConversation(sendConversationId, (current) =>
             mergePendingUploadedFiles(current, files),
           );
-          const composer = composerRef.current;
-          if (
-            draft &&
-            composer &&
-            getDisplayedConversationId() === sendConversationId &&
-            !composer.hasContent()
-          ) {
-            composer.setDraft(draft);
-          }
+          if (getDisplayedConversationId() !== sendConversationId) return;
+          restoreUnsentComposerDraft(composerRef.current, draft);
         };
         void sendChat(text, {
           conversationId: sendConversationId,
@@ -1679,15 +1668,7 @@ export function GatewayAppView({
                     onOpenChange={setUserMenuOpen}
                     userMenuLabel={userMenuLabel}
                     userAvatarLabel={userAvatarLabel}
-                    agentStatus={
-                      gatewayDisconnected
-                        ? "reconnecting"
-                        : status === null
-                          ? "unknown"
-                          : status.online
-                            ? "online"
-                            : "offline"
-                    }
+                    agentStatus={userMenuAgentStatus(status, gatewayDisconnected)}
                     agentSelector={
                       <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
                     }
@@ -1901,53 +1882,17 @@ export function GatewayAppView({
                         },
                         content: (
                           <>
-                            <GatewayConnectionBanner
-                              disconnected={gatewayDisconnected}
-                              onRetryNow={api ? () => api.retryConnectionNow() : undefined}
-                            />
-                            {visibleStatusError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {visibleStatusError}
-                              </div>
-                            ) : null}
-                            {chatProtocolIncompatibleMessage && !statusError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {chatProtocolIncompatibleMessage}
-                              </div>
-                            ) : null}
-                            {settingsSyncError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {settingsSyncError}
-                              </div>
-                            ) : null}
-                            {chatError && displayedTranscriptRowCount === 0 ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {chatError}
-                              </div>
+                            {api ? (
+                              <GatewayChatStatusBanners
+                                api={api}
+                                gatewayDisconnected={gatewayDisconnected}
+                                targetOffline={targetOffline}
+                                onSwitchAgent={handleActiveAgentChange}
+                                statusError={statusError}
+                                chatProtocolIncompatibleMessage={chatProtocolIncompatibleMessage}
+                                settingsSyncError={settingsSyncError}
+                                chatError={displayedTranscriptRowCount === 0 ? chatError : null}
+                              />
                             ) : null}
 
                             {sessionWorkbench.enabled ? (
