@@ -427,14 +427,6 @@
       ]
     },
     {
-      "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySession.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Access Token 验证失败。",
-        "请输入 Access Token。"
-      ]
-    },
-    {
       "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySettingsSync.ts",
       "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
       "literals": [
@@ -498,15 +490,6 @@
         "历史消息载荷不是数组，无法渲染。",
         "会话",
         "新对话"
-      ]
-    },
-    {
-      "file": "crates/agent-gateway/web/src/lib/gatewayAuth.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Access Token 错误，请检查后重试。",
-        "请输入 Access Token。",
-        "Access Token 验证失败。"
       ]
     },
     {

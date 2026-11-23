@@ -1,5 +1,19 @@
+// Errors carry a translation key the login page renders in the user's
+// language; other server text is shown as-is.
+export const GATEWAY_AUTH_ERROR_KEYS = {
+  required: "login.errorTokenRequired",
+  unauthorized: "login.errorTokenInvalid",
+  failed: "login.errorVerifyFailed",
+} as const;
+
+const AUTH_ERROR_KEY_VALUES: ReadonlySet<string> = new Set(Object.values(GATEWAY_AUTH_ERROR_KEYS));
+
+export function isGatewayAuthErrorKey(message: string | null | undefined): boolean {
+  return AUTH_ERROR_KEY_VALUES.has(message ?? "");
+}
+
 function readUnauthorizedErrorMessage(errorText: string) {
-  return errorText === "unauthorized" ? "Access Token 错误，请检查后重试。" : errorText;
+  return errorText === "unauthorized" ? GATEWAY_AUTH_ERROR_KEYS.unauthorized : errorText;
 }
 
 async function readFetchError(response: Response, fallback: string) {
@@ -39,7 +53,7 @@ export function normalizeGatewayAccessToken(value: string) {
 export async function verifyGatewayAccessToken(input: string) {
   const token = normalizeGatewayAccessToken(input);
   if (!token) {
-    throw new Error("请输入 Access Token。");
+    throw new Error(GATEWAY_AUTH_ERROR_KEYS.required);
   }
 
   const response = await fetch(`${window.location.origin}/api/status`, {
@@ -50,7 +64,7 @@ export async function verifyGatewayAccessToken(input: string) {
   });
 
   if (!response.ok) {
-    throw new Error(await readFetchError(response, "Access Token 验证失败。"));
+    throw new Error(await readFetchError(response, GATEWAY_AUTH_ERROR_KEYS.failed));
   }
 
   return token;
