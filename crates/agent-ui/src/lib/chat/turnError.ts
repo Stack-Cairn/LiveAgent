@@ -7,7 +7,7 @@ import { normalizeErrorMessage } from "../providers/errorMessage";
  * `401 Unauthorized: {"error":{"message":"Incorrect API key…"}}`. The
  * transcript shows that text as a typed error row, never as reply markdown.
  */
-export const KBRAIN_ERROR_MESSAGE_ID_PREFIX = "assistant-error-";
+const KBRAIN_ERROR_MESSAGE_ID_PREFIX = "assistant-error-";
 
 export function isKBrainErrorMessageId(id: unknown): boolean {
   return typeof id === "string" && id.startsWith(KBRAIN_ERROR_MESSAGE_ID_PREFIX);
