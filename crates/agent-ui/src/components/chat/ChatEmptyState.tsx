@@ -119,7 +119,7 @@ export function ChatEmptyState({
         </>
       ) : (
         <>
-          <div className="whitespace-nowrap text-center text-xl font-semibold leading-7 tracking-tight text-foreground">
+          <div className="text-balance px-6 text-center text-xl font-semibold leading-7 tracking-tight text-foreground">
             {t("chat.greetingTemplate")
               .replace("{greeting}", t(GREETING_KEYS[period]))
               .replace("{subtitle}", t("chat.greetingSubtitle"))}
@@ -127,8 +127,9 @@ export function ChatEmptyState({
           {onSuggestionSelect ? (
             <div
               className={cn(
-                "mt-7 grid w-full max-w-520px grid-cols-1 gap-2 px-6",
-                "sm:grid-cols-3 sm:px-4",
+                // Content-sized suggestions that wrap as a group instead of
+                // truncating inside equal columns.
+                "mt-7 flex w-full max-w-640px flex-wrap justify-center gap-2 px-6 sm:px-4",
               )}
             >
               {SUGGESTION_CARDS.map((card) => (
@@ -137,7 +138,7 @@ export function ChatEmptyState({
                   type="button"
                   onClick={() => onSuggestionSelect(t(card.promptKey))}
                   className={cn(
-                    "flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5",
+                    "flex h-11 min-w-0 max-w-full items-center gap-2 rounded-lg bg-foreground/[0.025] pl-2.5 pr-3.5",
                     "text-left text-foreground/85 transition-colors",
                     "hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
                   )}

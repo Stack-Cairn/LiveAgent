@@ -53,9 +53,11 @@
 }
 
 /* Match settings navigation: one tight text line plus 6px-equivalent padding
-   on each side. Unlike fixed pixel heights, this follows the font scale. */
+   on each side. Unlike fixed pixel heights, this follows the font scale.
+   Rows sit edge to edge, so a coarse pointer gets its 44px touch target as a
+   taller row (--touch-target-min) rather than an overlapping hit area. */
 @utility sidebar-list-row {
-  height: calc(max(1rem, var(--text-sm) * 1.25) + 0.75rem);
+  height: max(var(--touch-target-min, 0px), calc(max(1rem, var(--text-sm) * 1.25) + 0.75rem));
 }
 
 @utility layer-raised {
@@ -397,4 +399,51 @@ body > div:has([data-streamdown="table-fullscreen"]):not(#root) {
 [data-slot="sidebar-wrapper"]:not(:has([data-testid="chat-composer"]))
   [data-slot="skip-to-composer"] {
   display: none;
+}
+
+/* Coarse pointers (touch): small controls answer taps over at least 44x44px
+   without changing how they look, through an invisible ::before centred on
+   the control. Base layer, so a component's own positioning or ::before
+   utilities still win. */
+@layer base {
+  @media (pointer: coarse) {
+    :root {
+      --touch-target-min: 2.75rem;
+    }
+    .touch-hit,
+    .composer-toolbar-action {
+      position: relative;
+    }
+    /* A host kept static by its own classes would anchor the area elsewhere. */
+    :is(.touch-hit, .composer-toolbar-action):not(.static)::before {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc(50% - var(--touch-target-min) / 2));
+    }
+  }
+}
+
+@layer utilities {
+  @media (pointer: coarse) {
+    /* Neighbouring 32px icon buttons get room for their hit areas not to
+       overlap. Denser 28px rows (sidebar group actions) have no width to
+       spare at phone sizes and keep their spacing. */
+    :is(.flex, .inline-flex):has(
+        > :is(.touch-hit, .composer-toolbar-action):not(.size-7)
+          + :is(.touch-hit, .composer-toolbar-action):not(.size-7)
+      ) {
+      column-gap: 0.75rem;
+    }
+    /* The composer deck clips its chips sideways only, so they can reach 44px
+       tall while the deck keeps its height. */
+    .composer-control-deck :is(button, [role="button"]):not(.composer-toolbar-action) {
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+      margin-block: -0.25rem;
+    }
+    /* Below 16px, mobile browsers zoom the page when the composer takes focus. */
+    .mention-composer:is([role="textbox"]) {
+      font-size: max(1rem, var(--text-sm));
+    }
+  }
 }

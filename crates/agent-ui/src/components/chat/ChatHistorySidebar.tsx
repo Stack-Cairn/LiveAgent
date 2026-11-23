@@ -1800,7 +1800,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   <div
                     className={cn(
                       "flex shrink-0 items-center justify-between rounded-t-xl",
-                      "px-2 pb-1 pt-2 transition-colors",
+                      "px-2 pb-1 pt-2 transition-colors [@media(pointer:coarse)]:pb-2",
                       showWorkspaceFolderDrop &&
                         "bg-primary/[0.08] ring-1 ring-primary/40 ring-inset",
                     )}

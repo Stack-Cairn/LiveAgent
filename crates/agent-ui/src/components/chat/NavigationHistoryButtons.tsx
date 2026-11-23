@@ -40,7 +40,11 @@ export function NavigationHistoryButtons({
   return (
     <div
       data-navigation-history=""
-      className={cn("flex shrink-0 items-center [-webkit-app-region:no-drag]", className)}
+      className={cn(
+        // Leave room for the hit areas of the touch-sized buttons beside it.
+        "flex shrink-0 items-center [-webkit-app-region:no-drag] [@media(pointer:coarse)]:mx-1.5",
+        className,
+      )}
     >
       {buttons.map(({ key, label, shortcut, enabled, run, Icon }) => (
         <ShortcutTooltip key={key} label={label} shortcut={shortcut} side="bottom">
