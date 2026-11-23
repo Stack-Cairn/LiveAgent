@@ -31,13 +31,17 @@ function createHarness() {
   return { pipeline, stores, outcomes };
 }
 
+// A failed round carries its error in meta (rendered as the turn's error row),
+// not in the reply text, so it is read from there.
+function roundText(round) {
+  const text = round.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])).join("");
+  const error = round.meta?.stopReason === "error" ? (round.meta.errorMessage ?? "") : "";
+  return [text, error].filter(Boolean).join("\n");
+}
+
 function rowText(row) {
   if (row.kind === "assistant") {
-    return row.rounds
-      .map((round) =>
-        round.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])).join(""),
-      )
-      .join("\n");
+    return row.rounds.map(roundText).join("\n");
   }
   return row.text ?? "";
 }
