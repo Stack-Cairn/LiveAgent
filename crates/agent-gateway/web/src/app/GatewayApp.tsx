@@ -105,7 +105,6 @@ import {
 } from "@/lib/webStyleClasses";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
-import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
 import {
   asErrorMessage,
   readTunnelManagerToolChange,
@@ -155,6 +154,7 @@ import { useGatewayTransportStatus } from "./hooks/useGatewayTransportStatus";
 import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects";
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useStableCallback } from "./hooks/useStableCallback";
+import { SharedHistoryPage } from "./lazySurfaces";
 import type { SendChatFn } from "./types";
 import { shouldRestorePageComposerDraft } from "./workbench/pageComposerDraftRestore";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";

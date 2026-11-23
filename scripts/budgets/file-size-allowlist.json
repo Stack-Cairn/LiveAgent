@@ -3,7 +3,7 @@
   "limit": 1500,
   "files": {
     "crates/agent-gateway/web/src/app/GatewayApp.tsx": 2614,
-    "crates/agent-gateway/web/src/app/GatewayAppView.tsx": 2550,
+    "crates/agent-gateway/web/src/app/GatewayAppView.tsx": 2540,
     "crates/agent-gateway/web/src/lib/chat/transcript/transcriptStore.ts": 1541,
     "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts": 1609,
     "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts": 1550,

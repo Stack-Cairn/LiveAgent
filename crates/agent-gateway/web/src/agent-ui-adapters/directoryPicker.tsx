@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useRemotePathPicker } from "../components/RemotePathPickerModal";
+import { useRemotePathPicker } from "../components/useRemotePathPicker";
 
 export function useDirectoryPicker() {
   const { pickPath, pathPickerElement } = useRemotePathPicker();
