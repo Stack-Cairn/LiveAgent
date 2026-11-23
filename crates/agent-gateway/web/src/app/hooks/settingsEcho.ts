@@ -76,6 +76,30 @@ export function readSettingsSyncVersion(payload: unknown): GatewaySettingsSyncVe
   return { epoch: version.epoch, generation: version.generation };
 }
 
+/** Display preferences a settings target may leave to the browser (see readBrowserLocalSettings). */
+const BROWSER_LOCAL_CAPABLE_FIELDS = new Set<string>([
+  "locale",
+  "theme",
+] satisfies PendingSettingsField[]);
+export type BrowserLocalSettingsField = "locale" | "theme";
+
+/**
+ * Fields the settings target declares it does not persist (the K-brain relay has no
+ * home for UI preferences). Null when the snapshot does not say, so a partial
+ * payload keeps the previous answer. Only display preferences are honoured: a
+ * target can never make this tab drop backend settings from its saves.
+ */
+export function readBrowserLocalSettings(payload: unknown): Set<BrowserLocalSettingsField> | null {
+  const fields = (payload as { browserLocalSettings?: unknown } | null)?.browserLocalSettings;
+  if (!Array.isArray(fields)) return null;
+  return new Set(
+    fields.filter(
+      (field): field is BrowserLocalSettingsField =>
+        typeof field === "string" && BROWSER_LOCAL_CAPABLE_FIELDS.has(field),
+    ),
+  );
+}
+
 export function keepPendingFields(
   next: AppSettings,
   local: AppSettings,

@@ -127,6 +127,8 @@ WebUI 对 command ACK 使用 4 秒上限。连接中断或 ACK 丢失时仅重�
 
 设置协议的关键约束是 provider API key 不走普通 sync snapshot。WebUI 只能看到 redacted provider 数据和 `apiKeyConfigured` 状态。
 
+Gateway 以 `-kbrain-url` 直连 K-brain（无桌面端）时，settings 由 relay 投影：K-brain 只保存后端设置，`settingsUpdateForKBrain` 对白名单之外的字段明确报错，不会静默丢弃。界面语言 `locale` 与主题 `theme` 没有后端归属，relay 的 snapshot 用 `browserLocalSettings: ["locale", "theme"]` 声明它们只存在浏览器本地；WebUI 据此只写 localStorage，不再把这两个字段放进 `SettingsUpdateRequest`。WebUI 只接受这两个显示偏好出现在该列表里，其他被 relay 拒绝的字段仍显示保存失败。桌面端 snapshot 不带此字段，语言与主题照常同步到桌面端。
+
 ## History 同步
 
 | 操作 | 语义 |

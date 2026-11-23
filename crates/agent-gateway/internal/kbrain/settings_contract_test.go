@@ -485,3 +485,27 @@ func TestImageToggleIgnoresNullImageModel(t *testing.T) {
 		t.Fatalf("null imageModel produced an image toggle write: %v", model)
 	}
 }
+
+// The WebUI keeps browser-local fields out of relay saves; each one must stay
+// rejected here so the declaration never covers for a field K-brain does persist.
+func TestSettingsProjectionDeclaresBrowserLocalFieldsTheRelayRejects(t *testing.T) {
+	projected, err := settingsProjectionForGateway(json.RawMessage(`{"providers":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		BrowserLocalSettings []string `json:"browserLocalSettings"`
+	}
+	if err := json.Unmarshal(projected, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.BrowserLocalSettings, []string{"locale", "theme"}) {
+		t.Fatalf("browserLocalSettings=%v", got.BrowserLocalSettings)
+	}
+	for _, field := range got.BrowserLocalSettings {
+		body := json.RawMessage(`{"` + field + `":"x"}`)
+		if _, err := settingsUpdateForKBrain(body); err == nil || !strings.Contains(err.Error(), field) {
+			t.Fatalf("%s update err=%v", field, err)
+		}
+	}
+}

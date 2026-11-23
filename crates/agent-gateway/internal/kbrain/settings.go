@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+// relayBrowserLocalSettings are the WebUI display preferences a desktop app would
+// persist and sync, but which have no home behind the relay: K-brain stores backend
+// settings only, and settingsUpdateForKBrain rejects these fields. The projection
+// names them so the WebUI keeps them in the browser instead of sending a save that
+// cannot succeed; any other unsupported field still fails the save.
+var relayBrowserLocalSettings = []string{"locale", "theme"}
+
 // Project backend-owned settings only; MCP is fetched from its resource route.
 type gatewaySettingsProjection struct {
 	AIApproval json.RawMessage `json:"aiApproval,omitempty"`
@@ -23,6 +30,9 @@ type gatewaySettingsProjection struct {
 	KBrainWebSearch json.RawMessage `json:"kbrainWebSearch,omitempty"`
 	CustomProviders []any           `json:"customProviders"`
 	SelectedModel   map[string]any  `json:"selectedModel"`
+	// BrowserLocalSettings lists the WebUI fields this target does not persist
+	// (relayBrowserLocalSettings).
+	BrowserLocalSettings []string `json:"browserLocalSettings"`
 }
 
 type kbrainSettingsDocument struct {
@@ -221,7 +231,7 @@ func settingsProjectionForGateway(raw json.RawMessage) (json.RawMessage, error) 
 			"providerType":     providerTypeByID[document.DefaultProvider],
 		}
 	}
-	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory, KBrainMemoryOrganizer: document.MemoryOrganizer, KBrainWebSearch: document.WebSearch})
+	return json.Marshal(gatewaySettingsProjection{CustomProviders: providers, SelectedModel: selected, Computer: document.Computer, AIApproval: document.AIApproval, KBrainMemory: document.Memory, KBrainMemoryOrganizer: document.MemoryOrganizer, KBrainWebSearch: document.WebSearch, BrowserLocalSettings: relayBrowserLocalSettings})
 }
 
 func decodeSettingsDocument(raw json.RawMessage) (kbrainSettingsDocument, error) {
