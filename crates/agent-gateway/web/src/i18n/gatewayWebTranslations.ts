@@ -15,6 +15,11 @@ export const GATEWAY_WEB_TRANSLATIONS = {
     "gatewayWeb.pathPrompt.fileDescription":
       "浏览器无法直接打开远程文件选择器。请输入桌面端 Agent 可访问的配置文件绝对路径。",
     "gatewayWeb.pathPrompt.fileLabel": "配置文件路径",
+    "gatewayWeb.connection.lost": "连接已断开，正在重新连接…",
+    "gatewayWeb.connection.reconnected": "已重新连接",
+    "gatewayWeb.connection.retryNow": "立即重试",
+    "gatewayWeb.connection.reconnecting": "正在重新连接…",
+    "gatewayWeb.connection.sendBlocked": "正在重新连接…草稿会保留，连接恢复后即可发送",
   },
   "en-US": {
     "gatewayWeb.gatewayNotConnected": "The Gateway is not connected yet.",
@@ -32,5 +37,11 @@ export const GATEWAY_WEB_TRANSLATIONS = {
     "gatewayWeb.pathPrompt.fileDescription":
       "The browser cannot open a file picker on the remote desktop. Enter an absolute configuration file path the desktop Agent can access.",
     "gatewayWeb.pathPrompt.fileLabel": "Configuration file path",
+    "gatewayWeb.connection.lost": "Connection lost. Reconnecting…",
+    "gatewayWeb.connection.reconnected": "Reconnected",
+    "gatewayWeb.connection.retryNow": "Retry now",
+    "gatewayWeb.connection.reconnecting": "Reconnecting…",
+    "gatewayWeb.connection.sendBlocked":
+      "Reconnecting… Your draft is kept and can be sent once the connection is back",
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

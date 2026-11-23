@@ -16,7 +16,9 @@ type UserMenuProps = {
   onOpenChange: (open: boolean) => void;
   userMenuLabel: string;
   userAvatarLabel: string;
-  agentStatus: "online" | "offline" | "unknown";
+  // "reconnecting": the Gateway connection itself is down, so the last known
+  // agent state is stale and must not be shown as online.
+  agentStatus: "online" | "offline" | "reconnecting" | "unknown";
   agentSelector?: ReactNode;
   onLogout: () => void;
 };
@@ -37,7 +39,9 @@ export function UserMenu(props: UserMenuProps) {
       ? t("settings.devicesOnlineStatus")
       : agentStatus === "offline"
         ? t("settings.devicesOfflineStatus")
-        : t("settings.devicesUnknownStatus");
+        : agentStatus === "reconnecting"
+          ? t("gatewayWeb.connection.reconnecting")
+          : t("settings.devicesUnknownStatus");
   const statusDotClass =
     agentStatus === "online"
       ? "bg-success"

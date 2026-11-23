@@ -32,6 +32,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   FOREGROUND_SOCKET_RECYCLE_IDLE_MS,
   FOREGROUND_WAKEUP_RECENCY_MS,
+  GATEWAY_RECONNECTING_NOTICE,
   type GatewayRequestOptions,
   getRuntimeHost,
   type HistoryListener,
@@ -690,7 +691,7 @@ export class GatewayWebSocketTransport {
               online: false,
             }
           : null,
-        "Gateway 正在重新连接...",
+        GATEWAY_RECONNECTING_NOTICE,
       );
     }, RECONNECT_NOTICE_DELAY_MS);
   }

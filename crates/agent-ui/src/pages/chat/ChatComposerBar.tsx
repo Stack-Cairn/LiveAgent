@@ -301,6 +301,11 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
+  /**
+   * Set while sending is impossible but typing is fine (e.g. the host is
+   * reconnecting): the send button is disabled and announces this reason.
+   */
+  sendBlockedReason?: string | null;
   sttProvider?: SttProviderId | null;
   sttProviderConfigured?: boolean;
   sttTransport?: SttTransport;
@@ -437,6 +442,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
+    sendBlockedReason = null,
     sttProvider = null,
     sttProviderConfigured,
     sttTransport,
@@ -660,7 +666,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
   const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
-  const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
+  const sendBlocked = Boolean(sendBlockedReason);
+  const sendDisabled =
+    isInputDisabled || sendBlocked || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   // Mirrors the editor's send key preference; while a run streams the same
   // button stops it, and Esc does too (useEscapeToStopRun below).
@@ -669,7 +677,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     ? t("chat.queue.addToQueue")
     : isSending
       ? t("chat.stopGeneration")
-      : t("chat.sendMessage");
+      : sendBlockedReason || t("chat.sendMessage");
   // Esc stops the run; open popups, the expanded composer and a pending
   // approval keep the key first (see escapeStopRun.ts for the precedence).
   useEscapeToStopRun({
@@ -1181,11 +1189,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const handleComposerSend = useCallback(() => {
     // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
     if (clarifyOpen) return;
+    // Enter must not clear a draft the host cannot deliver right now.
+    if (sendBlockedReason) return;
     // 以已注册指令开头的草稿改走指令执行（发送按钮路径；Enter 在输入框内已拦截）。
     if (composerRef.current?.runCommandDraft()) return;
     setComposerExpanded(false);
     onSend();
-  }, [clarifyOpen, composerRef, onSend, setComposerExpanded]);
+  }, [clarifyOpen, composerRef, onSend, sendBlockedReason, setComposerExpanded]);
 
   useEffect(() => {
     const editor = glassCardRef.current?.querySelector<HTMLElement>(".mention-composer");

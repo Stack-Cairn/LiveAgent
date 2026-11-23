@@ -2009,7 +2009,7 @@ test("GatewayWebSocketClient paints offline when the post-wake reconnect notice 
   timers.fire((timer) => timer.ms === 15_000);
   const last = statuses.at(-1);
   assert.equal(last?.status?.online, false, "failed wake reconcile paints offline");
-  assert.equal(last?.error, "Gateway 正在重新连接...");
+  assert.equal(last?.error, "Gateway is reconnecting");
   resetGatewayWebSocketClient();
 });
 

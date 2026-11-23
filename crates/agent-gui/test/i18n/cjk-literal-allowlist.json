@@ -500,13 +500,6 @@
       ]
     },
     {
-      "file": "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Gateway 正在重新连接..."
-      ]
-    },
-    {
       "file": "crates/agent-gateway/web/src/lib/historyShare.ts",
       "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
       "literals": [

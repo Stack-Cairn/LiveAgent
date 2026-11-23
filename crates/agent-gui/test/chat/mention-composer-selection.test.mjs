@@ -115,5 +115,11 @@ test("transient cleanup protects mention nodes and locks composer controls durin
   const bar = source(new URL("../../../agent-ui/src/pages/chat/", import.meta.url), "ChatComposerBar.tsx");
   assert.match(bar, /disabled=\{isInputDisabled \|\| stt\.active\}/);
   assert.match(bar, /disabled=\{controlsDisabled\}/);
-  assert.match(bar, /const sendDisabled = isInputDisabled \|\| stt\.active \|\| isUploadingFiles \|\| !hasSendableDraft/);
+  assert.match(
+    bar,
+    /const sendDisabled =\s*isInputDisabled \|\| sendBlocked \|\| stt\.active \|\| isUploadingFiles \|\| !hasSendableDraft/,
+  );
+  // A host that cannot deliver right now (reconnecting) blocks Enter too,
+  // so the draft is never cleared into the void.
+  assert.match(bar, /if \(sendBlockedReason\) return;/);
 });

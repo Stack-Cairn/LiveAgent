@@ -46,17 +46,32 @@ export type ChatCommandOutcome =
   | { kind: "queued_in_gui"; update: ChatCommandUpdate }
   | { kind: "bound"; update: ChatCommandUpdate }
   | { kind: "settled" }
-  | { kind: "failed"; errorCode: string | null; message: string };
+  | {
+      kind: "failed";
+      errorCode: string | null;
+      message: string;
+      // The command never reached the gateway (the connection dropped): the
+      // caller keeps the draft and the connection status explains it, so no
+      // transcript error row is written.
+      transport?: boolean;
+    };
 
 export type ChatCommandPipelineHooks = {
   getTranscriptStore(conversationId: string): TranscriptStore;
   // A draft conversation got its real id: re-key stores/subscriptions.
   onBound?(update: ChatCommandUpdate, pending: PendingChatCommand): void;
   onQueuedInGui?(update: ChatCommandUpdate, pending: PendingChatCommand): void;
-  onFailed?(pending: PendingChatCommand, errorCode: string | null, message: string): void;
+  onFailed?(
+    pending: PendingChatCommand,
+    errorCode: string | null,
+    message: string,
+    transport: boolean,
+  ): void;
   onPendingChanged?(): void;
   // Text shown for a failed command: lets the app localize known error codes.
   describeFailure?(errorCode: string | null, message: string): string;
+  // True for connection-level failures (socket closed, connect timeout).
+  isTransportFailure?(message: string): boolean;
 };
 
 const PENDING_COMMAND_TIMEOUT_MS = 60_000;
@@ -318,8 +333,11 @@ export class ChatCommandPipeline {
     errorCode: string | null,
     message: string,
   ): Extract<ChatCommandOutcome, { kind: "failed" }> {
+    const transport = errorCode === null && this.hooks.isTransportFailure?.(message) === true;
     message = this.hooks.describeFailure?.(errorCode, message) ?? message;
-    const outcome = { kind: "failed" as const, errorCode, message };
+    const outcome = transport
+      ? { kind: "failed" as const, errorCode, message, transport }
+      : { kind: "failed" as const, errorCode, message };
     this.settledOutcomes.set(pending, outcome);
     this.startWaiters.get(pending)?.(outcome);
     this.startWaiters.delete(pending);
@@ -331,10 +349,10 @@ export class ChatCommandPipeline {
       store.restoreEditResendTranscript?.(pending.clientRequestId);
     }
     store.removeOptimisticUserEntry(pending.clientRequestId);
-    if (!pending.waitForStart) store.appendLocalError(message);
+    if (!pending.waitForStart && !transport) store.appendLocalError(message);
     this.settleBindingWaiters(pending, null);
     this.clearPending(pending);
-    this.hooks.onFailed?.(pending, errorCode, message);
+    this.hooks.onFailed?.(pending, errorCode, message, transport);
     return outcome;
   }
 

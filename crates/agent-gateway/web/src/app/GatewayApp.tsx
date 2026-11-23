@@ -80,6 +80,7 @@ import type { ChatCommandUpdate } from "@/lib/chat/stream/streamTypes";
 import { createTranscriptStoreRegistry } from "@/lib/chat/stream/useConversationChat";
 import { registerToolApprovalDecisionHandler } from "@/lib/chat/toolApprovalBridge";
 import { transcriptRowsToJumpCandidates } from "@/lib/chat/transcript/searchJumpCandidates";
+import { isGatewayTransportFailure } from "@/lib/gatewayTransportErrors";
 import type {
   AgentStatus,
   ChatEvent,
@@ -423,7 +424,12 @@ function useGatewayAppController() {
     (update: ChatCommandUpdate, pending: PendingChatCommand) => void
   >(() => undefined);
   const pipelineOnFailedRef = useRef<
-    (pending: PendingChatCommand, errorCode: string | null, message: string) => void
+    (
+      pending: PendingChatCommand,
+      errorCode: string | null,
+      message: string,
+      transport: boolean,
+    ) => void
   >(() => undefined);
   const chatCommandPipeline = useMemo(
     () =>
@@ -432,10 +438,11 @@ function useGatewayAppController() {
           transcriptStoreRegistry.get(targetConversationId),
         onBound: (update, pending) => pipelineOnBoundRef.current(update, pending),
         onQueuedInGui: (update, pending) => pipelineOnQueuedInGuiRef.current(update, pending),
-        onFailed: (pending, errorCode, message) =>
-          pipelineOnFailedRef.current(pending, errorCode, message),
+        onFailed: (pending, errorCode, message, transport) =>
+          pipelineOnFailedRef.current(pending, errorCode, message, transport),
         onPendingChanged: () => setPendingCommandRevision((current) => current + 1),
         describeFailure,
+        isTransportFailure: isGatewayTransportFailure,
       }),
     [describeFailure, transcriptStoreRegistry],
   );
@@ -1159,7 +1166,7 @@ function useGatewayAppController() {
       );
     }
   };
-  pipelineOnFailedRef.current = (pending, _errorCode, message) => {
+  pipelineOnFailedRef.current = (pending, _errorCode, message, transport) => {
     draftClientRequestsRef.current.delete(pending.clientRequestId);
     const conversationIdValue = pending.conversationId.trim();
     if (pending.isEditResend) {
@@ -1170,7 +1177,9 @@ function useGatewayAppController() {
       // transcript keeps the pipeline's error entry.
       sidebarStore.removeLocal(conversationIdValue);
     }
-    if (!pending.waitForStart && isDisplayedConversation(conversationIdValue)) {
+    // A dropped connection is reported by the connection banner and the
+    // sender keeps the draft; it is not an error of this conversation.
+    if (!transport && !pending.waitForStart && isDisplayedConversation(conversationIdValue)) {
       setChatError(message);
     }
   };

@@ -499,6 +499,12 @@ export class AsyncEventQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
   }
 }
 
+export {
+  GATEWAY_RECONNECTING_NOTICE,
+  isConnectionSetupTimeoutError,
+  isGatewayTransportFailure,
+  isRecoverableGatewayTransportError,
+} from "./gatewayTransportErrors";
 // Single source of truth for error-message coercion lives in the shared UI
 // lib; re-exported here so the transport/rpc layers keep one import path.
 export { asErrorMessage };
@@ -915,25 +921,8 @@ export function normalizeHistoryListPageSize(pageSize: number) {
   );
 }
 
-export function isRecoverableGatewayTransportError(error: unknown) {
-  const message = asErrorMessage(error, "");
-  return (
-    message.startsWith("Gateway WebSocket disconnected") ||
-    message === "Gateway WebSocket is not connected" ||
-    message.startsWith("Gateway transport stalled")
-  );
-}
-
 export function isRequestTimeoutError(error: unknown) {
   return asErrorMessage(error, "").startsWith("Gateway WebSocket request timed out");
-}
-
-export function isConnectionSetupTimeoutError(error: unknown) {
-  const message = asErrorMessage(error, "");
-  return (
-    message === "Gateway WebSocket connection timed out" ||
-    message === "Gateway WebSocket auth timed out"
-  );
 }
 
 export function isUnsupportedChatPrepareError(error: unknown) {
