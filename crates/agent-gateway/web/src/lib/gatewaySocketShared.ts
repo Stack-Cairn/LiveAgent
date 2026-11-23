@@ -35,6 +35,7 @@ import type {
 } from "@liveagent/ui/lib/workspace-activity/types";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { ChatCommandUpdate, ConversationActivityEvent } from "@/lib/chat/stream/streamTypes";
+import { isGatewayLocalWorkspaceAgentId } from "./gatewayAgentSelection";
 import type {
   AgentStatus,
   ChatQueueResponse,
@@ -976,7 +977,9 @@ export function requestRequiresAgentId(type: string): boolean {
 
 export function loadPersistedActiveAgent(): string {
   try {
-    return (globalThis.localStorage?.getItem(ACTIVE_AGENT_STORAGE_KEY) ?? "").trim();
+    const stored = (globalThis.localStorage?.getItem(ACTIVE_AGENT_STORAGE_KEY) ?? "").trim();
+    // A workspace watcher picked by an older build is never a chat target.
+    return isGatewayLocalWorkspaceAgentId(stored) ? "" : stored;
   } catch {
     return "";
   }

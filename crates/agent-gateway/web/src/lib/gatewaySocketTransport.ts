@@ -17,6 +17,11 @@ import { ConversationStreamClient } from "@/lib/chat/stream/conversationStreamCl
 import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
 import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
 import {
+  isGatewayLocalWorkspaceAgentId,
+  pickActiveAgentId,
+  selectableAgents,
+} from "./gatewayAgentSelection";
+import {
   applyTerminalSnapshotEvent,
   asErrorMessage,
   buildWebSocketUrl,
@@ -221,24 +226,9 @@ export class GatewayWebSocketTransport {
   }
 
   protected reconcileActiveAgent(agents: AgentStatus[], reconnect = true): string {
-    const current = this.activeAgentId;
-    if (current && agents.some((agent) => (agent.agent_id ?? "").trim() === current)) {
-      return current;
-    }
-    const preferred = [...agents]
-      .filter((agent) => (agent.agent_id ?? "").trim() !== "")
-      .sort((left, right) => {
-        if (left.online !== right.online) {
-          return left.online ? -1 : 1;
-        }
-        return (left.agent_id ?? "").localeCompare(right.agent_id ?? "");
-      })[0];
-    const agentId = (preferred?.agent_id ?? "").trim();
-    if (agentId) {
-      this.switchActiveAgent(agentId, reconnect);
-    } else if (current) {
-      this.switchActiveAgent("", reconnect);
-    }
+    // switchActiveAgent is a no-op when the pick is the current Agent.
+    const agentId = pickActiveAgentId(agents, this.activeAgentId);
+    this.switchActiveAgent(agentId, reconnect);
     return agentId;
   }
 
@@ -291,7 +281,7 @@ export class GatewayWebSocketTransport {
   }
 
   protected snapshotAgents(): AgentStatus[] {
-    return [...this.agents.values()].sort((a, b) =>
+    return selectableAgents([...this.agents.values()]).sort((a, b) =>
       (a.agent_id ?? "").localeCompare(b.agent_id ?? ""),
     );
   }
@@ -753,6 +743,13 @@ export class GatewayWebSocketTransport {
       this.reconnectTimer = null;
       void this.reconnectNow();
     }, baseDelay + jitter);
+  }
+
+  // An explicit user retry skips the remaining backoff wait.
+  retryConnectionNow() {
+    this.clearReconnectTimer();
+    this.reconnectAttempt = 0;
+    void this.reconnectNow();
   }
 
   protected async reconnectNow() {
@@ -1266,10 +1263,7 @@ export class GatewayWebSocketTransport {
       if (
         decoded.agentId &&
         !this.matchesActiveAgent(decoded.agentId) &&
-        !(
-          decoded.type === "workspace.activity" &&
-          decoded.agentId.startsWith("gateway-local-workspace-")
-        )
+        !(decoded.type === "workspace.activity" && isGatewayLocalWorkspaceAgentId(decoded.agentId))
       ) {
         return;
       }
