@@ -339,6 +339,7 @@ export const MentionComposer = memo(
     const [mentionSessionError, setMentionSessionError] = useState<string | null>(null);
     const mentionSessionRequestSeqRef = useRef(0);
     const mentionActiveRef = useRef(false);
+    const mentionRecheckSeqRef = useRef(0);
     const mentionSessionQueryRef = useRef("");
     const mentionFetchRef = useRef<MentionFetchSnapshot | null>(null);
     const mentionRefetchTimerRef = useRef<number | null>(null);
@@ -416,6 +417,7 @@ export const MentionComposer = memo(
     }, [cancelMentionRefetch]);
 
     const closeMentionSession = useCallback(() => {
+      mentionRecheckSeqRef.current += 1;
       mentionActiveRef.current = false;
       setMentionMenuMode("root");
       setMentionCtx(null);
@@ -926,9 +928,7 @@ export const MentionComposer = memo(
       if (!el) return;
       const applyContext = (ctx: MentionContext | null) => {
         if (!ctx) {
-          if (mentionActiveRef.current) {
-            closeMentionSession();
-          }
+          if (mentionActiveRef.current) closeMentionSession();
           return;
         }
         setMentionCtx((prev) => (prev && mentionContextEquals(prev, ctx) ? prev : ctx));
@@ -941,10 +941,8 @@ export const MentionComposer = memo(
         if (ctx.query === mentionSessionQueryRef.current) return;
         mentionSessionQueryRef.current = ctx.query;
         setHighlightIdx(0);
-        // The cached snapshot only answers the new query when it was complete
-        // for the fetched one; anything else goes back to the backend. File
-        // refetches are debounced so fast typing does not walk a large
-        // workspace once per keystroke.
+        // A cached snapshot answers only if it was complete for the fetched query;
+        // file refetches are debounced so typing doesn't walk the workspace per key.
         const fetched = mentionFetchRef.current;
         if (mentionSnapshotCoversQuery(fetched, ctx.trigger, normalizeMentionQuery(ctx.query))) {
           cancelMentionRefetch();
@@ -956,8 +954,10 @@ export const MentionComposer = memo(
       };
 
       applyContext(detectMention(el, enabledSkills.length > 0, commandsEnabled));
+      // Next-frame re-check for late DOM updates; skipped once a close (Escape) or newer refresh ran.
+      const recheck = ++mentionRecheckSeqRef.current;
       window.requestAnimationFrame(() => {
-        const nextEl = editorRef.current;
+        const nextEl = recheck === mentionRecheckSeqRef.current ? editorRef.current : null;
         if (!nextEl || document.activeElement !== nextEl) return;
         applyContext(detectMention(nextEl, enabledSkills.length > 0, commandsEnabled));
       });

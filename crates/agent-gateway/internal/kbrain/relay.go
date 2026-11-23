@@ -907,8 +907,11 @@ func (r *Relay) finish(state *runState) {
 				return
 			}
 			r.mu.Unlock()
-			go r.execute(nextCtx, nextState, next.CWD, next.Prompt)
+			// Publish the dequeue snapshot before the next run can start. Once
+			// execute is running it may finish and dequeue again, and emitting
+			// afterwards would let that newer revision reach clients first.
 			r.emitQueue(next.Callbacks, next.ConversationID, snapshot)
+			go r.execute(nextCtx, nextState, next.CWD, next.Prompt)
 			return
 		}
 	}
