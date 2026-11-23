@@ -3,8 +3,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-async function setup({ notifications = true } = {}) {
+const { SETTINGS_EN_US } = createTsModuleLoader().loadModule(
+  "../agent-ui/src/i18n/namespaces/settingsEnUS.ts",
+);
+
+async function setup({ notifications = true, discover = async () => [], t = (key) => key, initial = {} } = {}) {
   let env;
   const Box = ({ children, ...rest }) =>
     env.React.createElement(
@@ -24,7 +29,7 @@ async function setup({ notifications = true } = {}) {
       ),
       "@liveagent/ui/i18n/index": {
         SUPPORTED_LOCALES: ["en-US", "zh-CN"],
-        useLocale: () => ({ locale: "en-US", setLocale: () => {}, t: (key) => key }),
+        useLocale: () => ({ locale: "en-US", setLocale: () => {}, t }),
       },
       "@liveagent/ui/pages/settings/ProviderModal": { ProviderModal: Empty },
       "@liveagent/ui/pages/settings/modelPicker": { ModelPicker: Empty },
@@ -39,7 +44,7 @@ async function setup({ notifications = true } = {}) {
         }),
       },
       "@liveagent/adapters/providerSettings": {
-        discoverProviderModels: async () => [],
+        discoverProviderModels: discover,
         ProviderSettingsExtension: Empty,
         providerImportAvailable: () => false,
       },
@@ -57,7 +62,7 @@ async function setup({ notifications = true } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = env.createRoot(container);
-  const settings = normalizeSettings({});
+  const settings = normalizeSettings(initial);
   const steps = [];
   const onStepChange = (step) => steps.push(step);
   const render = (props) =>
@@ -80,6 +85,7 @@ async function setup({ notifications = true } = {}) {
     render,
     steps,
     step: () => container.querySelector("[data-testid=onboarding-dialog]")?.dataset.step,
+    text: (selector) => container.querySelector(selector)?.textContent ?? "",
     click: (testId) =>
       env.act(async () => container.querySelector(`[data-testid=${testId}]`).click()),
     async teardown() {
@@ -118,6 +124,45 @@ test("steps the host cannot offer are skipped in navigation", async () => {
     // A saved step that is not offered here falls back to the first step.
     await t.render({ initialStep: "workspace" });
     assert.equal(t.step(), "welcome");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("a failed connection test says why discovery failed", async () => {
+  const t = await setup({
+    t: (key) =>
+      key === "onboarding.model.testFailed" ? "Test failed: {error}" : (SETTINGS_EN_US[key] ?? key),
+    discover: async () => {
+      throw Object.assign(new Error("model discovery failed"), {
+        errorCode: "invalid_api_key",
+        upstreamStatus: 401,
+        upstreamMessage: "Incorrect API key provided: sk-bad***.",
+      });
+    },
+    initial: {
+      customProviders: [
+        {
+          id: "relay",
+          name: "Relay",
+          type: "codex",
+          baseUrl: "https://relay.example.com/v1",
+          apiKey: "sk-bad-key",
+          models: [{ id: "fake-model" }],
+          activeModels: ["fake-model"],
+        },
+      ],
+      selectedModel: { customProviderId: "relay", model: "fake-model" },
+    },
+  });
+  try {
+    await t.render({ initialStep: "model" });
+    assert.equal(t.step(), "model");
+    await t.click("onboarding-test-connection");
+    assert.equal(
+      t.text("output"),
+      "Test failed: API key was rejected (401): Incorrect API key provided: sk-bad***.",
+    );
   } finally {
     await t.teardown();
   }

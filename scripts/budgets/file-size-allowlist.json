@@ -7,7 +7,7 @@
     "crates/agent-gateway/web/src/lib/chat/transcript/transcriptStore.ts": 1535,
     "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts": 1609,
     "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts": 1540,
-    "crates/agent-gateway/web/src/lib/gatewaySocketV2/adapters.ts": 2448,
+    "crates/agent-gateway/web/src/lib/gatewaySocketV2/adapters.ts": 2444,
     "crates/agent-gateway/web/src/pages/StatusDashboardPage.tsx": 1634,
     "crates/agent-gui/src-tauri/src/commands/app/system.rs": 4564,
     "crates/agent-gui/src-tauri/src/commands/config/settings/tests.rs": 3526,

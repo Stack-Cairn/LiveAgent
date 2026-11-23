@@ -14775,11 +14775,19 @@ func (x *PongResponse) GetTimestamp() int64 {
 }
 
 type ErrorResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Code    int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// Machine-readable reason of a failed K-brain request, when K-brain gave one.
+	// A failed model discovery sets invalid_api_key, not_found, rate_limited,
+	// unreachable or upstream_error.
+	ErrorCode string `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// HTTP status the upstream provider answered with (0 when it gave none).
+	UpstreamStatus int32 `protobuf:"varint,4,opt,name=upstream_status,json=upstreamStatus,proto3" json:"upstream_status,omitempty"`
+	// Short, redacted error text from the upstream provider.
+	UpstreamMessage string `protobuf:"bytes,5,opt,name=upstream_message,json=upstreamMessage,proto3" json:"upstream_message,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ErrorResponse) Reset() {
@@ -14822,6 +14830,27 @@ func (x *ErrorResponse) GetCode() int32 {
 func (x *ErrorResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *ErrorResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *ErrorResponse) GetUpstreamStatus() int32 {
+	if x != nil {
+		return x.UpstreamStatus
+	}
+	return 0
+}
+
+func (x *ErrorResponse) GetUpstreamMessage() string {
+	if x != nil {
+		return x.UpstreamMessage
 	}
 	return ""
 }
@@ -18034,10 +18063,14 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\vPingRequest\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\",\n" +
 	"\fPongResponse\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"=\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\xb0\x01\n" +
 	"\rErrorResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"@\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x03 \x01(\tR\terrorCode\x12'\n" +
+	"\x0fupstream_status\x18\x04 \x01(\x05R\x0eupstreamStatus\x12)\n" +
+	"\x10upstream_message\x18\x05 \x01(\tR\x0fupstreamMessage\"@\n" +
 	"\x14ProviderCustomHeader\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"]\n" +

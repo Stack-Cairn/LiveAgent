@@ -62,6 +62,7 @@ import {
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { describeModelDiscoveryError } from "./modelDiscoveryError";
 import { ProviderModalView } from "./ProviderModalView";
 import {
   customHeaderIssueMessage,
@@ -313,6 +314,8 @@ function useProviderModalController({
     );
   const modelsNeedApiKeyMessageRef = useRef("");
   modelsNeedApiKeyMessageRef.current = t("settings.providerModelsNeedApiKey");
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const toggleShowApiKey = useCallback(async () => {
     if (showApiKey) {
       setShowApiKey(false);
@@ -418,7 +421,11 @@ function useProviderModalController({
             !key &&
             storedAddressChangedRef.current &&
             /credentials or endpoint are not configured/i.test(message);
-          setFetchError(storedKeyRefused ? modelsNeedApiKeyMessageRef.current : message);
+          setFetchError(
+            storedKeyRefused
+              ? modelsNeedApiKeyMessageRef.current
+              : describeModelDiscoveryError(err, translateRef.current),
+          );
         }
       } finally {
         if (generation === modelFetchGeneration.current) setFetchingModels(false);
