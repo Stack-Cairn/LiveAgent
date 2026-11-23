@@ -140,6 +140,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       <DropdownMenuTrigger
         disabled={!(projectReady || anyRightDockStandaloneToolAvailable(availability)) || creating}
         title={t("projectTools.newProjectTool")}
+        aria-label={t("projectTools.newProjectTool")}
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
           "size-8 rounded-lg text-muted-foreground hover:text-foreground",

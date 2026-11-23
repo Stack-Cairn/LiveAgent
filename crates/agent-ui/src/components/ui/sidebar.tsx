@@ -7,6 +7,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { PanelLeftClose } from "@liveagent/ui/components/IconSet";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useLocale } from "../../i18n";
 import { isMacLikePlatform } from "../../lib/shared/platform";
@@ -21,6 +22,7 @@ import { Input } from "./input";
 import { Separator } from "./separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./sheet";
 import { Skeleton } from "./skeleton";
+import { SkipToComposerLink } from "./skip-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
@@ -40,6 +42,9 @@ type SidebarContextProps = {
 };
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
+// First child of the wrapper: the skip link is portaled here from `Sidebar`,
+// which (unlike the provider) renders inside each host's locale context.
+const SidebarSkipLinkSlotContext = React.createContext<HTMLElement | null>(null);
 
 function useSidebar() {
   const context = React.useContext(SidebarContext);
@@ -130,6 +135,8 @@ function SidebarProvider({
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed";
 
+  const [skipLinkSlot, setSkipLinkSlot] = React.useState<HTMLDivElement | null>(null);
+
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
       state,
@@ -145,28 +152,41 @@ function SidebarProvider({
 
   return (
     <SidebarContext.Provider value={contextValue}>
-      <div
-        data-slot="sidebar-wrapper"
-        style={
-          {
-            "--sidebar-width": SIDEBAR_WIDTH,
-            "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-            ...style,
-          } as React.CSSProperties
-        }
-        className={cn(
-          "group/sidebar-wrapper relative flex size-full min-h-0 min-w-0 has-data-[variant=inset]:bg-sidebar",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </div>
+      <SidebarSkipLinkSlotContext.Provider value={skipLinkSlot}>
+        <div
+          data-slot="sidebar-wrapper"
+          style={
+            {
+              "--sidebar-width": SIDEBAR_WIDTH,
+              "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
+              ...style,
+            } as React.CSSProperties
+          }
+          className={cn(
+            "group/sidebar-wrapper relative flex size-full min-h-0 min-w-0 has-data-[variant=inset]:bg-sidebar",
+            className,
+          )}
+          {...props}
+        >
+          <div ref={setSkipLinkSlot} data-slot="sidebar-skip-link-slot" className="contents" />
+          {children}
+        </div>
+      </SidebarSkipLinkSlotContext.Provider>
     </SidebarContext.Provider>
   );
 }
 
-function Sidebar({
+function Sidebar(props: React.ComponentProps<typeof SidebarFrame>) {
+  const skipLinkSlot = React.useContext(SidebarSkipLinkSlotContext);
+  return (
+    <>
+      {skipLinkSlot ? createPortal(<SkipToComposerLink />, skipLinkSlot) : null}
+      <SidebarFrame {...props} />
+    </>
+  );
+}
+
+function SidebarFrame({
   side = "left",
   variant = "sidebar",
   collapsible = "offcanvas",
@@ -506,7 +526,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button group/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-sm leading-tight font-normal ring-ring outline-hidden transition-colors duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 active:bg-foreground/10 active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-foreground/5 data-open:hover:text-foreground data-active:bg-foreground/10 data-active:font-medium data-active:text-foreground [&>svg]:shrink-0 [&>span:last-child]:truncate",
+  "peer/menu-button group/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-sm leading-tight font-normal ring-ring outline-hidden transition-colors duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset active:bg-foreground/10 active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-foreground/5 data-open:hover:text-foreground data-active:bg-foreground/10 data-active:font-medium data-active:text-foreground [&>svg]:shrink-0 [&>span:last-child]:truncate",
   {
     variants: {
       variant: {
@@ -601,7 +621,7 @@ function SidebarMenuAction({
     props: mergeProps<"button">(
       {
         className: cn(
-          "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 md:after:hidden [&>svg]:shrink-0",
+          "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset md:after:hidden [&>svg]:shrink-0",
           showOnHover &&
             "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-foreground aria-expanded:opacity-100 md:opacity-0",
           className,

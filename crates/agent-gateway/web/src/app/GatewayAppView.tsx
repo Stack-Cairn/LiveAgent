@@ -74,6 +74,7 @@ import {
   normalizeSidebarShortcuts,
   type SidebarShortcutId,
 } from "@liveagent/ui/lib/settings/sidebarShortcuts";
+import { useSettingsOverlayModal } from "@liveagent/ui/lib/settings/useSettingsOverlayModal";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import {
@@ -467,6 +468,7 @@ export function GatewayAppView({
   } = viewModel;
   // SSHManager rows name hosts by their configured name rather than the opaque id.
   rememberSshHostNames(settings.ssh.hosts);
+  const overlayModalRef = useSettingsOverlayModal(translate("settings.title", settings.locale));
   const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
   useEffect(() => {
@@ -1025,8 +1027,7 @@ export function GatewayAppView({
           onWidthChange={handleChatTranscriptWidthChange}
           resizeLabel={translate("chat.transcript.resizeWidth", settings.locale)}
           resetLabel={translate("chat.transcript.resizeWidthReset", settings.locale)}
-          // The history overlay below is a blocking panel layer above the
-          // handles; suspend them for exactly as long as it is mounted (#749).
+          // Suspend the handles while the blocking history overlay is mounted (#749).
           suspended={conversationOpenState.showOverlay}
         />
         {displayedTranscriptRowCount > 0 && !conversationOpenState.showOverlay ? (
@@ -2468,7 +2469,6 @@ export function GatewayAppView({
               </WorkspacePanelGroup>
             </div>
           </div>
-
           {projectSettingsProject ? (
             <WorkspaceProjectSettingsModal
               project={projectSettingsProject}
@@ -2494,9 +2494,9 @@ export function GatewayAppView({
               }}
             />
           ) : null}
-
           {settingsOpen ? (
             <div
+              ref={overlayModalRef}
               // The settings overlay covers the chat, so the Cmd/Ctrl+K palette stays closed.
               data-command-palette-suppressed=""
               className={cn(

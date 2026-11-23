@@ -391,3 +391,10 @@ body > div:has([data-streamdown="table-fullscreen"]):not(#root) {
   background-color: var(--color-amber-400);
   color: var(--color-black);
 }
+
+/* The skip link only helps while a chat composer is on screen; the WebUI login
+   screen shares the sidebar wrapper and must not get a dead first Tab stop. */
+[data-slot="sidebar-wrapper"]:not(:has([data-testid="chat-composer"]))
+  [data-slot="skip-to-composer"] {
+  display: none;
+}
