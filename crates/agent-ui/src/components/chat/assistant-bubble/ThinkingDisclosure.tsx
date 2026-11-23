@@ -29,16 +29,21 @@ export function resolveReasoningDurationMs(
 ): number | null {
   let total: number | null = null;
   for (const segment of segments) {
-    const duration = resolveThinkingDurationMs(segment.key, segment.key === activeKey);
+    const duration = resolveThinkingDurationMs(
+      segment.key,
+      segment.key === activeKey,
+      Date.now(),
+      segment.text,
+    );
     if (duration !== null) total = (total ?? 0) + duration;
   }
   return total;
 }
 
 /**
- * One uninterrupted stretch of reasoning in the processing trace: consecutive
- * segments fold into a single "思考 · Xs" row, so a model that reasons in
- * several bursts does not stack one row per burst. The row never carries a
+ * The reasoning of a turn in the processing trace: all segments fold into a
+ * single "Thought for Xs" row, so a model that reasons before every tool call
+ * does not stack one row per burst. The row never carries a
  * spinner — the turn's single status row says the model is thinking — and its
  * body stays unmounted until the user expands it, so the reasoning text is
  * never dropped from the transcript, only folded. With detailed progress on,
@@ -99,7 +104,9 @@ export function ThinkingDisclosure(props: {
   const streaming = active && renderMode === "streaming";
   const revealedText = useStreamingReveal(text, streaming);
   const displayText = streaming ? sliceStreamingMarkdownTail(revealedText) : text;
-  const durationLabel = !active && durationMs !== null ? formatElapsedTime(durationMs) : "";
+  // The settled total so far: a turn's merged row keeps its "Thought for Xs"
+  // while a later segment streams instead of flipping back to the untimed label.
+  const durationLabel = durationMs !== null ? formatElapsedTime(durationMs) : "";
   const label = durationLabel
     ? t("chat.thoughtDuration").replace("{duration}", durationLabel)
     : t("chat.thinkingProcess");

@@ -61,6 +61,7 @@ export function LiveAssistantStatus(props: {
   startedAtMs?: number;
   hasRunningTool?: boolean;
   toolActivity?: { label: string; title?: string } | null;
+  replyTextLength?: number;
   className?: string;
 }) {
   const { isCompaction = false, ...rest } = props;

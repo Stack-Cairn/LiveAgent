@@ -145,6 +145,31 @@ function phaseLabel(
   }
 }
 
+/** How long reply text may sit still before the status row returns. */
+export const REPLY_STREAM_QUIET_MS = 2_000;
+
+/** Phases that always stay on screen: they say the turn is blocked, not busy. */
+const BLOCKED_PHASES = new Set<RunPhase>([
+  "reconnecting",
+  "retrying",
+  "connecting",
+  "waiting_session",
+  "compacting",
+]);
+
+/**
+ * Tracks when the reply text at the live edge last grew. While it keeps
+ * growing the streaming text is the turn's activity indicator, so the status
+ * row steps aside; if it stalls for REPLY_STREAM_QUIET_MS the row returns.
+ */
+function useReplyStreaming(replyTextLength: number, now: number) {
+  const growth = useRef({ length: 0, at: 0 });
+  if (replyTextLength !== growth.current.length) {
+    growth.current = { length: replyTextLength, at: now };
+  }
+  return replyTextLength > 0 && now - growth.current.at < REPLY_STREAM_QUIET_MS;
+}
+
 /**
  * The one live status indicator of a running turn: a single compact row with
  * the activity glyph, the current phase in plain words and the turn's elapsed
@@ -165,6 +190,11 @@ export function LiveTurnStatus(props: {
   hasRunningTool?: boolean;
   /** Names the running call, e.g. "正在运行 pnpm test", for the tool phase. */
   toolActivity?: { label: string; title?: string } | null;
+  /**
+   * Length of the reply text streaming at the live edge (0 when none). While
+   * it grows the row hides: the text already shows the turn is alive.
+   */
+  replyTextLength?: number;
   className?: string;
 }) {
   const {
@@ -174,6 +204,7 @@ export function LiveTurnStatus(props: {
     startedAtMs,
     hasRunningTool = false,
     toolActivity,
+    replyTextLength = 0,
     className,
   } = props;
   const { t } = useLocale();
@@ -183,6 +214,7 @@ export function LiveTurnStatus(props: {
   });
   const phase = useDebouncedRunPhase(target, detailed);
   const elapsedMs = useTurnElapsedMs({ running: true, startedAtMs, tick: true });
+  const replyStreaming = useReplyStreaming(replyTextLength, Date.now());
 
   if (compacting || target.phase === "compacting") {
     return (
@@ -197,6 +229,9 @@ export function LiveTurnStatus(props: {
       </span>
     );
   }
+
+  const blocked = BLOCKED_PHASES.has(phase) || BLOCKED_PHASES.has(target.phase);
+  if (replyStreaming && !awaitingDecision && !blocked) return null;
 
   const progress = parseRunProgress(status);
   const timings = progress

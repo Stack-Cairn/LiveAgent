@@ -8,24 +8,13 @@ import {
 export type WorkTraceReasoningSegment = { key: string; text: string };
 
 /**
- * Reasoning folded into a tool activity group: one slot per uninterrupted
- * stretch, placed before the tool call at `beforeIndex` (or after the last
- * call when it equals the number of calls).
- */
-export type WorkTraceReasoningSlot = {
-  key: string;
-  beforeIndex: number;
-  segments: WorkTraceReasoningSegment[];
-};
-
-/**
  * One row of the processing trace as the transcript presents it.
  *
- * - `reasoning`: a stretch of consecutive reasoning segments with no tool call
- *   next to it (before the first progress note, or right before the answer).
- * - `activity`: a stage of tool calls together with the reasoning between and
- *   around them, in chronological order. Reasoning that sits between tool calls
- *   no longer splits the stage into alternating rows.
+ * - `reasoning`: every reasoning segment of the turn, merged into one row that
+ *   leads the trace ("Thought for 12s"). A model that reasons before each tool
+ *   call no longer interleaves a reasoning row with every batch.
+ * - `activity`: a stage of consecutive tool calls. Reasoning between calls is
+ *   pulled into the turn's reasoning row, so it no longer splits the stage.
  * - `entry`: everything else, rendered as before (progress notes, hosted
  *   searches, standalone tool cards such as subagents, compaction seams).
  */
@@ -37,65 +26,51 @@ export type WorkTraceItem =
       key: string;
       items: ToolTraceItem[];
       runningToolCallIds: string[];
-      reasoning: WorkTraceReasoningSlot[];
     };
-
-function isStageEntry(entry: AssistantTurnLayoutEntry) {
-  return entry.block.kind === "thinking" || entry.block.kind === "toolGroup";
-}
 
 function toSegment(entry: AssistantTurnLayoutEntry): WorkTraceReasoningSegment {
   return { key: entry.key, text: entry.block.kind === "thinking" ? entry.block.text : "" };
 }
 
 function buildStageItem(stage: AssistantTurnLayoutEntry[]): WorkTraceItem {
-  const firstToolGroup = stage.find((entry) => entry.block.kind === "toolGroup");
-  if (!firstToolGroup) {
-    return { kind: "reasoning", key: stage[0]?.key ?? "", segments: stage.map(toSegment) };
-  }
   const items: ToolTraceItem[] = [];
   const running = new Set<string>();
-  const reasoning: WorkTraceReasoningSlot[] = [];
   for (const entry of stage) {
-    if (entry.block.kind === "toolGroup") {
-      items.push(...entry.block.items);
-      for (const id of entry.runningToolCallIds) running.add(id);
-      continue;
-    }
-    const previous = reasoning.at(-1);
-    if (previous && previous.beforeIndex === items.length) {
-      previous.segments.push(toSegment(entry));
-    } else {
-      reasoning.push({ key: entry.key, beforeIndex: items.length, segments: [toSegment(entry)] });
-    }
+    if (entry.block.kind !== "toolGroup") continue;
+    items.push(...entry.block.items);
+    for (const id of entry.runningToolCallIds) running.add(id);
   }
   return {
     kind: "activity",
     // The first tool group's key stays put while the stage grows, so the row
-    // never remounts as later calls and reasoning join it.
-    key: firstToolGroup.key,
+    // never remounts as later calls join it.
+    key: stage[0]?.key ?? "",
     items,
     runningToolCallIds: Array.from(running),
-    reasoning,
   };
 }
 
 /**
- * Merge the layout's work entries into presentation rows. A "stage" is a
- * maximal run of reasoning segments and tool batches; progress notes, hosted
- * searches, standalone tool cards and compaction seams end it. A stage with
- * at least one tool call becomes one activity group; a stage of reasoning
- * alone becomes one reasoning row.
+ * Merge the layout's work entries into presentation rows. All reasoning of the
+ * turn becomes one leading reasoning row (keyed by its first segment, so it
+ * never remounts as later segments join). A "stage" is a maximal run of tool
+ * batches, with reasoning in between treated as transparent; progress notes,
+ * hosted searches, standalone tool cards and compaction seams end it.
  */
 export function buildWorkTraceItems(entries: readonly AssistantTurnLayoutEntry[]): WorkTraceItem[] {
   const result: WorkTraceItem[] = [];
+  const segments: WorkTraceReasoningSegment[] = [];
   let stage: AssistantTurnLayoutEntry[] = [];
   const flush = () => {
     if (stage.length > 0) result.push(buildStageItem(stage));
     stage = [];
   };
   for (const entry of entries) {
-    if (isStageEntry(entry)) {
+    if (entry.block.kind === "thinking") {
+      segments.push(toSegment(entry));
+      continue;
+    }
+    if (entry.block.kind === "toolGroup") {
       stage.push(entry);
       continue;
     }
@@ -103,6 +78,8 @@ export function buildWorkTraceItems(entries: readonly AssistantTurnLayoutEntry[]
     result.push({ kind: "entry", key: entry.key, entry });
   }
   flush();
+  const first = segments[0];
+  if (first) result.unshift({ kind: "reasoning", key: first.key, segments });
   return result;
 }
 
@@ -112,20 +89,25 @@ export function resolveActiveWorkItem(
   entries: readonly AssistantTurnLayoutEntry[],
   activeThinkingKey: string | null,
 ): WorkTraceItem | null {
+  const reasoning = items[0]?.kind === "reasoning" ? items[0] : null;
+  if (reasoning?.segments.some((segment) => segment.key === activeThinkingKey)) return reasoning;
   const item = items.at(-1);
-  if (!item) return null;
+  if (!item || item === reasoning) return null;
   if (item.kind === "entry") return resolveActiveWorkEntry(entries) ? item : null;
-  if (item.kind === "reasoning") {
-    return item.segments.some((segment) => segment.key === activeThinkingKey) ? item : null;
-  }
+  if (item.kind !== "activity") return null;
   const running = new Set(item.runningToolCallIds);
-  const hasRunningTool = item.items.some(
-    (tool) => tool.toolCall.id && running.has(tool.toolCall.id),
-  );
-  const hasActiveReasoning = item.reasoning.some((slot) =>
-    slot.segments.some((segment) => segment.key === activeThinkingKey),
-  );
-  return hasRunningTool || hasActiveReasoning ? item : null;
+  return item.items.some((tool) => tool.toolCall.id && running.has(tool.toolCall.id)) ? item : null;
+}
+
+/**
+ * Length of the reply prose at the live edge of the turn: the trailing work
+ * entry when it is text. Zero when the turn is busy with anything else. The
+ * status row steps aside while this keeps growing (the text itself shows the
+ * turn is alive).
+ */
+export function trailingReplyTextLength(entries: readonly AssistantTurnLayoutEntry[]): number {
+  const block = entries.at(-1)?.block;
+  return block?.kind === "text" ? block.text.trim().length : 0;
 }
 
 /** Number of tool calls the turn made, for the trace's summary header. */

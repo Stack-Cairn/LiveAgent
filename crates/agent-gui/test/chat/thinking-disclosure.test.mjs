@@ -283,3 +283,16 @@ test("thinking durations settle once and stay stable across reads", () => {
   // A segment never observed streaming (history reload) has no duration.
   assert.equal(resolveThinkingDurationMs("seg-2", false, 9_000), null);
 });
+
+test("a measured duration carries over when saved history replaces the live entries", () => {
+  const text = "The readme is short.\n\nNext I search the sources.";
+  assert.equal(resolveThinkingDurationMs("live:r2:thinking", true, 10_000, text), null);
+  assert.equal(resolveThinkingDurationMs("live:r2:thinking", false, 16_500, text), 6_500);
+  // History reload: new entry key, same reasoning (whitespace may differ).
+  assert.equal(
+    resolveThinkingDurationMs("history:msg-7:thinking", false, 20_000, "The readme is short. Next I search the sources."),
+    6_500,
+  );
+  // Different reasoning text stays untimed.
+  assert.equal(resolveThinkingDurationMs("history:msg-8:thinking", false, 20_000, "Something else."), null);
+});

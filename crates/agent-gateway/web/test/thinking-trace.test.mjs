@@ -22,10 +22,11 @@ test("WebUI transcript renders reasoning as expandable disclosures", () => {
   assert.doesNotMatch(roundContentSource, /ThinkingActivity/);
   assert.match(disclosureSource, /data-thinking-disclosure/);
   assert.match(disclosureSource, /aria-expanded=\{open\}/);
-  // Reasoning stays out of redacted share views entirely, also when it is
-  // folded into a tool group.
+  // Reasoning stays out of redacted share views entirely; it is one row per
+  // turn and never folded into a tool group.
   assert.match(roundContentSource, /redactToolContent \? null : \(\s*<ThinkingDisclosure/);
-  assert.match(toolTraceSource, /const visibleReasoning = redactToolContent \? EMPTY_REASONING : reasoning;/);
+  assert.match(roundContentSource, /if \(item\.kind === "reasoning"\) \{\s*if \(redactToolContent\) return null;/);
+  assert.doesNotMatch(toolTraceSource, /ThinkingDisclosure/);
 });
 
 test("the live reply shows one status row that freezes on a user decision", () => {

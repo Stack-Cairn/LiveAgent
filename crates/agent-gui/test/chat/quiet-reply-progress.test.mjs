@@ -18,7 +18,7 @@ const {
   RUN_PHASE_MODEL_WAIT_MS,
 } = pure.loadModule("@liveagent/ui/lib/chat/runPhase.ts");
 const { encodeRunProgress } = pure.loadModule("@liveagent/ui/lib/chat/runProgress.ts");
-const { buildWorkTraceItems, countWorkTraceToolCalls } = pure.loadModule(
+const { buildWorkTraceItems, countWorkTraceToolCalls, trailingReplyTextLength } = pure.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/workTraceDisplay.ts",
 );
 
@@ -145,46 +145,63 @@ const shape = (items) =>
           kind: item.kind,
           key: item.key,
           tools: item.items.map((tool) => tool.toolCall.id),
-          reasoning: item.reasoning.map((slot) => [slot.beforeIndex, slot.segments.map((segment) => segment.text)]),
         }
       : item.kind === "reasoning"
         ? { kind: item.kind, key: item.key, texts: item.segments.map((segment) => segment.text) }
         : { kind: item.kind, key: item.key },
   );
 
-test("reasoning between tool calls folds into one activity group, in order", () => {
+test("a turn's reasoning merges into one leading row; tool calls between it form one group", () => {
+  const plan = thinking("plan");
   const firstTools = tools("a", "b");
-  const entries = [thinking("plan"), firstTools, thinking("check a"), thinking("check b"), tools("c"), thinking("wrap up")];
+  const entries = [plan, firstTools, thinking("check a"), thinking("check b"), tools("c"), thinking("wrap up")];
   assert.deepEqual(shape(buildWorkTraceItems(entries)), [
-    {
-      kind: "activity",
-      // The first batch's key stays put as the stage grows: no remount.
-      key: firstTools.key,
-      tools: ["a", "b", "c"],
-      reasoning: [
-        [0, ["plan"]],
-        // Consecutive reasoning merges into one collapsed slot.
-        [2, ["check a", "check b"]],
-        [3, ["wrap up"]],
-      ],
-    },
+    // One reasoning row for the whole turn, keyed by its first segment.
+    { kind: "reasoning", key: plan.key, texts: ["plan", "check a", "check b", "wrap up"] },
+    // The first batch's key stays put as the stage grows: no remount.
+    { kind: "activity", key: firstTools.key, tools: ["a", "b", "c"] },
   ]);
   assert.equal(countWorkTraceToolCalls(entries), 3);
 });
 
-test("reasoning alone is one row, and notes or standalone tools end a stage", () => {
+test("notes or standalone tools still end a tool stage, but never split the reasoning row", () => {
   const first = thinking("read the issue");
   const progressNote = note("Found the bug, fixing it now.");
   const agent = subagent("agent-1");
   const entries = [first, thinking("look at tests"), progressNote, tools("x"), thinking("verify"), agent, thinking("done")];
   assert.deepEqual(shape(buildWorkTraceItems(entries)), [
-    { kind: "reasoning", key: first.key, texts: ["read the issue", "look at tests"] },
+    { kind: "reasoning", key: first.key, texts: ["read the issue", "look at tests", "verify", "done"] },
     { kind: "entry", key: progressNote.key },
-    { kind: "activity", key: entries[3].key, tools: ["x"], reasoning: [[1, ["verify"]]] },
+    { kind: "activity", key: entries[3].key, tools: ["x"] },
     { kind: "entry", key: agent.key },
-    { kind: "reasoning", key: entries[6].key, texts: ["done"] },
   ]);
   assert.equal(countWorkTraceToolCalls(entries), 2);
+});
+
+test("reasoning under a second stays out of the trace; untimed history reasoning stays", () => {
+  const cases = [
+    // [running, active, detailed, settledMs, visible]
+    [false, false, false, 400, false],
+    [false, false, false, 1_000, true],
+    [false, false, false, null, true],
+    [true, true, false, null, false],
+    [true, false, false, 600, false],
+    [true, true, false, 2_400, true],
+    [true, true, true, null, true],
+  ];
+  for (const [running, active, detailed, settledMs, visible] of cases) {
+    assert.equal(
+      shouldShowReasoningRow({ running, active, detailed, settledMs }),
+      visible,
+      JSON.stringify({ running, active, detailed, settledMs }),
+    );
+  }
+});
+
+test("the reply text at the live edge is what the status row steps aside for", () => {
+  assert.equal(trailingReplyTextLength([thinking("plan"), tools("a")]), 0);
+  assert.equal(trailingReplyTextLength([tools("a"), note("  Done.  ")]), 5);
+  assert.equal(trailingReplyTextLength([]), 0);
 });
 
 // --- rendered status row and turn (DOM, fake timers) ---
@@ -223,7 +240,7 @@ const env = await createDomTestEnv({
 const { React, act, createRoot } = env;
 const { LiveTurnStatus } = env.loadModule("@liveagent/ui/components/chat/LiveTurnStatus.tsx");
 const { ProcessDisclosureProvider } = env.loadModule("@liveagent/ui/components/chat/processDisclosure.tsx");
-const { AssistantTurnContent } = env.loadModule(
+const { AssistantTurnContent, shouldShowReasoningRow } = env.loadModule(
   "@liveagent/ui/components/chat/assistant-bubble/RoundContent.tsx",
 );
 
@@ -431,16 +448,108 @@ test("a completed turn folds into one expandable summary row", () => {
 
     act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     assert.equal(toggle.getAttribute("aria-expanded"), "true");
-    // Expanded: reasoning folds into the tool group instead of separate rows.
+    // Expanded: one collapsed reasoning row for the whole turn, then one tool group.
     const operations = traces[0].querySelectorAll("[data-assistant-operation]");
-    assert.equal(operations.length, 1);
-    const groupToggle = operations[0].querySelector("button[aria-expanded]");
-    act(() => groupToggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    const disclosures = operations[0].querySelectorAll("[data-thinking-disclosure] button");
+    assert.equal(operations.length, 2);
+    const disclosures = traces[0].querySelectorAll("[data-thinking-disclosure] > button");
     assert.deepEqual(
-      Array.from(disclosures, (button) => button.textContent),
-      ["思考过程", "思考 · 8s"],
+      Array.from(disclosures, (button) => [button.textContent, button.getAttribute("aria-expanded")]),
+      [["思考 · 8s", "false"]],
     );
+    assert.ok(operations[0].querySelector("[data-thinking-disclosure]"));
     act(() => root.unmount());
+  });
+});
+
+function mountTurn() {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const render = (props) =>
+    act(() =>
+      root.render(
+        React.createElement(
+          ProcessDisclosureProvider,
+          { expandByDefault: false, detailedProgress: false },
+          React.createElement(AssistantTurnContent, { startedAtMs: START, ...props }),
+        ),
+      ),
+    );
+  const reasoningLabels = () =>
+    Array.from(host.querySelectorAll("[data-thinking-disclosure] > button"), (button) => button.textContent);
+  return { host, render, reasoningLabels, unmount: () => act(() => root.unmount()) };
+}
+
+const reasoningRound = (key, text, { open = false, tool = null, stopReason } = {}) => ({
+  round: Number(key.slice(1)),
+  key,
+  blocks: [{ kind: "thinking", id: `th-${key}`, text }, ...(tool ? [tool] : [])],
+  meta: stopReason ? { stopReason } : undefined,
+  thinkingOpen: open,
+  runningToolCallIds: [],
+});
+
+test("a live turn grows one reasoning row once a second of reasoning has settled", () => {
+  withFakeClock((advance) => {
+    const view = mountTurn();
+    const r1 = reasoningRound("q1", "Read the readme.", { open: true });
+    view.render({ rounds: [r1], isLive: true, isStreaming: true });
+    advance(300);
+    // A 300 ms burst settles below the threshold: no row, only the status row.
+    const r1done = reasoningRound("q1", "Read the readme.", { tool: readTool("q1-t", "README.md"), stopReason: "toolUse" });
+    const r2 = reasoningRound("q2", "Search the sources for exports.", { open: true });
+    view.render({ rounds: [r1done, r2], isLive: true, isStreaming: true });
+    assert.deepEqual(view.reasoningLabels(), []);
+    advance(2_200);
+    const r2done = reasoningRound("q2", "Search the sources for exports.", { tool: readTool("q2-t", "src/app.ts"), stopReason: "toolUse" });
+    const r3 = reasoningRound("q3", "List the files.", { open: true });
+    view.render({ rounds: [r1done, r2done, r3], isLive: true, isStreaming: true });
+    // One row with the settled total, while the next burst streams.
+    assert.deepEqual(view.reasoningLabels(), ["思考 · 2s"]);
+    assert.equal(view.host.querySelectorAll("[data-live-turn-status]").length, 1);
+    view.unmount();
+  });
+});
+
+test("a settled turn hides reasoning under a second", () => {
+  withFakeClock((advance) => {
+    const view = mountTurn();
+    const live = reasoningRound("s1", "Quick check.", { open: true });
+    view.render({ rounds: [live], isLive: true, isStreaming: true });
+    advance(400);
+    const done = reasoningRound("s1", "Quick check.", { tool: readTool("s1-t", "a.ts"), stopReason: "toolUse" });
+    const answer = { round: 2, key: "s2", blocks: [{ kind: "text", id: "s2-a", text: "All good." }], meta: { stopReason: "stop" }, runningToolCallIds: [] };
+    view.render({ rounds: [done, answer], isLive: false, isStreaming: false, durationMs: 3_000 });
+    const toggle = view.host.querySelector("[data-chat-work-trace] > button");
+    act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    assert.equal(view.host.querySelectorAll("[data-assistant-operation]").length, 1);
+    assert.deepEqual(view.reasoningLabels(), []);
+    view.unmount();
+  });
+});
+
+test("the status row steps aside while reply text streams and returns when it stalls", () => {
+  withFakeClock((advance) => {
+    const view = mountTurn();
+    const replyRound = (text) => ({
+      round: 1,
+      key: "w1",
+      blocks: [readTool("w1-t", "a.ts"), { kind: "text", id: "w1-a", text }],
+      runningToolCallIds: [],
+    });
+    const statusRows = () => view.host.querySelectorAll("[data-live-turn-status]").length;
+    view.render({ rounds: [replyRound("")], isLive: true, isStreaming: true, toolStatus: progress("responding") });
+    advance(1_000);
+    assert.equal(statusRows(), 1);
+    view.render({ rounds: [replyRound("The project")], isLive: true, isStreaming: true, toolStatus: progress("responding") });
+    assert.equal(statusRows(), 0, "streaming text is the indicator");
+    advance(1_000);
+    view.render({ rounds: [replyRound("The project has a")], isLive: true, isStreaming: true, toolStatus: progress("responding") });
+    assert.equal(statusRows(), 0);
+    advance(3_000);
+    assert.equal(statusRows(), 1, "a stalled reply brings the status row back");
+    // A blocked phase always shows, even mid-text.
+    view.render({ rounds: [replyRound("The project has a short")], isLive: true, isStreaming: true, toolStatus: progress("reconnecting") });
+    assert.equal(statusRows(), 1);
+    view.unmount();
   });
 });
