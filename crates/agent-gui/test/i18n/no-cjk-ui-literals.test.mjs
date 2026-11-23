@@ -5,9 +5,12 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseTypeScriptSource, walkSyntaxTree } from "../../../../scripts/typescript-source-tools.mjs";
 
-// UI text goes through i18n (en + zh). A CJK string in a component is almost
-// always untranslated UI text, so every such literal must be either moved to a
+// UI text goes through i18n (en + zh). A CJK string in a component, or in the
+// hooks, services and helpers that hand text to components, is almost always
+// untranslated UI text, so every such literal must be either moved to a
 // translation module or listed in cjk-literal-allowlist.json with a reason.
+// Both .tsx and .ts sources are scanned: UI text also reaches the screen from
+// plain modules (a service's display label, an error message a hook shows).
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const roots = ["crates/agent-ui/src", "crates/agent-gui/src", "crates/agent-gateway/web/src"];
@@ -16,11 +19,11 @@ const SKIPPED_DIRECTORIES = new Set(["i18n", "node_modules", "gen", "test", "tes
 const CJK = /[　-〿㐀-鿿＀-￯]/;
 const allowlistPath = fileURLToPath(new URL("./cjk-literal-allowlist.json", import.meta.url));
 
-function* tsxFiles(directory) {
+function* sourceFiles(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      if (!SKIPPED_DIRECTORIES.has(entry.name)) yield* tsxFiles(path.join(directory, entry.name));
-    } else if (entry.name.endsWith(".tsx") && !/\.test\.tsx$/.test(entry.name)) {
+      if (!SKIPPED_DIRECTORIES.has(entry.name)) yield* sourceFiles(path.join(directory, entry.name));
+    } else if (/\.tsx?$/.test(entry.name) && !/\.(test|d)\.tsx?$/.test(entry.name)) {
       yield path.join(directory, entry.name);
     }
   }
@@ -36,7 +39,7 @@ function collectCjkLiterals() {
   const found = new Map();
   let scanned = 0;
   for (const root of roots) {
-    for (const file of tsxFiles(path.join(repoRoot, root))) {
+    for (const file of sourceFiles(path.join(repoRoot, root))) {
       scanned++;
       const source = readFileSync(file, "utf8");
       if (!CJK.test(source)) continue;
@@ -74,10 +77,10 @@ function loadAllowlist() {
   return allowed;
 }
 
-test("UI .tsx sources contain no CJK literals outside the allowlist", () => {
+test("UI .ts and .tsx sources contain no CJK literals outside the allowlist", () => {
   const { found, scanned } = collectCjkLiterals();
   const allowed = loadAllowlist();
-  assert.ok(scanned > 300, `expected to scan the UI sources, scanned ${scanned} files`);
+  assert.ok(scanned > 1000, `expected to scan the UI sources, scanned ${scanned} files`);
 
   const unexpected = [...found]
     .filter(([key]) => !allowed.has(key))

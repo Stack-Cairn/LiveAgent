@@ -37,6 +37,7 @@ import { toast } from "@liveagent/ui/components/ui/toast-manager";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
+import { SttSettingsRequestError } from "@liveagent/ui/lib/stt/errors";
 import type {
   SttConnectionTestResult,
   SttSecretField,
@@ -160,6 +161,11 @@ const RESULT_LABEL_KEYS: Record<SttConnectionTestResult, string> = {
 
 type ConfigStep = "providers" | "form";
 
+const RUNTIME_LABEL_KEYS: Record<NonNullable<SttSettingsService["runtime"]>, string> = {
+  desktop: "settings.stt.runtimeDesktop",
+  webui: "settings.stt.runtimeWebui",
+};
+
 function fieldLabel(t: Translate, provider: SttProviderId, field: keyof SttProviderSettings) {
   if (field === "appId") return provider === "tencent_cloud" ? "AppId" : "App ID";
   const key = FIELD_LABEL_KEYS[field];
@@ -181,6 +187,12 @@ function fieldPlaceholder(t: Translate, provider: SttProviderId, field: keyof St
   const key = FIELD_PLACEHOLDER_KEYS[field];
   if (key) return t(key);
   return FIELD_PLACEHOLDERS[field] ?? "";
+}
+
+/** A request failure names its HTTP status/body after the localized message of the operation. */
+function settingsErrorMessage(cause: unknown, fallback: string) {
+  if (cause instanceof SttSettingsRequestError) return `${fallback} (${cause.detail})`;
+  return errorMessageWithFallback(cause, fallback);
 }
 
 function fieldValue(provider: SttProviderSettings, field: keyof SttProviderSettings) {
@@ -283,7 +295,7 @@ export function SttSection({
         setVisibleSecrets((previous) => ({ ...previous, [field]: true }));
       } catch (cause) {
         if (revealRequestRef.current !== requestId) return;
-        setError(errorMessageWithFallback(cause, t("settings.stt.revealFailed")));
+        setError(settingsErrorMessage(cause, t("settings.stt.revealFailed")));
       } finally {
         if (revealRequestRef.current === requestId) setRevealingSecret(null);
       }
@@ -336,7 +348,7 @@ export function SttSection({
       resetSecretVisibility();
       return true;
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, t("settings.stt.saveFailed")));
+      setError(settingsErrorMessage(cause, t("settings.stt.saveFailed")));
       return false;
     } finally {
       setSaving(false);
@@ -392,7 +404,7 @@ export function SttSection({
         appearance: "notice",
       });
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, t("settings.stt.clearFailed")));
+      setError(settingsErrorMessage(cause, t("settings.stt.clearFailed")));
     } finally {
       setClearing(false);
     }
@@ -415,7 +427,7 @@ export function SttSection({
       if (passed) toast.success(message, options);
       else toast.error(message, options);
     } catch (cause) {
-      setError(errorMessageWithFallback(cause, t("settings.stt.testFailed")));
+      setError(settingsErrorMessage(cause, t("settings.stt.testFailed")));
     } finally {
       setTesting(false);
     }
@@ -447,9 +459,12 @@ export function SttSection({
             description={
               <>
                 {t("settings.stt.enableDescription")}
-                {service.runtimeLabel ? (
+                {service.runtime ? (
                   <span className="block">
-                    {t("settings.stt.runtime").replace("{runtime}", service.runtimeLabel)}
+                    {t("settings.stt.runtime").replace(
+                      "{runtime}",
+                      t(RUNTIME_LABEL_KEYS[service.runtime]),
+                    )}
                   </span>
                 ) : null}
               </>

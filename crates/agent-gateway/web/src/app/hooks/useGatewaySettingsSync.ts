@@ -37,11 +37,13 @@ import { loadWebSettings, persistWebSettings, type WebSettingsSaveState } from "
 import { asErrorMessage } from "../chatEventUtils";
 import { hasSettingsSyncChanged, resolveAppWorkspaceProjects } from "../historyUtils";
 import {
+  type BrowserLocalSettingsField,
   createSettingsSyncClientId,
   keepPendingFields,
   type PendingSettingsField,
   pendingFieldsForUpdate,
   readAppliedClientSeqs,
+  readBrowserLocalSettings,
   readSettingsSyncVersion,
   SETTINGS_ECHO_ACK_TIMEOUT_MS,
   SETTINGS_ECHO_SETTLE_MS,
@@ -129,6 +131,9 @@ export function useGatewaySettingsSync(params: {
   const settingsSaveSequenceRef = useRef(0);
   const settingsSaveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const backendPromptResourcesRef = useRef(false);
+  // Fields the current target keeps no copy of (the K-brain relay): saved to browser
+  // storage only, so changing them never sends a save the target must refuse.
+  const browserLocalFieldsRef = useRef<ReadonlySet<BrowserLocalSettingsField>>(new Set());
   // Mirrors `settings` so setSettings/applyGatewaySettings can read the latest value
   // synchronously without passing a (side-effecting) function into setSettingsState —
   // React 18 StrictMode double-invokes functional state updaters in development,
@@ -311,6 +316,8 @@ export function useGatewaySettingsSync(params: {
         syncVersionRef.current = version;
       }
       if (Object.hasOwn(payload, "projectPrompts")) backendPromptResourcesRef.current = true;
+      const browserLocal = readBrowserLocalSettings(payload);
+      if (browserLocal) browserLocalFieldsRef.current = browserLocal;
       // The web search fallback rides along on settings.get answers from desktops whose
       // K-brain has it; the composer and the send path gate web search on it.
       if (Object.hasOwn(payload, "kbrainWebSearch")) {
@@ -392,6 +399,9 @@ export function useGatewaySettingsSync(params: {
       if (gatewayUpdate?.system && backendPromptResourcesRef.current) {
         projectPromptSettingsUpdate(gatewayUpdate, prev, next);
       }
+      if (gatewayUpdate) {
+        for (const field of browserLocalFieldsRef.current) delete gatewayUpdate[field];
+      }
       const sendsGatewayUpdate = gatewayUpdate !== null && Object.keys(gatewayUpdate).length > 0;
       const syncSeq = sendsGatewayUpdate ? ++syncSeqRef.current : 0;
       if (gatewayUpdate && sendsGatewayUpdate) {
@@ -469,6 +479,7 @@ export function useGatewaySettingsSync(params: {
   // biome-ignore lint/correctness/useExhaustiveDependencies: switching the active agent intentionally starts a fresh settings synchronization
   useEffect(() => {
     backendPromptResourcesRef.current = false;
+    browserLocalFieldsRef.current = new Set();
     // A slow old device must not block saves to the new device.
     settingsSaveChainRef.current = Promise.resolve();
     savesInFlightRef.current = 0;

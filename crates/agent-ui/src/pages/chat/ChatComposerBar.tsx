@@ -559,6 +559,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     hidden,
     onError: onSttError,
     onConfigurationRequired: handleSttConfigurationRequired,
+    t,
   });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [composerHasOverflow, setComposerHasOverflow] = useState(false);
@@ -585,8 +586,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const scheduleComposerOverflowMeasureRef = useRef<(() => void) | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const composerColumnRef = useRef<HTMLDivElement | null>(null);
-  // 走 state 而非 ref：容器随 taskProgressBar 插槽挂载/卸载，测量 effect 要
-  // 跟着重新观察它。
+  // 走 state 而非 ref：容器随 taskProgressBar 插槽挂载/卸载，测量 effect 要跟着重新观察它。
   const [taskProgressBarElement, setTaskProgressBarElement] = useState<HTMLDivElement | null>(null);
   const queueListRef = useRef<HTMLUListElement | null>(null);
   const queueHadTurnsRef = useRef(false);

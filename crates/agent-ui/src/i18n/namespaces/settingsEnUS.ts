@@ -1077,6 +1077,9 @@ export const SETTINGS_EN_US = {
   "settings.stt.secretsCleared": "Secrets cleared",
   "settings.stt.enableDescription": "Show a microphone button in the chat composer.",
   "settings.stt.runtime": "Current runtime: {runtime}",
+  "settings.stt.runtimeDesktop": "Desktop app (synced to the Gateway WebUI)",
+  "settings.stt.runtimeWebui":
+    "WebUI (synced with the desktop app; the Gateway keeps credentials secure)",
   "settings.stt.configured": "Configured",
   "settings.stt.notConfigured": "Not configured",
   "settings.stt.manage": "Manage",

@@ -50,7 +50,8 @@ export type SttSecretField = Extract<
 export type SttSecretRevealMode = "value" | "field-name";
 
 export interface SttSettingsService {
-  runtimeLabel?: string;
+  /** The runtime that owns these settings; the settings page names it in the UI language. */
+  runtime?: "desktop" | "webui";
   /**
    * Desktop reveals the locally stored value on demand. WebUI deliberately
    * reveals only the field label and never requests a credential value.

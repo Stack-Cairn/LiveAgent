@@ -8,6 +8,7 @@ import { HOSTED_SEARCH_TRANSLATIONS } from "./translations/hostedSearchTranslati
 import { IMAGE_SETTINGS_TRANSLATIONS } from "./translations/imageSettingsTranslations";
 import { ONBOARDING_DIAGNOSTICS_TRANSLATIONS } from "./translations/onboardingDiagnosticsTranslations";
 import { SANDBOXED_UI_TRANSLATIONS } from "./translations/sandboxedUiTranslations";
+import { STT_TRANSLATIONS } from "./translations/sttTranslations";
 import { TEXT_FORMAT_TRANSLATIONS } from "./translations/textFormatTranslations";
 import { ZH_CN_COMMON_TRANSLATIONS } from "./translations/zhCNCommon";
 import { ZH_CN_SETTINGS_TRANSLATIONS } from "./translations/zhCNSettings";
@@ -23,6 +24,7 @@ export const SHARED_TRANSLATIONS = {
     ...IMAGE_SETTINGS_TRANSLATIONS["zh-CN"],
     ...CHECKPOINT_REWIND_TRANSLATIONS["zh-CN"],
     ...HOSTED_SEARCH_TRANSLATIONS["zh-CN"],
+    ...STT_TRANSLATIONS["zh-CN"],
     ...TEXT_FORMAT_TRANSLATIONS["zh-CN"],
     ...WORKBENCH_TRANSLATIONS["zh-CN"],
     ...SANDBOXED_UI_TRANSLATIONS["zh-CN"],
@@ -37,6 +39,7 @@ export const SHARED_TRANSLATIONS = {
     ...IMAGE_SETTINGS_TRANSLATIONS["en-US"],
     ...CHECKPOINT_REWIND_TRANSLATIONS["en-US"],
     ...HOSTED_SEARCH_TRANSLATIONS["en-US"],
+    ...STT_TRANSLATIONS["en-US"],
     ...TEXT_FORMAT_TRANSLATIONS["en-US"],
     ...WORKBENCH_TRANSLATIONS["en-US"],
     ...SANDBOXED_UI_TRANSLATIONS["en-US"],

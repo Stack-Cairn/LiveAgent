@@ -66,6 +66,55 @@ test("legacy STT settings gain protocol defaults without changing saved values",
   assert.equal(normalized.providers.baidu_cloud.websocketUrl, "wss://vop.baidu.com/realtime_asr");
 });
 
+test("STT settings name the active runtime in the UI language", () => {
+  const i18n = loader.loadModule("src/i18n/config.ts");
+  loader.loadModule("@liveagent/ui/i18n/namespaces/settings.ts");
+  const { webSttSettingsService } = loader.loadModule("src/lib/stt/webSttSettingsService.ts");
+  const runtimeLine = (key, locale) =>
+    i18n.t("settings.stt.runtime", locale).replace("{runtime}", i18n.t(key, locale));
+
+  assert.equal(webSttSettingsService.runtime, "webui");
+  assert.equal(
+    runtimeLine("settings.stt.runtimeWebui", "en-US"),
+    "Current runtime: WebUI (synced with the desktop app; the Gateway keeps credentials secure)",
+  );
+  assert.equal(
+    runtimeLine("settings.stt.runtimeDesktop", "en-US"),
+    "Current runtime: Desktop app (synced to the Gateway WebUI)",
+  );
+  assert.equal(
+    runtimeLine("settings.stt.runtimeWebui", "zh-CN"),
+    "当前运行端：WebUI（与桌面端同步，凭据由 Gateway 安全托管）",
+  );
+  assert.equal(
+    runtimeLine("settings.stt.runtimeDesktop", "zh-CN"),
+    "当前运行端：桌面端（同步到 Gateway WebUI）",
+  );
+  for (const key of ["settings.stt.runtimeWebui", "settings.stt.runtimeDesktop"]) {
+    assert.doesNotMatch(runtimeLine(key, "en-US"), /[\u3400-\u9fff]/);
+  }
+});
+
+test("STT settings request failures keep the localized message and add the HTTP detail", async () => {
+  const mocked = createWebModuleLoader({
+    rootDir: fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url)),
+    mocks: { "@/lib/storage": { loadToken: () => "token" } },
+  });
+  const { createWebSttSettingsService } = mocked.loadModule("src/lib/stt/webSttSettingsService.ts");
+  const { SttSettingsRequestError } = mocked.loadModule("@liveagent/ui/lib/stt/errors.ts");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("STT settings unavailable", { status: 500 });
+  try {
+    await assert.rejects(createWebSttSettingsService().get(), (error) => {
+      assert.ok(error instanceof SttSettingsRequestError);
+      assert.equal(error.detail, "HTTP 500: STT settings unavailable");
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("STT connection test saves the current form and identifies the active runtime", () => {
   const section = readFileSync(
     fileURLToPath(new URL("../../../agent-ui/src/pages/settings/SttSection.tsx", import.meta.url)),
@@ -137,9 +186,14 @@ test("STT connection test saves the current form and identifies the active runti
   assert.match(zhCNSettings, /"settings\.stt\.saveAndTest": "保存并测试连接"/);
   assert.match(
     section,
-    /t\("settings\.stt\.runtime"\)\.replace\("\{runtime\}", service\.runtimeLabel\)/,
+    /t\("settings\.stt\.runtime"\)\.replace\(\s*"\{runtime\}",\s*t\(RUNTIME_LABEL_KEYS\[service\.runtime\]\),?\s*\)/,
   );
-  assert.match(zhCNSettings, /"settings\.stt\.runtime": "当前运行端：\{runtime\}"/);
+  assert.match(section, /desktop: "settings\.stt\.runtimeDesktop"/);
+  assert.match(section, /webui: "settings\.stt\.runtimeWebui"/);
+  assert.match(
+    section,
+    /import "@liveagent\/ui\/i18n\/namespaces\/settings";/,
+  );
   assert.match(section, /fields: \["websocketUrl", "model", "apiKey"\]/);
   assert.match(
     section,
@@ -170,10 +224,15 @@ test("STT connection test saves the current form and identifies the active runti
     webSettingsSync,
     /queueSettingsSave\(prev, next, "同步桌面端设置失败。", false\)/,
   );
-  assert.match(desktopService, /runtimeLabel: "桌面端（同步到 Gateway WebUI）"/);
+  assert.match(desktopService, /runtime: "desktop"/);
   assert.match(desktopService, /secretRevealMode: "value"/);
   assert.match(desktopService, /settings_reveal_stt_secret/);
-  assert.match(webService, /runtimeLabel: "WebUI（与桌面端同步，凭据由 Gateway 安全托管）"/);
+  assert.match(webService, /runtime: "webui"/);
+  // Runtime labels and request failures are translated by the page, never written in a service.
+  for (const service of [desktopService, webService]) {
+    assert.doesNotMatch(service, /[\u3400-\u9fff]/);
+    assert.doesNotMatch(service, /runtimeLabel:/);
+  }
   assert.match(webService, /secretRevealMode: "field-name"/);
   assert.match(section, /toggleSecretVisibility/);
   assert.match(section, /const SAVED_SECRET_MASK = "saved-secret-placeholder"/);
@@ -244,7 +303,8 @@ test("STT connection test saves the current form and identifies the active runti
     fileURLToPath(new URL("../../../agent-ui/src/pages/chat/useComposerStt.ts", import.meta.url)),
     "utf8",
   );
-  assert.match(composerStt, /STT供应商配置不完整/);
+  assert.match(composerStt, /t\("chat\.stt\.error\.providerIncomplete"\)/);
+  assert.doesNotMatch(composerStt, /"[^"\n]*[\u3400-\u9fff][^"\n]*"/);
   assert.match(composerStt, /resetSilenceClock/);
   assert.match(composerStt, /abortActiveSession/);
   assert.match(composerStt, /if \(!current\?\.ready \|\| current\.stopping\) return;/);

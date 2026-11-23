@@ -58,6 +58,9 @@ func TestRelayMCPSettingsReadSaveClearAndFailure(t *testing.T) {
 	if err != nil || !strings.Contains(get.GetSettingsJson(), `"existing"`) {
 		t.Fatalf("get=%v err=%v", get, err)
 	}
+	if !strings.Contains(get.GetSettingsJson(), `"browserLocalSettings":["locale","theme"]`) {
+		t.Fatalf("relay snapshot does not declare browser-local fields: %s", get.GetSettingsJson())
+	}
 	var snapshot struct {
 		Projects map[string]gatewayProjectPrompt `json:"projectPrompts"`
 	}
