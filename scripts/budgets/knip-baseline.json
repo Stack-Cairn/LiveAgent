@@ -891,7 +891,7 @@
       "crates/agent-gui/src/lib/trajectory/liveTrajectory.ts#desktopTrajectoryReloadVersion|localTrajectoryRefreshRevision",
       "crates/agent-gui/src/lib/trajectory/liveTrajectory.ts#subscribeDesktopLiveTrajectory|subscribeLocalTrajectory",
       "crates/agent-ui/src/components/ui/menu-surface.ts#floatingSurfaceClassName|menuSurfaceClassName",
-      "crates/agent-ui/src/lib/shared/fontFamily.ts#DEFAULT_APP_FONT_FAMILY|DEFAULT_INTERFACE_FONT_FAMILY"
+      "crates/agent-ui/src/lib/shared/fontFamily.ts#DEFAULT_APP_FONT_FAMILY|DEFAULT_CHAT_FONT_FAMILY|DEFAULT_INTERFACE_FONT_FAMILY"
     ]
   },
   "updated": "2026-11-22",

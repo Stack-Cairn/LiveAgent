@@ -87,6 +87,7 @@ import {
 import { WORKSPACE_HISTORY_PAGE_SIZE } from "../../lib/sidebar/store";
 import type { SidebarConversation } from "../../lib/sidebar/types";
 import { useSidebarReorderDrag } from "../../lib/sidebar/useSidebarReorderDrag";
+import { useSidebarRovingFocus } from "../../lib/sidebar/useSidebarRovingFocus";
 import {
   buildWorkspaceProjectSections,
   sliceWorkspaceProjectSections,
@@ -331,6 +332,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   } = props;
   const { t } = useLocale();
   const sidebarToggleShortcut = useSidebarToggleShortcut();
+  const sidebarRovingFocus = useSidebarRovingFocus(t("sidebar.rowKeyboardHint"));
 
   const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
   const [conversationSearchMode, setConversationSearchMode] = useState<"search" | "palette">(
@@ -1221,8 +1223,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       if (event.key !== "Escape" || event.defaultPrevented || bulkConfirmOpenRef.current) {
         return;
       }
-      // Escape inside the composer or any text field belongs to that editor,
-      // not to the sidebar selection.
+      // Escape in the composer or any text field belongs to that editor.
       const target = event.target as HTMLElement | null;
       if (
         target &&
@@ -1612,6 +1613,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           </div>
         ) : null}
         <div
+          {...sidebarRovingFocus}
           className={cn(
             "chat-history-sidebar-inner flex w-272px min-w-272px min-h-0 flex-1 flex-col",
             "web:max-820:w-full web:max-820:min-w-0 web:max-820:translate-z-0 web:max-820:[backface-visibility:hidden]",
@@ -1629,9 +1631,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     draggable={false}
                     className="size-8 shrink-0 select-none rounded-xl object-contain"
                   />
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold tracking-tight">Live Agent</div>
-                  </div>
+                  <div className="min-w-0 truncate font-semibold tracking-tight">LiveAgent</div>
                 </div>
               )}
 
@@ -1800,7 +1800,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   <div
                     className={cn(
                       "flex shrink-0 items-center justify-between rounded-t-xl",
-                      "px-2 pb-1 pt-2 transition-colors",
+                      "px-2 pb-1 pt-2 transition-colors [@media(pointer:coarse)]:pb-2",
                       showWorkspaceFolderDrop &&
                         "bg-primary/[0.08] ring-1 ring-primary/40 ring-inset",
                     )}

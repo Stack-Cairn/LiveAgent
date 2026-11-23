@@ -2004,3 +2004,23 @@ test("WebUI resolves a hand-written K-brain provider type the way the desktop do
   });
   assert.equal(anthropic.customProviders[0].type, "claude_code");
 });
+
+test("WebUI safety mode defaults to ask only when this browser has no stored settings", () => {
+  const { WEB_SETTINGS_STORAGE_KEY } = loader.loadModule("src/lib/webLocale.ts");
+  const previousWindow = globalThis.window;
+  try {
+    installWindow();
+    assert.equal(webSettings.loadWebSettings("token").system.commandSafetyMode, "ask");
+
+    // A snapshot saved before the new default keeps the old effective mode.
+    const legacy = installWindow();
+    legacy.set(WEB_SETTINGS_STORAGE_KEY, JSON.stringify({ system: { executionMode: "tools" } }));
+    assert.equal(webSettings.loadWebSettings("token").system.commandSafetyMode, "always");
+
+    const chosen = installWindow();
+    chosen.set(WEB_SETTINGS_STORAGE_KEY, JSON.stringify({ system: { commandSafetyMode: "autoEdit" } }));
+    assert.equal(webSettings.loadWebSettings("token").system.commandSafetyMode, "autoEdit");
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});

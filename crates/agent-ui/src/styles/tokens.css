@@ -463,7 +463,11 @@
   :root {
     color-scheme: light;
     --app-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
-    --chat-font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+    /* Body text: regular weight. The bundled semibold face is registered at
+       weight 600 only and used for chat headings and bold text. Mirrors
+       DEFAULT_CHAT_*_FONT_FAMILY in lib/shared/fontFamily.ts. */
+    --chat-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --chat-emphasis-font-family: "LiveAgent Chat Semibold", var(--chat-font-family);
     --code-font-family:
       "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
       monospace;

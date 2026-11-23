@@ -6,6 +6,7 @@ import { EN_US_COMMON_TRANSLATIONS } from "./translations/enUSCommon";
 import { EN_US_SETTINGS_TRANSLATIONS } from "./translations/enUSSettings";
 import { HOSTED_SEARCH_TRANSLATIONS } from "./translations/hostedSearchTranslations";
 import { IMAGE_SETTINGS_TRANSLATIONS } from "./translations/imageSettingsTranslations";
+import { KEYBOARD_NAVIGATION_TRANSLATIONS } from "./translations/keyboardNavigationTranslations";
 import { ONBOARDING_DIAGNOSTICS_TRANSLATIONS } from "./translations/onboardingDiagnosticsTranslations";
 import { SANDBOXED_UI_TRANSLATIONS } from "./translations/sandboxedUiTranslations";
 import { STT_TRANSLATIONS } from "./translations/sttTranslations";
@@ -29,6 +30,7 @@ export const SHARED_TRANSLATIONS = {
     ...WORKBENCH_TRANSLATIONS["zh-CN"],
     ...SANDBOXED_UI_TRANSLATIONS["zh-CN"],
     ...ONBOARDING_DIAGNOSTICS_TRANSLATIONS["zh-CN"],
+    ...KEYBOARD_NAVIGATION_TRANSLATIONS["zh-CN"],
   },
   "en-US": {
     ...TASK_TRANSLATIONS["en-US"],
@@ -44,5 +46,6 @@ export const SHARED_TRANSLATIONS = {
     ...WORKBENCH_TRANSLATIONS["en-US"],
     ...SANDBOXED_UI_TRANSLATIONS["en-US"],
     ...ONBOARDING_DIAGNOSTICS_TRANSLATIONS["en-US"],
+    ...KEYBOARD_NAVIGATION_TRANSLATIONS["en-US"],
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;

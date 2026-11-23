@@ -1,8 +1,13 @@
 export const DEFAULT_INTERFACE_FONT_FAMILY =
   'ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
 export const DEFAULT_APP_FONT_FAMILY = DEFAULT_INTERFACE_FONT_FAMILY;
-export const DEFAULT_CHAT_FONT_FAMILY =
-  '"OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif';
+// Chat body text uses the app sans stack at its regular weight. The bundled
+// face is semibold only, so it is registered at weight 600 and offered to
+// headings and bold text alone; leading the body stack with it would render
+// every paragraph semibold (font matching picks a family before a weight).
+export const DEFAULT_CHAT_FONT_FAMILY = DEFAULT_INTERFACE_FONT_FAMILY;
+export const CHAT_EMPHASIS_FONT_FACE = '"LiveAgent Chat Semibold"';
+export const DEFAULT_CHAT_EMPHASIS_FONT_FAMILY = `${CHAT_EMPHASIS_FONT_FACE}, ${DEFAULT_CHAT_FONT_FAMILY}`;
 export const DEFAULT_CODE_FONT_FAMILY =
   '"SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono", monospace';
 
@@ -106,6 +111,11 @@ export function resolveChatFontFamily(value: string): string {
   return resolveFontFamily(value, DEFAULT_CHAT_FONT_FAMILY);
 }
 
+/** Headings and bold text keep a custom chat font; only the default stack adds the semibold face. */
+export function resolveChatEmphasisFontFamily(value: string): string {
+  return normalizeFontFamily(value) || DEFAULT_CHAT_EMPHASIS_FONT_FAMILY;
+}
+
 export function resolveCodeFontFamily(value: string): string {
   return resolveFontFamily(value, DEFAULT_CODE_FONT_FAMILY);
 }
@@ -130,6 +140,10 @@ export function applyFontFamilies(
 
   root.style.setProperty("--app-font-family", appFontFamily);
   root.style.setProperty("--chat-font-family", chatFontFamily);
+  root.style.setProperty(
+    "--chat-emphasis-font-family",
+    resolveChatEmphasisFontFamily(settings.chatFontFamily),
+  );
   root.style.setProperty("--code-font-family", codeFontFamily);
 
   if (previousCodeFontFamily !== codeFontFamily) {

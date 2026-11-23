@@ -332,6 +332,7 @@ function browserUiSettings(input: unknown) {
       executionMode: system.executionMode,
       workdir: system.workdir,
       defaultTimeZone: system.defaultTimeZone,
+      commandSafetyMode: system.commandSafetyMode,
     } as AppSettings["system"],
     customSettings: {
       chatSidebar: custom.chatSidebar,
@@ -359,6 +360,7 @@ function browserUiSettings(input: unknown) {
       executionMode: normalized.system.executionMode,
       workdir: normalized.system.workdir,
       defaultTimeZone: normalized.system.defaultTimeZone,
+      commandSafetyMode: normalized.system.commandSafetyMode,
     },
     customSettings: normalized.customSettings,
     chatRuntimeControls: normalized.chatRuntimeControls,
@@ -380,8 +382,14 @@ function readBrowserPersistedSettings(): AppSettings {
     const browser = readObject(raw);
     // Import only presentation fields from the old shared UI key. Never write
     // that key: it may still be used by direct/native settings on this origin.
-    const legacyUi = readObject(localStorage.getItem(LOCAL_UI_SETTINGS_STORAGE_KEY));
-    const safe = browserUiSettings({ ...legacyUi, ...browser });
+    const legacyRaw = localStorage.getItem(LOCAL_UI_SETTINGS_STORAGE_KEY);
+    const legacyUi = readObject(legacyRaw);
+    // A stored snapshot without a safety mode keeps the old effective "always";
+    // only a browser with nothing stored yet is a new install and starts at "ask".
+    const newInstall = raw === null && legacyRaw === null;
+    const safe = browserUiSettings(
+      newInstall ? { system: getDefaultSettings().system } : { ...legacyUi, ...browser },
+    );
     localStorage.setItem(BROWSER_SETTINGS_STORAGE_KEY, JSON.stringify(safe));
     return normalizeSettings({
       ...safe,

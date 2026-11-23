@@ -28,9 +28,9 @@
       })();
     </script>
     <style>
-      /* Keep --background / --foreground in sync with
-         crates/agent-ui/src/styles/tokens.css so the boot screen matches the
-         main UI; the stylesheet redefines the same tokens once it loads. */
+      /* Keep --background / --foreground and the body font stack in sync with
+         crates/agent-ui/src/styles/tokens.css (--app-font-family) so the boot
+         screen matches the main UI; the stylesheet redefines them once it loads. */
       :root {
         color-scheme: light;
         --background: 0 0% 100%;
@@ -51,7 +51,7 @@
       }
       body {
         overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
       }
       .app-boot-screen {
         display: flex;

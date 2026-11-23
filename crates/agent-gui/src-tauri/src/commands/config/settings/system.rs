@@ -365,6 +365,8 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         Some(Value::Object(system)) => system,
         _ => Map::new(),
     };
+    // No stored system settings at all means a fresh install.
+    let fresh_install = system.is_empty();
 
     let execution_mode = system
         .get(SYSTEM_EXECUTION_MODE_KEY)
@@ -480,10 +482,11 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_SYSTEM_PROXY_KEY.to_string(),
         normalize_system_proxy_value(system.get(SYSTEM_SYSTEM_PROXY_KEY)),
     );
-    system.insert(
-        SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
-        normalize_command_safety_mode_value(system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY)),
-    );
+    let command_safety_mode = match system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY) {
+        None if fresh_install => Value::String(COMMAND_SAFETY_MODE_NEW_INSTALL_DEFAULT.to_string()),
+        raw => normalize_command_safety_mode_value(raw),
+    };
+    system.insert(SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(), command_safety_mode);
     // 缺省 false：安全侧的开关，任何非 true 的值（缺失、null、字符串）
     // 都收敛成「不允许自指」。
     system.insert(
@@ -612,8 +615,10 @@ fn normalize_browser_automation_mode_value(raw: Option<&Value>) -> Value {
 const COMMAND_SAFETY_MODES: [&str; 7] = [
     "ask", "auto", "autoEdit", "always", "autoReview", "sandbox", "sandboxOffline",
 ];
-/// 键缺失(全新配置/旧快照)时的默认值。
+/// 已有快照缺少该键时的默认值:保持旧版本的有效行为,不改变老用户的选择。
 const COMMAND_SAFETY_MODE_DEFAULT: &str = "always";
+/// 全新安装(尚无任何 system 设置)时的默认值:逐次询问,与前端 getDefaultSettings 一致。
+const COMMAND_SAFETY_MODE_NEW_INSTALL_DEFAULT: &str = "ask";
 /// 已下线的"完全访问"旧值,读取时迁移为"始终允许"。
 const COMMAND_SAFETY_MODE_RETIRED_AUTO: &str = "auto";
 /// 存在但无法识别时收敛到的最严格值(逐次人工放行)。
@@ -621,7 +626,8 @@ const COMMAND_SAFETY_MODE_FAIL_CLOSED: &str = "ask";
 
 /// 保留受支持的权限模式，未知值收敛到 "ask"。
 ///
-/// - 键缺失 / null / 空串:默认 "always"(全新配置与旧快照的正常形态)。
+/// - 键缺失 / null / 空串:默认 "always"(旧快照的正常形态);全新安装由
+///   `system_value_with_defaults` / `load_runtime_command_safety_mode` 改用 "ask"。
 /// - 旧值 "auto"(已下线的"完全访问")迁移为 "always"(始终允许),随下次保存持久化。
 /// - **存在但无法识别:收敛到最严格的 "ask"**(P2#6)。该设置全部意义在于约束,而
 ///   `save_system` 会先删除全部 system key 再按白名单重插,故此处的默认值不只是读取
@@ -662,11 +668,10 @@ fn normalize_command_safety_mode_value(raw: Option<&Value>) -> Value {
 /// 读取失败时返回 Err:调用方据此 fail-closed(报错),绝不静默降级成无沙箱执行。
 pub(crate) fn load_runtime_command_safety_mode() -> Result<String, String> {
     let conn = open_db()?;
-    let system = load_system(&conn)?;
-    let raw = system
-        .as_ref()
-        .and_then(|value| value.get(SYSTEM_COMMAND_SAFETY_MODE_KEY));
-    match normalize_command_safety_mode_value(raw) {
+    let Some(system) = load_system(&conn)? else {
+        return Ok(COMMAND_SAFETY_MODE_NEW_INSTALL_DEFAULT.to_string());
+    };
+    match normalize_command_safety_mode_value(system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY)) {
         Value::String(mode) => Ok(mode),
         _ => Ok(COMMAND_SAFETY_MODE_FAIL_CLOSED.to_string()),
     }

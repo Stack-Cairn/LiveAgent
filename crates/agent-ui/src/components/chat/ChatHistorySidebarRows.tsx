@@ -942,7 +942,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 "flex sidebar-list-row w-full min-w-0 items-center gap-2 rounded-md px-2 py-0",
                 "bg-transparent hover:bg-transparent active:bg-transparent data-active:bg-transparent",
                 "text-left outline-hidden transition-colors",
-                "focus-visible:ring-2 focus-visible:ring-ring web:max-820:[-webkit-touch-callout:none] web:max-820:select-none web:max-820:touch-pan-y",
+                "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring web:max-820:[-webkit-touch-callout:none] web:max-820:select-none web:max-820:touch-pan-y",
               )}
               title={branchHint ? [item.title, branchHint].join("\n") : item.title}
             >
@@ -1048,7 +1048,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 <>
                   <SidebarMenuAction
                     type="button"
-                    className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
+                    className={cn(PROJECT_ICON_BUTTON_CLASS, "relative after:hidden")}
                     title={item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")}
                     aria-label={
                       item.isPinned ? t("chat.conversationUnpin") : t("chat.conversationPin")
@@ -1062,7 +1062,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                     render={
                       <SidebarMenuAction
                         type="button"
-                        className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
+                        className={cn(PROJECT_ICON_BUTTON_CLASS, "relative after:hidden")}
                         disabled={isInteractionDisabled || isBusy}
                         title={t("chat.conversationMore")}
                         aria-label={t("chat.conversationMore")}
@@ -1265,7 +1265,7 @@ export function ProjectGroupHeader(props: {
         className={cn(
           "flex sidebar-list-row min-w-0 flex-1 items-center gap-2 rounded-md px-2",
           "text-left outline-hidden transition-colors",
-          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         )}
         onClick={onToggleCollapsed}
         title={t("chat.workspaceGroupToggle")}
@@ -1640,7 +1640,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
               className={cn(
                 "flex sidebar-list-row min-w-0 items-center gap-2 rounded-md px-2 py-0",
                 "bg-transparent hover:bg-transparent active:bg-transparent data-active:bg-transparent",
-                "text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 isMissing
                   ? "hover:text-destructive focus-visible:bg-destructive/10"
                   : isArchived
@@ -1790,7 +1790,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                 >
                   <SidebarMenuAction
                     type="button"
-                    className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
+                    className={cn(PROJECT_ICON_BUTTON_CLASS, "relative after:hidden")}
                     aria-label={t("chat.newConversation")}
                     onClick={() => props.onNewConversation?.(project)}
                     disabled={isInteractionDisabled || !props.onNewConversation}
@@ -1808,7 +1808,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                   render={
                     <SidebarMenuAction
                       type="button"
-                      className={cn(PROJECT_ICON_BUTTON_CLASS, "static after:hidden")}
+                      className={cn(PROJECT_ICON_BUTTON_CLASS, "relative after:hidden")}
                       title={t("chat.workspaceMore")}
                       aria-label={t("chat.workspaceMore")}
                       disabled={isInteractionDisabled}

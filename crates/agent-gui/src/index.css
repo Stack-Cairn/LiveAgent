@@ -11,11 +11,13 @@
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
 @source "../../agent-ui/src";
 
+/* Semibold-only face: registered at 600 so chat headings and bold text use it
+   while body text stays on the regular-weight sans stack (tokens.css). */
 @font-face {
-  font-family: "OpenAI Sans Semibold";
+  font-family: "LiveAgent Chat Semibold";
   src: url("../../agent-ui/src/assets/font/OpenAISans-Semibold.woff2") format("woff2");
   font-style: normal;
-  font-weight: normal;
+  font-weight: 600;
   font-display: swap;
 }
 

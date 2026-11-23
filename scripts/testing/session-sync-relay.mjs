@@ -409,7 +409,7 @@ try {
       browserItem ??= await createBrowserSession();
       for (const client of browserClients) {
         await client.request("Page.bringToFront");
-        await until(() => client.evaluate(`Boolean(document.querySelector('button[aria-label="打开边栏"], [data-sidebar="sidebar"]')) || /Live Agent/.test(document.body.innerText)`), "WebUI login and sidebar control");
+        await until(() => client.evaluate(`Boolean(document.querySelector('button[aria-label="打开边栏"], [data-sidebar="sidebar"]')) || /Live ?Agent/.test(document.body.innerText)`), "WebUI login and sidebar control");
         const activeAgent = await client.evaluate("localStorage.getItem('liveagent.gateway.activeAgent')");
         if (activeAgent !== "relay-test") {
           await client.evaluate(`Array.from(document.querySelectorAll('button')).find(button => /在线|离线/.test(button.innerText))?.click(); true`);

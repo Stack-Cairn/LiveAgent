@@ -31,6 +31,7 @@ import {
   readGatewaySettingsSyncClient,
 } from "@liveagent/ui/lib/settings/sync";
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
+import { useSettingsOverlayModal } from "@liveagent/ui/lib/settings/useSettingsOverlayModal";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { notifySkillsDiscoveryUpdated } from "@liveagent/ui/lib/skills/index";
@@ -966,6 +967,7 @@ export default function App() {
     };
   }, [queueSettingsSave, queueSettingsSyncAck, settingsReady]);
 
+  const overlayModalRef = useSettingsOverlayModal(translate("settings.title", settings.locale));
   if (!settingsReady) {
     return (
       <LocaleContext.Provider value={localeContextValue}>
@@ -1044,6 +1046,7 @@ export default function App() {
         </AppErrorBoundary>
         {visible && (
           <div
+            ref={overlayModalRef}
             // The settings overlay covers the chat, so the Cmd/Ctrl+K palette stays closed.
             data-command-palette-suppressed=""
             className={cn(

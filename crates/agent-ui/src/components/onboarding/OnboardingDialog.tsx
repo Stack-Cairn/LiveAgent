@@ -779,7 +779,19 @@ export function OnboardingDialog(props: OnboardingDialogProps) {
           </Button>
           <div className="flex items-center gap-2">
             {previous ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => setStep(previous)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Back unmounts on the first step: move focus to Continue first so
+                  // the dialog does not fall back to focusing its own container.
+                  if (!previousOnboardingStep(steps, previous)) {
+                    document.querySelector<HTMLElement>('[data-testid="onboarding-next"]')?.focus();
+                  }
+                  setStep(previous);
+                }}
+              >
                 {t("onboarding.back")}
               </Button>
             ) : null}

@@ -2012,7 +2012,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               "gap-2 bg-muted px-3 py-1",
             )}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-clip">
               {/* The mode notice floats over the controls beside the picker
                   instead of pushing them out of a narrow deck. */}
               <span className="relative flex shrink-0 items-center">

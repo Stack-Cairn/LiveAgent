@@ -1535,7 +1535,7 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
 /**
  * 命令安全模式归一。
  *
- * - 缺失 / null / 空串:默认 `always`(全新配置与旧快照的正常形态)。
+ * - 缺失 / null / 空串:`always`(旧快照,保留老用户选择;全新安装由 getDefaultSettings 给 `ask`)。
  * - 旧值 `auto`(已下线的"完全访问")迁移为 `always`(始终允许)。
  * - **存在但无法识别:收敛到最严格的 `ask`**(P2#6)。该设置全部意义在于约束,
  *   未来新增的模式值、回退到旧版本、手改配置的笔误若静默降级成最宽松的非 ask 值,
@@ -1895,7 +1895,7 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
-      commandSafetyMode: "always",
+      commandSafetyMode: "ask",
       browserAutomationMode: "auto",
       defaultTimeZone: "",
       workspaceProjects: [],
