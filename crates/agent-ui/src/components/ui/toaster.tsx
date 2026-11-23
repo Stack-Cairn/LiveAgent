@@ -110,10 +110,10 @@ const ToastEntry = memo(function ToastEntry(props: { toast: ToastObject<ToastDat
               ? "border-success/30"
               : "border-destructive/30"
           : isWarning
-            ? "border-warning/30 bg-amber-50/95 dark:bg-amber-950/80"
+            ? "border-warning/30 bg-warning-surface/95 dark:bg-warning-surface/80"
             : isSuccess
-              ? "border-success/30 bg-emerald-50/95 dark:bg-emerald-950/80"
-              : "border-destructive/30 bg-red-50/95 dark:bg-red-950/80",
+              ? "border-success/30 bg-success-surface/95 dark:bg-success-surface/80"
+              : "border-destructive/30 bg-destructive-surface/95 dark:bg-destructive-surface/80",
       )}
     >
       {isWarning ? (

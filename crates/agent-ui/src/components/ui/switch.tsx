@@ -26,9 +26,9 @@ const SWITCH_SIZES = {
 } as const;
 
 const switchTrackClassName =
-  "shrink-0 rounded-full bg-muted-foreground/20 transition-colors data-[checked]:bg-sky-500";
+  "shrink-0 rounded-full bg-muted-foreground/20 transition-colors data-[checked]:bg-control-checked";
 const switchThumbClassName =
-  "pointer-events-none block translate-x-0.5 rounded-full bg-white shadow-sm transition-transform";
+  "pointer-events-none block translate-x-0.5 rounded-full bg-control-thumb shadow-sm transition-transform";
 
 /** Decorative state for a menu row that owns the checkbox interaction. */
 export function SwitchIndicator({ checked, className }: { checked: boolean; className?: string }) {
@@ -62,8 +62,8 @@ export const Switch = React.forwardRef<HTMLElement, SwitchProps>(
         size !== "lg" && "inline-flex cursor-pointer items-center",
         "focus-visible:outline-none focus-visible:ring-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[unchecked]:hover:bg-muted-foreground/30",
         SWITCH_SIZES[size].track,
-        "data-[checked]:bg-sky-500 focus-visible:ring-sky-500/30",
-        size === "lg" && tone === "default" && "focus-visible:ring-sky-500/35",
+        "data-[checked]:bg-control-checked focus-visible:ring-control-checked/30",
+        size === "lg" && tone === "default" && "focus-visible:ring-control-checked/35",
         className,
       )}
       {...props}

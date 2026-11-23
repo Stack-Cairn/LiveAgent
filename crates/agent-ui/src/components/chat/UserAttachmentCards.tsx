@@ -88,7 +88,7 @@ function UserImageAttachmentCard(props: {
       title={file.relativePath}
       className={cn(
         "group relative overflow-hidden",
-        "rounded-xl border border-white/60 bg-white/75 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        "rounded-xl border border-glass-highlight bg-glass/95",
         compact ? "min-w-0 basis-third-minus-gap grow" : "w-full max-w-280px",
       )}
     >
@@ -98,7 +98,7 @@ function UserImageAttachmentCard(props: {
           onClick={() => onRemove(file.relativePath)}
           className={cn(
             "absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center",
-            "rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100",
+            "rounded-full bg-on-media-control/60 text-on-media/90 opacity-0 backdrop-blur-sm transition-all hover:bg-on-media-control-hover/65 group-hover:opacity-100",
           )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}
@@ -111,7 +111,7 @@ function UserImageAttachmentCard(props: {
           {imageLoadFailed ? (
             <div
               className={cn(
-                "flex w-full items-center justify-center bg-black/[0.02] dark:bg-white/5",
+                "flex w-full items-center justify-center bg-glass-fill/50",
                 compact ? "h-28" : "h-36",
               )}
             >
@@ -139,7 +139,7 @@ function UserImageAttachmentCard(props: {
                     src={imageSrc}
                     alt={file.fileName}
                     className={cn(
-                      "block w-full bg-black/[0.02] dark:bg-white/5",
+                      "block w-full bg-glass-fill/50",
                       compact ? "h-28 object-cover" : "max-h-56 object-contain",
                     )}
                     onLoad={() => setImageLoadState({ src: imageSrc, status: "loaded" })}
@@ -167,14 +167,14 @@ function UserImageAttachmentCard(props: {
       ) : (
         <div
           className={cn(
-            "flex w-full items-center justify-center bg-black/[0.02] dark:bg-white/5",
+            "flex w-full items-center justify-center bg-glass-fill/50",
             compact ? "h-28" : "h-36",
           )}
         >
           {isLoading ? (
-            <Skeleton className="size-16 rounded-xl bg-black/5 dark:bg-white/10" />
+            <Skeleton className="size-16 rounded-xl bg-glass-fill" />
           ) : (
-            <div className="flex size-10 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/10">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-glass-fill">
               <FallbackIcon className="size-5" />
             </div>
           )}
@@ -208,15 +208,15 @@ function UserFileAttachmentCard(props: {
       title={file.relativePath}
       className={cn(
         "group relative flex items-center gap-2",
-        "rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-ui-userattachmentcards-20",
-        "transition-shadow hover:shadow-ui-userattachmentcards-21 dark:border-white/[0.12] dark:bg-white/[0.06]",
+        "rounded-xl border border-glass-highlight bg-glass/95 px-2.5 py-2 text-left shadow-ui-userattachmentcards-20",
+        "transition-shadow hover:shadow-ui-userattachmentcards-21",
         compact ? "min-w-0 basis-third-minus-gap grow" : "w-full",
       )}
     >
       <div
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b",
-          "from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]",
+          "from-glass-fill/65 to-glass-fill",
         )}
       >
         <TypeIcon className="size-4.5" />
@@ -236,7 +236,7 @@ function UserFileAttachmentCard(props: {
           className={cn(
             "absolute top-1/2 right-1.5 z-10 flex size-5 -translate-y-1/2 items-center",
             "justify-center rounded-full text-chat-user-foreground/30 opacity-0 transition-all",
-            "hover:bg-black/5 hover:text-chat-user-foreground/60 group-hover:opacity-100 dark:hover:bg-white/10",
+            "hover:bg-glass-fill hover:text-chat-user-foreground/60 group-hover:opacity-100",
           )}
           aria-label={removeLabel ?? file.fileName}
           title={removeLabel}

@@ -112,6 +112,14 @@
     0 var(--spacing-2px) var(--spacing-6px) var(--spacing-minus-2px)
     color-mix(in oklab, var(--color-black) 42%, transparent),
     inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
+  --shadow-chat-jump-button:
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 45%, transparent),
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-14px)
+    color-mix(in oklab, var(--color-black) 35%, transparent);
+  --shadow-chat-jump-button-dark:
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent),
+    0 var(--spacing-8px) var(--spacing-24px) var(--spacing-minus-14px)
+    color-mix(in oklab, var(--color-black) 60%, transparent);
   --shadow-ui-userattachmentcards-20:
     0 var(--spacing-1px) var(--spacing-3px) color-mix(in oklab, var(--color-black) 6%, transparent),
     0 var(--spacing-1px) var(--spacing-2px) color-mix(in oklab, var(--color-black) 4%, transparent);
@@ -497,12 +505,57 @@
     --success-foreground: var(--color-white);
     --warning: var(--color-amber-700);
     --warning-foreground: var(--color-white);
+    /* Bright warning hue for soft fills and gradients (recommended picks); the
+       --warning text role is too dark to tint with. */
+    --warning-tint: var(--color-amber-400);
+    /* Opaque status surfaces for toasts and banners that float over content. */
+    --success-surface: var(--color-emerald-50);
+    --warning-surface: var(--color-amber-50);
+    --destructive-surface: var(--color-red-50);
+    /* On state and knob of switches. */
+    --control-checked: var(--color-sky-500);
+    --control-thumb: var(--color-white);
+    /* Find-in-text match highlight and drag-and-drop insertion marker. */
+    --search-highlight: color-mix(in oklab, var(--color-amber-300) 45%, transparent);
+    --drop-indicator: var(--color-blue-500);
+    /* Context compaction accent (band, seam row): fill/border, icon, label. */
+    --compaction: var(--color-violet-500);
+    --compaction-icon: var(--color-violet-600);
+    --compaction-foreground: var(--color-violet-800);
     --info: var(--color-sky-700);
     --info-foreground: var(--color-white);
     /* Scrim behind dialogs, sheets and lightboxes. */
     --overlay: color-mix(in oklab, var(--color-black) 40%, transparent);
     /* Faint fill that lifts a row or tile off the surface it sits on. */
     --surface-subtle: color-mix(in oklab, var(--color-black) 2%, transparent);
+    /* Frosted glass cards over the transcript and composer (clarify panel, attachment
+       and checkpoint cards, tool result wells). Use opacity modifiers for lighter steps. */
+    --glass: color-mix(in oklab, var(--color-white) 80%, transparent);
+    --glass-border: color-mix(in oklab, var(--color-black) 8%, transparent);
+    --glass-border-strong: color-mix(in oklab, var(--color-black) 16%, transparent);
+    --glass-fill: color-mix(in oklab, var(--color-black) 5%, transparent);
+    /* Light catching the top edge of a glass card. */
+    --glass-highlight: color-mix(in oklab, var(--color-white) 60%, transparent);
+    /* Chrome drawn over images and video (viewer toolbars, badges, remove buttons).
+       Media is not themed, so these hold in both themes. */
+    --on-media-fg: var(--color-white);
+    --on-media-scrim: color-mix(in oklab, var(--color-black) 60%, transparent);
+    --on-media-control: color-mix(in oklab, var(--color-black) 50%, transparent);
+    --on-media-control-hover: color-mix(in oklab, var(--color-black) 70%, transparent);
+    --on-media-chip: color-mix(in oklab, var(--color-white) 95%, transparent);
+    --on-media-chip-fg: var(--color-zinc-800);
+    --media-backdrop: var(--color-black);
+    /* Themed surfaces media sits on: the frame around inline thumbnails and the
+       canvas behind a full image preview. */
+    --media-frame: color-mix(in oklab, var(--color-white) 80%, transparent);
+    --media-canvas: var(--color-neutral-200);
+    /* Right dock tab strip scrollbar; the WebUI overrides these with its gateway
+       scrollbar palette. */
+    --project-tools-tabs-scrollbar-track: hsl(var(--muted) / 0.42);
+    --project-tools-tabs-scrollbar-track-hover: hsl(var(--muted) / 0.5);
+    --project-tools-tabs-scrollbar-thumb: hsl(var(--muted-foreground) / 0.22);
+    --project-tools-tabs-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.36);
+    --project-tools-tabs-scrollbar-thumb-border: hsl(var(--background) / 0.82);
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -599,11 +652,26 @@
     --success: var(--color-emerald-300);
     --success-foreground: var(--color-emerald-950);
     --warning: var(--color-amber-300);
+    --warning-tint: var(--color-amber-300);
+    --success-surface: var(--color-emerald-950);
+    --warning-surface: var(--color-amber-950);
+    --destructive-surface: var(--color-red-950);
+    --search-highlight: color-mix(in oklab, var(--color-amber-400) 25%, transparent);
+    --compaction: var(--color-violet-400);
+    --compaction-icon: var(--color-violet-300);
+    --compaction-foreground: var(--color-violet-200);
     --warning-foreground: var(--color-amber-950);
     --info: var(--color-sky-300);
     --info-foreground: var(--color-sky-950);
     --overlay: color-mix(in oklab, var(--color-black) 40%, transparent);
     --surface-subtle: color-mix(in oklab, var(--color-white) 3%, transparent);
+    --glass: color-mix(in oklab, var(--color-white) 6%, transparent);
+    --glass-border: color-mix(in oklab, var(--color-white) 10%, transparent);
+    --glass-border-strong: color-mix(in oklab, var(--color-white) 20%, transparent);
+    --glass-fill: color-mix(in oklab, var(--color-white) 8%, transparent);
+    --glass-highlight: color-mix(in oklab, var(--color-white) 12%, transparent);
+    --media-frame: color-mix(in oklab, var(--color-black) 20%, transparent);
+    --media-canvas: var(--color-neutral-950);
 
     --border: 0 0% 26%;
     --input: 0 0% 26%;
@@ -1027,7 +1095,40 @@
   --spacing-status-board-stage-h: min(var(--spacing-100dvh), var(--spacing-948px));
   --color-status-cyan: rgb(var(--status-cyan));
   /* biome-ignore format: Keep the existing Tailwind shadow parsing behavior. */
-  --shadow-status-board-pill: inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent);
+  --shadow-status-board-dot-glow: 0 0 var(--spacing-18px) currentColor;
+  --shadow-status-board-icon-glow:
+    0 0 var(--spacing-28px) rgba(var(--status-cyan), 0.2),
+    inset 0 0 var(--spacing-22px) color-mix(in oklab, var(--color-white) 8%, transparent);
+  --shadow-status-board-header:
+    0 var(--spacing-18px) var(--spacing-60px)
+    color-mix(in oklab, var(--color-black) 26%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent),
+    inset 0 0 var(--spacing-48px) rgba(var(--status-cyan), 0.05);
+  --shadow-status-board-header-line: 0 0 var(--spacing-18px) rgba(var(--status-cyan), 0.72);
+  --shadow-status-board-reactor:
+    0 0 var(--spacing-46px) rgba(var(--status-cyan), 0.22),
+    inset 0 0 var(--spacing-34px) color-mix(in oklab, var(--color-black) 58%, transparent);
+  --shadow-status-board-reactor-core: inset 0 0 var(--spacing-28px) rgba(var(--status-cyan), 0.12);
+  --shadow-status-board-radar:
+    0 0 var(--spacing-70px) rgba(var(--status-cyan), 0.16),
+    inset 0 0 var(--spacing-70px) rgba(var(--status-cyan), 0.08);
+  --shadow-status-board-radar-core:
+    0 0 var(--spacing-40px) rgba(var(--status-cyan), 0.23),
+    inset 0 0 var(--spacing-26px) rgba(var(--status-cyan), 0.08);
+  --shadow-status-board-orbit-dot:
+    0 0 var(--spacing-20px) rgba(var(--status-board-tone), 0.82),
+    0 0 var(--spacing-46px) rgba(var(--status-board-tone), 0.38);
+  --shadow-status-board-meter: 0 0 var(--spacing-16px) rgba(var(--status-board-tone), 0.44);
+  --shadow-status-board-stream-meter: 0 0 var(--spacing-16px) rgba(var(--status-cyan), 0.34);
+  --color-status-board-frost: var(--color-white);
+  --shadow-status-board-panel:
+    0 var(--spacing-24px) var(--spacing-70px)
+    color-mix(in oklab, var(--color-black) 32%, transparent),
+    inset 0 var(--spacing-1px) 0 color-mix(in oklab, var(--color-white) 8%, transparent),
+    inset 0 0 var(--spacing-56px) rgba(var(--status-cyan), 0.035);
+  --shadow-status-board-panel-line: 0 0 var(--spacing-18px) rgba(var(--status-cyan), 0.48);
+  --shadow-status-board-pill: inset 0 var(--spacing-1px) 0
+    color-mix(in oklab, var(--color-white) 8%, transparent);
   --blur-16px: var(--spacing-16px);
   --transition-duration-160ms: var(--ui-duration-160ms);
   --ease-default: ease;

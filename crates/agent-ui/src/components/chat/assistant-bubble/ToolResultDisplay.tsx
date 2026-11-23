@@ -325,7 +325,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     if (!cmd) return null;
     return (
       <div className="flex flex-col gap-2">
-        <ToolScrollablePre className="max-h-44 bg-zinc-950/90 text-emerald-300/90 dark:bg-zinc-950/90">
+        <ToolScrollablePre className="max-h-44 bg-terminal-surface/90 text-terminal-foreground/90">
           <span className="mr-1 select-none text-success/30">$</span>
           {cmd}
         </ToolScrollablePre>
@@ -493,7 +493,7 @@ export function ShellToolDisplay({
 
   return (
     <section
-      className="overflow-hidden rounded-xl border border-border/75 bg-foreground/[0.025] dark:bg-white/[0.035]"
+      className="overflow-hidden rounded-xl border border-border/75 bg-glass-fill/50"
       aria-label="Shell"
       data-shell-tool-display=""
     >
@@ -546,7 +546,7 @@ function CodePreview(props: { text: string; maxChars?: number }) {
   const { text, maxChars = 4000 } = props;
   if (!/\S/.test(text)) return null;
   return (
-    <ToolScrollablePre className="max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
+    <ToolScrollablePre className="max-h-56 bg-surface-subtle">
       {previewText(text, maxChars)}
     </ToolScrollablePre>
   );
@@ -740,7 +740,7 @@ export function ToolResultDisplay({
           />
         </ToolSurface>
         {!details.reusedExisting && images.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+          <div className="overflow-hidden rounded-lg border border-glass-border/75 bg-glass/70 p-2">
             {images.map((image, index) => (
               <ToolResultImagePreview
                 // biome-ignore lint/suspicious/noArrayIndexKey: 同一结果可含重复图片（内容签名会撞 key）；列表随结果整体重建，索引 key 稳定唯一。
@@ -902,7 +902,7 @@ export function ToolResultDisplay({
                 key={`${entry.kind}-${entry.path}`}
                 className={cn(
                   "flex items-start gap-2 rounded-md px-1.5 py-1 text-xs leading-1p5",
-                  "even:bg-black/[0.02] dark:even:bg-white/[0.03]",
+                  "even:bg-surface-subtle",
                 )}
               >
                 <span className="mt-1px shrink-0 text-tiny font-semibold uppercase text-muted-foreground/35">
@@ -940,7 +940,7 @@ export function ToolResultDisplay({
                 path={entry}
                 className={cn(
                   "block rounded-md px-1.5 py-1",
-                  "break-all font-mono text-xs leading-1p5 even:bg-black/[0.02] dark:even:bg-white/[0.03]",
+                  "break-all font-mono text-xs leading-1p5 even:bg-surface-subtle",
                 )}
               />
             ))}
@@ -972,7 +972,7 @@ export function ToolResultDisplay({
               {details.files.map((file) => (
                 <div
                   key={file.path}
-                  className="space-y-1 rounded-md px-1.5 py-1 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                  className="space-y-1 rounded-md px-1.5 py-1 even:bg-surface-subtle"
                 >
                   <PathDisplay
                     path={file.path}
@@ -996,7 +996,7 @@ export function ToolResultDisplay({
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: multiline grep 同一行可命中多次产生字段全同的 match；列表随结果整体重建，索引 key 稳定唯一。
                 key={`${match.path}:${match.line}:${index}`}
-                className="rounded-md border border-black/[0.05] bg-white/[0.55] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
+                className="rounded-md border border-glass-border/60 bg-glass/60 p-2"
               >
                 <div className="flex items-start gap-2">
                   <PathDisplay
@@ -1005,8 +1005,8 @@ export function ToolResultDisplay({
                   />
                   <span
                     className={cn(
-                      "shrink-0 rounded bg-black/[0.04] px-1.5 py-1px",
-                      "text-tiny font-semibold text-muted-foreground/60 dark:bg-white/[0.05]",
+                      "shrink-0 rounded bg-glass-fill/70 px-1.5 py-1px",
+                      "text-tiny font-semibold text-muted-foreground/60",
                     )}
                   >
                     line {match.line}
@@ -1209,8 +1209,8 @@ export function ToolResultDisplay({
         {details.bodyPreview ? (
           <div
             className={cn(
-              "rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-xs leading-1p6",
-              "dark:border-white/[0.07] dark:bg-white/[0.03]",
+              "rounded-md border border-glass-border/65 bg-glass/55 px-2.5 py-2 text-xs leading-1p6",
+              "",
             )}
           >
             <Markdown content={details.bodyPreview} />
@@ -1223,7 +1223,7 @@ export function ToolResultDisplay({
   if (images.length > 0) {
     return (
       <div className="space-y-2">
-        <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+        <div className="overflow-hidden rounded-lg border border-glass-border/75 bg-glass/70 p-2">
           {images.map((image, index) => (
             <ToolResultImagePreview
               // biome-ignore lint/suspicious/noArrayIndexKey: 同一结果可含重复图片（内容签名会撞 key）；列表随结果整体重建，索引 key 稳定唯一。

@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { SectionHeader } from "@liveagent/ui/components/ui/section-header";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -2071,18 +2072,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                           </Fragment>
                         );
                       })}
-                      {renderedSections.ungrouped.length > 0 ? (
-                        <Fragment>
-                          {renderedSections.grouped.length > 0 ? (
-                            <div className="px-2 pt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-                              {t("chat.workspaceUngrouped")}
-                            </div>
-                          ) : null}
-                          {renderedSections.ungrouped.map((project) =>
-                            renderWorkspaceProject(project),
-                          )}
-                        </Fragment>
+                      {renderedSections.grouped.length > 0 &&
+                      renderedSections.ungrouped.length > 0 ? (
+                        <SectionHeader
+                          size="xs"
+                          className="px-row-x pt-1.5 text-muted-foreground/70"
+                        >
+                          {t("chat.workspaceUngrouped")}
+                        </SectionHeader>
                       ) : null}
+                      {renderedSections.ungrouped.map((project) => renderWorkspaceProject(project))}
                       {hiddenProjectCount > 0 || showAllProjects ? (
                         <button
                           type="button"

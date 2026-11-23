@@ -187,14 +187,14 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
     <div
       className={cn(
         "changed-files-card overflow-hidden rounded-2xl border border-border/55 bg-background/55 backdrop-blur-sm",
-        "dark:border-white/[0.09] dark:bg-white/[0.035]",
+        "dark:border-glass-border/90 dark:bg-glass/60",
       )}
     >
       <div className="flex items-center gap-3 px-3 py-2.5">
         <div
           className={cn(
             "flex w-8 min-h-8 shrink-0 items-center justify-center self-stretch",
-            "rounded-xl border-0 bg-muted/60 text-foreground/70 shadow-none dark:bg-white/[0.07]",
+            "rounded-xl border-0 bg-muted/60 text-foreground/70 shadow-none dark:bg-glass-fill/90",
           )}
         >
           <FilePenLine className="size-4" />
@@ -217,8 +217,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
               "flex h-7 shrink-0 items-center gap-1.5",
               "rounded-lg border border-border/55 bg-transparent px-2.5",
               "text-xs font-medium leading-none text-muted-foreground transition-colors",
-              "hover:border-border/80 hover:bg-foreground/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:border-white/[0.1]",
-              "dark:hover:border-white/[0.16] dark:hover:bg-white/[0.06]",
+              "hover:border-border/80 hover:bg-foreground/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:border-glass-border",
+              "dark:hover:border-glass-border-strong/80 dark:hover:bg-glass-fill/75",
             )}
           >
             <GitCommitHorizontal className="size-3.5" />
@@ -227,7 +227,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
         ) : null}
       </div>
       {/* 超过 5 个文件时默认只展示前 5 个，点击后展开全部。 */}
-      <div className="flex flex-col gap-0 border-t border-border/30 px-2 py-1 dark:border-white/[0.05]">
+      <div className="flex flex-col gap-0 border-t border-border/30 px-2 py-1 dark:border-glass-border/50">
         {visibleFiles.map((file) => (
           <ChangedFileRow key={file.lastToolCallId || file.path} file={file} />
         ))}

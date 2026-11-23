@@ -29,7 +29,7 @@ export const SheetBackdrop = React.forwardRef<
     ref={ref}
     data-slot="sheet-backdrop"
     className={cn(
-      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200",
+      "layer-modal fixed inset-0 bg-overlay backdrop-blur-xs transition-opacity duration-200",
       "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}

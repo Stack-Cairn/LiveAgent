@@ -9,8 +9,8 @@ import { ImagePreviewActionFeedback, ImagePreviewContextMenu } from "./ImagePrev
 
 const cornerActionClassName = cn(
   "absolute z-10 inline-flex size-4 items-center justify-center",
-  "rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale,opacity]",
-  "hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35",
+  "rounded-full bg-on-media-control text-on-media/95 backdrop-blur-sm transition-[background-color,scale,opacity]",
+  "hover:bg-on-media-control-hover active:scale-90 focus-visible:bg-on-media-control-hover disabled:pointer-events-none disabled:opacity-35",
 );
 
 export function ComposerAttachmentCard(props: {
@@ -95,8 +95,8 @@ export function ComposerAttachmentCard(props: {
         title={annotated ? `${fileName} · ${t("chat.annotate.annotated")}` : fileName}
         className={cn(
           "group relative size-12 shrink-0 overflow-hidden",
-          "rounded-lg border border-black/[0.075] bg-black/[0.035] transition-[border-color]",
-          "hover:border-black/[0.16] dark:border-white/[0.11] dark:bg-white/[0.065] dark:hover:border-white/[0.22]",
+          "rounded-lg border border-glass-border bg-glass-fill/75 transition-[border-color]",
+          "hover:border-glass-border-strong",
           annotated && "border-primary/60 dark:border-primary/60",
         )}
         data-composer-attachment-annotated-state={annotated ? "annotated" : undefined}
@@ -137,10 +137,7 @@ export function ComposerAttachmentCard(props: {
             {fallbackIcon}
           </span>
         ) : (
-          <Skeleton
-            render={<span />}
-            className="block size-full bg-black/[0.055] dark:bg-white/[0.09]"
-          />
+          <Skeleton render={<span />} className="block size-full bg-glass-fill" />
         )}
         <button
           type="button"
@@ -148,8 +145,8 @@ export function ComposerAttachmentCard(props: {
           onClick={onRemove}
           className={cn(
             "absolute right-0.5 top-0.5 z-10 inline-flex size-4 items-center justify-center",
-            "rounded-full bg-black/50 text-white/95 backdrop-blur-sm transition-[background-color,scale]",
-            "hover:bg-black/70 active:scale-90 focus-visible:bg-black/70 disabled:pointer-events-none disabled:opacity-35",
+            "rounded-full bg-on-media-control text-on-media/95 backdrop-blur-sm transition-[background-color,scale]",
+            "hover:bg-on-media-control-hover active:scale-90 focus-visible:bg-on-media-control-hover disabled:pointer-events-none disabled:opacity-35",
           )}
           aria-label={`${removeLabel} ${fileName}`}
           title={removeLabel}
@@ -210,14 +207,14 @@ export function ComposerAttachmentCard(props: {
       title={pathTitle}
       className={cn(
         "group flex h-9 w-36 max-w-viewport-inset-5rem shrink-0 items-center gap-1",
-        "rounded-lg border border-black/[0.075] bg-black/[0.035] p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color]",
-        "hover:border-black/[0.11] hover:bg-black/[0.05] dark:border-white/[0.11] dark:bg-white/[0.065] dark:shadow-ui-composerattachmentcard-2 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.09]",
+        "rounded-lg border border-glass-border bg-glass-fill/75 p-1 pr-1.5 shadow-ui-composerattachmentcard-1 transition-[border-color,background-color]",
+        "hover:border-glass-border-strong/75 hover:bg-glass-fill dark:shadow-ui-composerattachmentcard-2",
       )}
     >
       <span
         className={cn(
           "flex size-7 shrink-0 items-center justify-center overflow-hidden",
-          "rounded-md bg-black/[0.045] text-muted-foreground dark:bg-white/[0.08]",
+          "rounded-md bg-glass-fill/95 text-muted-foreground",
         )}
       >
         {fallbackIcon}

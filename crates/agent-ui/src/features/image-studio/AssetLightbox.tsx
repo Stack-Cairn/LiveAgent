@@ -27,7 +27,7 @@ function Loading({ label, onClose }: { label: string; onClose: () => void }) {
   return (
     <div
       role="status"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 text-sm text-white"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-on-media-scrim text-sm text-on-media"
     >
       <Loader2 className="mr-2 size-5 animate-spin motion-reduce:animate-none" />
       {label}
@@ -35,7 +35,7 @@ function Loading({ label, onClose }: { label: string; onClose: () => void }) {
         type="button"
         aria-label={t("imageStudio.lightbox.close")}
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 hover:bg-white/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
+        className="absolute right-4 top-4 rounded-full bg-on-media/10 p-2 hover:bg-on-media/20 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-on-media"
       >
         <X className="size-5" />
       </button>

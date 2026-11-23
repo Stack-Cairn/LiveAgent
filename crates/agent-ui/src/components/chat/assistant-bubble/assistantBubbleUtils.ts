@@ -818,13 +818,17 @@ export function isCuaDriverToolName(name: string) {
   return parsed ? isCuaDriverServerId(parsed.serverId) : false;
 }
 
-export function getToolDisplayName(name: string) {
+/**
+ * `mcpServerLabel` is the host's display label for the tool's MCP server (see
+ * `useMcpServerLabel`); without one the server segment of the name stands in.
+ */
+export function getToolDisplayName(name: string, mcpServerLabel?: string) {
   if (name === "SshManager") return "SSHManager";
   // `mcp_cua-driver_get_desktop_state` 这样的原始名在气泡标题里又长又
   // 难读。拆成 `cua-driver · get_desktop_state`：server 仍然可见（同时
   // 挂多个 MCP 时需要区分），但工具本身成为视觉重心。
   const parsed = parseDynamicMcpToolName(name);
-  if (parsed) return `${parsed.serverId} · ${parsed.tool}`;
+  if (parsed) return `${mcpServerLabel?.trim() || parsed.serverId} · ${parsed.tool}`;
   return name;
 }
 
@@ -977,11 +981,14 @@ export function getToolActivityTitleKey(
   return category === "other" ? null : `chat.tool.activity.${category}.${phase}`;
 }
 
-export function getToolDisplayTitle(toolCall: {
-  name: string;
-  arguments?: Record<string, unknown>;
-}) {
-  const name = getToolDisplayName(toolCall.name);
+export function getToolDisplayTitle(
+  toolCall: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  },
+  mcpServerLabel?: string,
+) {
+  const name = getToolDisplayName(toolCall.name, mcpServerLabel);
   const action = getManagerToolActionName(toolCall);
   return { name, action };
 }

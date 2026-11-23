@@ -39,7 +39,7 @@ function StreamingTextPreviewSurface({
       </div>
       {preview.has ? (
         preview.text ? (
-          <ToolScrollablePre className="max-h-56 rounded-none bg-black/[0.02] dark:bg-white/[0.03]">
+          <ToolScrollablePre className="max-h-56 rounded-none bg-surface-subtle">
             {preview.text}
           </ToolScrollablePre>
         ) : (

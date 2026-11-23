@@ -22,7 +22,7 @@ function StreamBlock({ label, text, tone }: { label: string; text: string; tone?
       <ToolSurfaceLabel label={label} />
       <ToolScrollablePre
         className={cn(
-          "max-h-56 bg-black/[0.02] font-mono dark:bg-white/[0.03]",
+          "max-h-56 bg-surface-subtle font-mono",
           tone === "error" && "text-destructive/85",
         )}
       >

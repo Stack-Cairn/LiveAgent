@@ -1180,7 +1180,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                               aria-pressed={isSelected}
                               className={cn(
                                 "grid w-full cursor-default grid-cols-composer-control items-center gap-3 rounded-md",
-                                "px-2 py-1.5 text-left text-xs hover:bg-muted",
+                                "px-row-x py-row-y text-left text-xs hover:bg-muted",
                                 !isMobileLayout && "touch-none",
                                 isSelected &&
                                   "bg-success/10 text-foreground ring-1 ring-success/20",

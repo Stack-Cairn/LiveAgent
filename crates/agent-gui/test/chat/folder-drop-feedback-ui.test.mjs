@@ -17,7 +17,7 @@ const animationStyles = readStyleSource(new URL("../../../agent-ui/src/styles/an
 test("folder import notifications adapt to locale, theme, and narrow screens", () => {
   assert.match(toastSource, /useLocale\(\)/);
   assert.match(toastSource, /t\("common\.dismissNotification"\)/);
-  assert.match(toastSource, /dark:bg-(?:amber|emerald|red)-950/);
+  assert.match(toastSource, /dark:bg-(?:warning|success|destructive)-surface/);
   assert.match(toastSource, /w-notification/);
   assert.match(toastSource, /whitespace-pre-wrap break-words/);
 });

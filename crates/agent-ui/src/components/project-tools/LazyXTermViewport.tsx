@@ -26,7 +26,7 @@ export function XTermViewport(props: XTermViewportProps) {
         <div
           style={style}
           className={cn(
-            "project-terminal-viewport relative size-full min-h-0 overflow-hidden bg-[var(--project-terminal-background)]",
+            "project-terminal-viewport relative size-full min-h-0 overflow-hidden bg-project-terminal",
             props.className,
           )}
         />

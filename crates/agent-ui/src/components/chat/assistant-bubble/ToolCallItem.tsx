@@ -67,6 +67,7 @@ import {
   KBRAIN_SUBAGENT_TOOL_NAME,
 } from "./assistantBubbleUtils";
 import { getConciseToolTarget } from "./conciseToolTarget";
+import { useMcpServerLabel } from "./McpServerLabelsContext";
 import { SubagentControlToolCall, SubagentToolCall } from "./SubagentToolCard";
 import { ToolElicitations } from "./ToolElicitations";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
@@ -280,6 +281,7 @@ function ToolCallItem({
     [fileChangeArgsFinal, isRedactedToolContent, item.toolCall],
   );
   const fileOperation = useMemo(() => getFileOperationDisplay(item), [item]);
+  const mcpServerLabel = useMcpServerLabel(item.toolCall.name);
   const meta = getToolMeta(item.toolCall.name);
   const ToolIcon = meta.Icon;
   const activityPhase =
@@ -302,12 +304,12 @@ function ToolCallItem({
     : isPlanCard
       ? { name: t("chat.planMode.cardTitle"), action: "" }
       : isRedactedToolContent
-        ? { name: getToolDisplayName(item.toolCall.name), action: "" }
+        ? { name: getToolDisplayName(item.toolCall.name, mcpServerLabel), action: "" }
         : localizedFileOperationTitle
           ? { name: localizedFileOperationTitle, action: "" }
           : localizedActivityTitle
             ? { name: localizedActivityTitle, action: "" }
-            : getToolDisplayTitle(item.toolCall);
+            : getToolDisplayTitle(item.toolCall, mcpServerLabel);
 
   // Successful/running path-based file operations are deliberately a single
   // IDE link row. Failed operations retain the disclosure so the error stays
@@ -378,6 +380,9 @@ function ToolCallItem({
     (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
   const effectiveOpen = canExpand && open;
   const summaryTitleName = title.name;
+  // A server label replaces the name key, so the raw tool name stays in the tooltip.
+  const summaryTitleTooltip =
+    mcpServerLabel && summaryTitleName !== item.toolCall.name ? item.toolCall.name : undefined;
   const compactChipText = simpleFileOperation ? "" : inlineTarget || title.action;
   // Inside a batch the row body skips the request arguments; when the concise
   // target dropped part of the request (a long command, a search path), show
@@ -440,7 +445,9 @@ function ToolCallItem({
         ) : null}
       </span>
 
-      <span className="shrink-0 text-sm font-book text-foreground/62">{summaryTitleName}</span>
+      <span className="shrink-0 text-sm font-book text-foreground/62" title={summaryTitleTooltip}>
+        {summaryTitleName}
+      </span>
 
       {compactChipText || fileChangeStats ? (
         <span
@@ -485,7 +492,10 @@ function ToolCallItem({
           className="min-w-0 truncate font-mono text-xs leading-5 text-foreground/48"
           title={inlineTargetTitle || undefined}
         >
-          <span className="font-sans text-sm font-book text-foreground/62 group-hover/tool:text-foreground/75">
+          <span
+            className="font-sans text-sm font-book text-foreground/62 group-hover/tool:text-foreground/75"
+            title={summaryTitleTooltip}
+          >
             {summaryTitleName}
             {title.action ? (
               <span className="font-mono text-xs font-normal text-foreground/48">
@@ -543,7 +553,7 @@ function ToolCallItem({
 
           if (readOnly) {
             return (
-              <ToolScrollablePre className="max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
+              <ToolScrollablePre className="max-h-56 bg-surface-subtle">
                 {previewText(resultText, 6000)}
               </ToolScrollablePre>
             );
@@ -570,7 +580,7 @@ function ToolCallItem({
                 <ChevronRight className="size-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                 {t("chat.tool.viewReturn")}
               </summary>
-              <ToolScrollablePre className="mt-1.5 max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
+              <ToolScrollablePre className="mt-1.5 max-h-56 bg-surface-subtle">
                 {previewText(resultText, 6000)}
               </ToolScrollablePre>
             </details>

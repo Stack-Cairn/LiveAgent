@@ -3,6 +3,8 @@
 // name key (the old `serverId`) to `serverKey`; tool names built from the server stay on
 // the name key so they read the same on either backend.
 
+import { kbrainMcpServerKey } from "@liveagent/ui/lib/chat/mcpApps";
+
 export type KBrainMcpToolInfo = {
   /** Configured server id (older backends: the name key, as they report it). */
   serverId: string;
@@ -88,4 +90,40 @@ export function kbrainMcpServerToolSummaries(
     }
   }
   return summaries;
+}
+
+/**
+ * Display label by server key (the `<serverKey>` of `mcp__<serverKey>__<tool>`), for tool
+ * row headers: an entry's `serverLabel` from GET /v1/mcp/tools, else its configured
+ * `serverId`, else the GET /v1/mcp settings `name` or `id` of the server whose key it is.
+ * Keys whose only label is the key itself are left out, so callers fall back to the key.
+ */
+export function kbrainMcpServerLabels(toolsBody: unknown, settingsBody: unknown) {
+  const labels = new Map<string, string>();
+  const add = (key: string, label: string) => {
+    const text = label.trim();
+    if (key && text && text !== key && !labels.has(key)) labels.set(key, text);
+  };
+  const tools = (toolsBody as { tools?: unknown } | null)?.tools;
+  for (const raw of Array.isArray(tools) ? tools : []) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Record<string, unknown>;
+    if (!readString(entry.name)) continue;
+    // Older backends report the name key as serverId and the same value as serverLabel.
+    const serverId = readString(entry.serverId);
+    const key = readString(entry.serverKey) || serverId;
+    add(key, readString(entry.serverLabel) || serverId);
+    if (serverId !== key) add(key, serverId);
+  }
+  const servers = (settingsBody as { settings?: { servers?: unknown } } | null)?.settings?.servers;
+  for (const raw of Array.isArray(servers) ? servers : []) {
+    if (!raw || typeof raw !== "object") continue;
+    const server = raw as Record<string, unknown>;
+    const id = readString(server.id).trim();
+    if (!id) continue;
+    const key = kbrainMcpServerKey(id);
+    add(key, readString(server.name) || id);
+    add(key, id);
+  }
+  return labels;
 }

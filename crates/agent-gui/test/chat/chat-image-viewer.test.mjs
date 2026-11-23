@@ -299,7 +299,7 @@ test("chat attachment sources preserve verified metadata and keep menus scoped t
   assert.match(composerSource, /disabled=\{!canPreview\}/);
   assertJsxDimensions(composerSource, "img", { width: "full", height: "full" }, ["block", "object-cover"]);
   assert.match(composerSource, /const \[imageLoadState, setImageLoadState\] = useState<\{/);
-  assert.match(userImageAttachmentSource, /"block w-full bg-black\/\[0\.02\] dark:bg-white\/5"/);
+  assert.match(userImageAttachmentSource, /"block w-full bg-glass-fill\/50"/);
   assert.match(userImageAttachmentSource, /imageLoadState\?\.src === imageSrc/);
   assert.match(userImageAttachmentSource, /disabled=\{!canPreview\}/);
   assert.match(userImageAttachmentSource, /onError=\{\(\) => \{/);

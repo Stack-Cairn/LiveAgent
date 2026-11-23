@@ -126,7 +126,7 @@ export function ComposerCommandPanel({
       </div>
       {details ? (
         // 与图标后的文字起点对齐（图标 14px + 间距 8px），右侧让出关闭按钮。
-        <div className="min-w-0 break-words pl-[22px] pr-6 text-muted-foreground">{details}</div>
+        <div className="min-w-0 break-words pl-22px pr-6 text-muted-foreground">{details}</div>
       ) : null}
     </section>
   );

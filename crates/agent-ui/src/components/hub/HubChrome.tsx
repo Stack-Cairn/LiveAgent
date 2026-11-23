@@ -115,7 +115,7 @@ export function GlassPanel(props: {
       case "violet":
       case "neutral":
         return active
-          ? "border-border/55 bg-background/80 shadow-ui-hubchrome-24 dark:border-white/[0.09] dark:bg-white/[0.06] dark:shadow-ui-hubchrome-25"
+          ? "border-border/55 bg-background/80 shadow-ui-hubchrome-24 dark:border-glass-border/90 dark:bg-glass dark:shadow-ui-hubchrome-25"
           : "border-border/40 bg-background/60";
       default:
         return "border-border/40 bg-background/60";

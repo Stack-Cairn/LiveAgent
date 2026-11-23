@@ -44,7 +44,7 @@ function useElapsed(startedAt: number | undefined, running: boolean) {
 
 const iconButton = cn(
   "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
-  "hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.08]",
+  "hover:bg-glass-fill hover:text-foreground",
   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
   "disabled:pointer-events-none disabled:opacity-40",
 );
@@ -143,10 +143,10 @@ export function ComposerGoalBar({
       data-composer-goal-bar={state.status}
       className={cn(
         // 比输入框窄一圈，落在其圆角以内，也少挡转录区的文字。
-        "mx-auto w-inset-2p25rem rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70",
+        "mx-auto w-inset-2p25rem rounded-t-lg border border-b-0 border-glass-border/80 bg-glass/95",
         "px-2 py-1",
         "shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%]",
-        "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23",
+        "dark:shadow-ui-clarifypanel-23",
       )}
     >
       <div className="flex h-7 min-w-0 items-center gap-1.5 text-xs">

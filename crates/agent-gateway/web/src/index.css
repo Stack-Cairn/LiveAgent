@@ -92,6 +92,8 @@ html[data-liveagent-webui="gateway"].dark {
   --status-emerald: 68, 255, 196;
   --status-rose: 255, 78, 142;
   --status-violet: 169, 119, 255;
+  /* Default tint for neutral entries; tiles set their own tone. */
+  --status-board-tone: 191, 210, 232;
 }
 
 .gateway-chat-frame {

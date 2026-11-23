@@ -382,9 +382,9 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       aria-hidden={!scrollbar.visible}
       className={cn(
         "project-tools-panel-tabs-scrollbar relative h-4px basis-4px touch-none overflow-hidden",
-        "rounded-full bg-[var(--project-tools-tabs-scrollbar-track,hsl(var(--muted)/0.42))] opacity-0",
+        "rounded-full bg-dock-tabs-scrollbar-track opacity-0",
         "transition-[background-color,opacity] duration-160 ease-default",
-        "hover:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&.project-tools-panel-tabs-scrollbar-dragging]:bg-[var(--project-tools-tabs-scrollbar-track-hover,hsl(var(--muted)/0.5))] [&:hover_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] [&.project-tools-panel-tabs-scrollbar-dragging_.project-tools-panel-tabs-scrollbar-thumb]:bg-[var(--project-tools-tabs-scrollbar-thumb-hover,hsl(var(--muted-foreground)/0.36))] web:max-820:h-5px web:max-820:basis-5px",
+        "hover:bg-dock-tabs-scrollbar-track-hover [&.project-tools-panel-tabs-scrollbar-dragging]:bg-dock-tabs-scrollbar-track-hover [&:hover_.project-tools-panel-tabs-scrollbar-thumb]:bg-dock-tabs-scrollbar-thumb-hover [&.project-tools-panel-tabs-scrollbar-dragging_.project-tools-panel-tabs-scrollbar-thumb]:bg-dock-tabs-scrollbar-thumb-hover web:max-820:h-5px web:max-820:basis-5px",
         scrollbar.visible && "opacity-100 pointer-events-auto",
         dragging && "project-tools-panel-tabs-scrollbar-dragging",
       )}
@@ -396,7 +396,7 @@ function RightDockTabsScrollbar(props: { scrollRef: RefObject<HTMLDivElement | n
       <div
         className={cn(
           "project-tools-panel-tabs-scrollbar-thumb absolute inset-y-0 left-0 min-w-28px",
-          "rounded-inherit bg-[var(--project-tools-tabs-scrollbar-thumb,hsl(var(--muted-foreground)/0.22))] shadow-[inset_0_0_0_var(--spacing-1px)_var(--project-tools-tabs-scrollbar-thumb-border,hsl(var(--background)/0.82))]",
+          "rounded-inherit bg-dock-tabs-scrollbar-thumb inset-ring inset-ring-dock-tabs-scrollbar-thumb-border",
           "transition-[background-color,box-shadow] duration-160 ease-default",
         )}
         style={{

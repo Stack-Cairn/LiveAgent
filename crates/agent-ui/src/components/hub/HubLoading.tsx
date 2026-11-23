@@ -6,7 +6,7 @@ import { Loader2 } from "../IconSet";
 const loadingSurfaceVariants = cva("relative overflow-hidden rounded-xl border", {
   variants: {
     variant: {
-      hero: "border-hsl-border-55 bg-hub-frost-hero backdrop-blur-24px backdrop-saturate-180 shadow-hub-frost-hero dark:border-white/8 dark:bg-hub-frost-hero-dark dark:shadow-hub-frost-hero-dark",
+      hero: "border-hsl-border-55 bg-hub-frost-hero backdrop-blur-24px backdrop-saturate-180 shadow-hub-frost-hero dark:border-glass-border/80 dark:bg-hub-frost-hero-dark dark:shadow-hub-frost-hero-dark",
       skeleton:
         "border-hsl-border-35 bg-hsl-background-50 backdrop-blur-18px backdrop-saturate-170",
     },
@@ -28,7 +28,7 @@ export function LoadingTrack({ className, ...props }: ComponentProps<"div">) {
       {...props}
       className={cn(
         "relative h-2px w-full overflow-hidden rounded-full bg-hsl-muted-foreground-10",
-        "after:absolute after:inset-y-0 after:left-0 after:w-2/5 after:rounded-[inherit] after:bg-primary/35 after:animate-hub-loading-progress after:content-['']",
+        "after:absolute after:inset-y-0 after:left-0 after:w-2/5 after:rounded-inherit after:bg-primary/35 after:animate-hub-loading-progress after:content-['']",
         "motion-reduce:after:animate-none!",
         className,
       )}
