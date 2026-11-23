@@ -219,6 +219,9 @@ export const SETTINGS_EN_US = {
   "settings.saveError": "Save failed",
   "settings.saved": "Saved",
   "settings.savedDesc": "Settings written to local storage",
+  "settings.savedOnDevice": "Saved on this device",
+  "settings.savedOnDeviceDesc":
+    "This Agent doesn't store this setting. It applies in this browser only.",
   "settings.systemProxyEnable": "Enable app proxy",
   "settings.systemProxyInvalid":
     "The proxy is enabled. Enter a valid host and port; affected requests fail until the configuration is valid.",

@@ -405,8 +405,11 @@ export function useGatewaySettingsSync(params: {
       if (gatewayUpdate?.system && backendPromptResourcesRef.current) {
         projectPromptSettingsUpdate(gatewayUpdate, prev, next);
       }
-      if (gatewayUpdate) {
-        for (const field of browserLocalFieldsRef.current) delete gatewayUpdate[field];
+      // Fields the target does not store stay in this browser; the indicator says so.
+      let keptOnDevice = false;
+      for (const field of gatewayUpdate ? browserLocalFieldsRef.current : []) {
+        keptOnDevice ||= Object.hasOwn(gatewayUpdate ?? {}, field);
+        delete gatewayUpdate?.[field];
       }
       const sendsGatewayUpdate = gatewayUpdate !== null && Object.keys(gatewayUpdate).length > 0;
       const syncSeq = sendsGatewayUpdate ? ++syncSeqRef.current : 0;
@@ -444,7 +447,7 @@ export function useGatewaySettingsSync(params: {
         })
         .then(() => {
           if (isCurrentScope() && settingsSaveSequenceRef.current === saveSequence) {
-            setSettingsSaveState({ status: "saved" });
+            setSettingsSaveState({ status: keptOnDevice ? "savedOnDevice" : "saved" });
           }
         })
         .catch((error) => {

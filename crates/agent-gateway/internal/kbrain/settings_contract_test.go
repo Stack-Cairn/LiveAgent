@@ -499,7 +499,7 @@ func TestSettingsProjectionDeclaresBrowserLocalFieldsTheRelayRejects(t *testing.
 	if err := json.Unmarshal(projected, &got); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.BrowserLocalSettings, []string{"locale", "theme"}) {
+	if !reflect.DeepEqual(got.BrowserLocalSettings, []string{"locale", "theme", "system", "customSettings"}) {
 		t.Fatalf("browserLocalSettings=%v", got.BrowserLocalSettings)
 	}
 	for _, field := range got.BrowserLocalSettings {

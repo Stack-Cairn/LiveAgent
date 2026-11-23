@@ -71,6 +71,13 @@ function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) 
         text: t("settings.saveError"),
         title: state.message,
       };
+    case "savedOnDevice":
+      return {
+        tone: "success" as const,
+        pulse: false,
+        text: t("settings.savedOnDevice"),
+        title: t("settings.savedOnDeviceDesc"),
+      };
     case "saved":
     case "idle":
       return {

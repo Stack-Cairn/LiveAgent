@@ -6,6 +6,8 @@ export type WebSettingsSaveState =
   | { status: "idle" }
   | { status: "saving" }
   | { status: "saved" }
+  // Kept in this browser only: the settings target does not store these fields.
+  | { status: "savedOnDevice" }
   | { status: "error"; message: string };
 
 export function getWebDefaultSettings(token: string): AppSettings {
