@@ -60,11 +60,18 @@ function allRows(snapshot) {
   return snapshot.rows;
 }
 
+// A failed round's error is round meta (rendered as the turn's error row), not reply
+// text; it reads after the round's text.
 function rowText(row) {
   if (row.kind === "assistant") {
     return row.rounds
       .map((round) =>
-        round.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])).join(""),
+        [
+          round.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])).join(""),
+          round.meta?.errorMessage ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       )
       .join("\n");
   }

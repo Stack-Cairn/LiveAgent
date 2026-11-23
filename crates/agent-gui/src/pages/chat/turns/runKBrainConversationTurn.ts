@@ -55,6 +55,7 @@ import type {
   KBrainQuestionRequest,
   KBrainRunOptions,
 } from "../../../lib/kbrain/types";
+import { restoreUnpersistedReply } from "../../../lib/kbrain/unpersistedReply";
 import {
   resolveUploadStagingRoot,
   withUploadStagingRoot,
@@ -645,12 +646,17 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         ...results.values(),
       ]);
       // Cancelled/failed runs can also commit messages and background-task results.
-      // Replace from authority rather than appending replayed messages a second time.
+      // Replace from authority rather than appending replayed messages a second time,
+      // keeping the partial or stopped reply K-brain does not store.
       try {
-        const history = await getKBrainHistoryWindow(params.conversationId);
+        const restored = restoreUnpersistedReply(
+          await getKBrainHistoryWindow(params.conversationId),
+          projected,
+        );
+        // A stopped reply with no stored message is added back by the merge.
         state = mergeUnacceptedKBrainInputs(
           params.conversationId,
-          buildConversationStateFromWindow(history),
+          buildConversationStateFromWindow(restored.window),
         );
       } catch (error) {
         gatewayBridgeEvents.emitError(

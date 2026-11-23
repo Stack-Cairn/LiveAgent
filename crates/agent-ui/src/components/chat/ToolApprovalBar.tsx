@@ -17,12 +17,13 @@ import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";
 
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   ToolApprovalAnswerOptions,
   ToolApprovalPreview,
   ToolApprovalRememberScope,
 } from "../../lib/chat/toolApprovalArgs";
+import { workspaceRelativePath } from "../../lib/chat/workspaceRelativePath";
 
 /** approve:本次放行;deny:本次拒绝;approve_session:请后端在本会话内记住这条授权范围。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
@@ -92,8 +93,11 @@ export function ToolApprovalBar({
   pending,
   onDecide,
   onDecideAll,
+  workdir,
 }: {
   pending: PendingApprovalItem[];
+  /** The conversation's workspace; paths inside it are shown relative to it. */
+  workdir?: string;
   onDecide: (
     toolCallId: string,
     decision: ToolApprovalDecision,
@@ -109,6 +113,7 @@ export function ToolApprovalBar({
   } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
   const deadlines = pending
     .map((item) => item.deadlineAt)
     .filter((value): value is number => typeof value === "number");
@@ -159,6 +164,11 @@ export function ToolApprovalBar({
   const offerLegacySession = offerSession && !offerRemember;
   const hasMoreActions = offerLegacySession || pending.length > 1;
   const rememberScope = current.defaultScope ?? "session";
+  const previewPath = current.preview?.path;
+  const displayPreviewPath = previewPath ? workspaceRelativePath(previewPath, workdir) : undefined;
+  // A Write/Edit summary is the file's path, which the preview already names.
+  const summary =
+    current.summary && current.summary.trim() !== previewPath?.trim() ? current.summary : "";
   const sessionTarget = current.sessionScope
     ? `${displayToolName} · ${current.sessionScope}`
     : displayToolName;
@@ -211,7 +221,8 @@ export function ToolApprovalBar({
     <section
       ref={panelRef}
       tabIndex={-1}
-      aria-label={t("chat.toolApproval.title")}
+      role="alertdialog"
+      aria-labelledby={titleId}
       data-testid="tool-approval"
       onKeyDown={(event) => {
         if (
@@ -276,7 +287,10 @@ export function ToolApprovalBar({
         </div>
 
         {/* Wraps instead of truncating: on phones the session-wide explanation must stay readable. */}
-        <p className="mt-2 break-words text-sm font-medium leading-1p5 text-foreground/92">
+        <p
+          id={titleId}
+          className="mt-2 break-words text-sm font-medium leading-1p5 text-foreground/92"
+        >
           {current.sessionWide
             ? t("chat.toolApproval.sessionWideBody")
             : t("chat.toolApproval.body").replace("{tool}", displayToolName)}
@@ -284,12 +298,12 @@ export function ToolApprovalBar({
 
         {/* The whole command, wrapped and scrollable: approving what one cut line shows
             is approving blind. */}
-        {current.summary ? (
+        {summary ? (
           <pre
             data-approval-command=""
             className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-1p45 text-muted-foreground"
           >
-            {current.summary}
+            {summary}
           </pre>
         ) : null}
 
@@ -315,19 +329,20 @@ export function ToolApprovalBar({
                     beforeText=""
                     afterText=""
                     diffText={current.preview.diff}
-                    filePath={current.preview.path}
+                    filePath={displayPreviewPath}
+                    fullWidth
                   />
-                ) : current.preview.path ? (
+                ) : displayPreviewPath ? (
                   <p className="break-all font-mono text-xs text-foreground">
-                    {current.preview.path}
+                    {displayPreviewPath}
                   </p>
                 ) : null
               ) : current.preview.split ? (
                 // Two separately cut sides: a diff of them would hide or invent changes.
                 <div className="space-y-2">
-                  {current.preview.path ? (
+                  {displayPreviewPath ? (
                     <p className="break-all font-mono text-xs text-foreground">
-                      {current.preview.path}
+                      {displayPreviewPath}
                     </p>
                   ) : null}
                   {(
@@ -350,7 +365,8 @@ export function ToolApprovalBar({
                 <EditDiffView
                   beforeText={current.preview.before}
                   afterText={current.preview.after}
-                  filePath={current.preview.path}
+                  filePath={displayPreviewPath}
+                  fullWidth
                 />
               )}
             </div>

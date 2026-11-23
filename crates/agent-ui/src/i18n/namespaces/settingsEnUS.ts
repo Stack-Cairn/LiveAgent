@@ -733,6 +733,7 @@ export const SETTINGS_EN_US = {
   "settings.activeModels": " active models",
   "settings.noBaseUrl": "Base URL not set",
   "settings.noProvidersHint": "No providers configured yet",
+  "settings.noProvidersForService": "No {service} providers configured yet",
   "settings.customSettings": "Advanced Settings",
   "settings.closeCustomSettings": "Close advanced settings",
   "settings.customSettingsModelsTitle": "Generation Models",

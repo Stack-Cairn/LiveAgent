@@ -167,7 +167,7 @@ test("an edit shows its diff, and a cut preview says so", async () => {
     preview: { path: "src/a.ts", before: "const a = 1;", after: "const a = 2;", truncated: true },
   }]);
   try {
-    assert.deepEqual(diffs.at(-1), { beforeText: "const a = 1;", afterText: "const a = 2;", filePath: "src/a.ts" });
+    assert.deepEqual(diffs.at(-1), { beforeText: "const a = 1;", afterText: "const a = 2;", filePath: "src/a.ts", fullWidth: true });
     assert.match(host.textContent, /预览已截断/);
   } finally {
     await cleanup();
@@ -287,7 +287,7 @@ test("the approval card renders K-brain diff rows, a new file and a change too l
     preview: { path: "notes.md", before: "", after: "", truncated: false, diff: "1 + # Notes\n2 + hi", newFile: true },
   }]);
   try {
-    assert.deepEqual(diffs.at(-1), { beforeText: "", afterText: "", diffText: "1 + # Notes\n2 + hi", filePath: "notes.md" });
+    assert.deepEqual(diffs.at(-1), { beforeText: "", afterText: "", diffText: "1 + # Notes\n2 + hi", filePath: "notes.md", fullWidth: true });
     assert.equal(host.querySelector("[data-approval-preview-new-file]") !== null, true);
     assert.doesNotMatch(host.textContent, /预览已截断/);
   } finally {

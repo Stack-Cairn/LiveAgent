@@ -103,6 +103,7 @@ import {
   enforceUniqueAppMentionsInEditor,
   ensureTrailingCaretAnchor,
   extractClipboardFiles,
+  formatMentionIndexError,
   hasLegacyImeKeyboardSignal,
   IME_COMPOSITION_END_ENTER_TAIL_MS,
   IME_ENTER_SUPPRESS_WINDOW_MS,
@@ -473,17 +474,17 @@ export const MentionComposer = memo(
               mentionFetchRef.current = { ...mentionFetchRef.current, truncated: resp.truncated };
             }
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             if (requestSeq !== mentionSessionRequestSeqRef.current) return;
             setMentionSessionEntries([]);
-            setMentionSessionError("Could not index files");
+            setMentionSessionError(formatMentionIndexError(t, error));
           })
           .finally(() => {
             if (requestSeq !== mentionSessionRequestSeqRef.current) return;
             setMentionSessionLoading(false);
           });
       },
-      [cancelMentionRefetch, normalizedWorkdir, refreshCommandCatalog],
+      [cancelMentionRefetch, normalizedWorkdir, refreshCommandCatalog, t],
     );
 
     const scheduleMentionRefetch = useCallback(
@@ -1942,13 +1943,12 @@ export const MentionComposer = memo(
             setHighlightIdx((p) => (p - 1 + suggestions.length) % suggestions.length);
             return;
           }
-          if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-            e.preventDefault();
-            if (suggestions[highlightIdx]) {
-              selectSuggestion(suggestions[highlightIdx]);
-            }
-            return;
-          }
+        }
+        // An open popup owns Enter even with no row to pick (no match, loading, error).
+        if (popupVisible && (e.key === "Tab" || (isEnter && !e.shiftKey))) {
+          e.preventDefault();
+          if (suggestions[highlightIdx]) selectSuggestion(suggestions[highlightIdx]);
+          return;
         }
         if (popupVisible && e.key === "Escape") {
           e.preventDefault();

@@ -10,7 +10,8 @@ import {
   resolveRunPhaseTarget,
   stepRunPhase,
 } from "../../lib/chat/runPhase";
-import { parseRunProgress } from "../../lib/chat/runProgress";
+import "@liveagent/ui/i18n/namespaces/turnErrors";
+import { parseRunProgress, type RunProgress } from "../../lib/chat/runProgress";
 import { cn } from "../../lib/shared/utils";
 import { formatElapsedTime, useTurnElapsedMs } from "./AssistantWorkTrace";
 import { CompactionBand } from "./CompactionBand";
@@ -104,6 +105,18 @@ export function useDebouncedRunPhase(target: RunPhaseTarget, immediate: boolean)
   return state.shown;
 }
 
+/** "Retrying (1/2) in 3s", counting down to the next attempt of a failed model request. */
+function retryLabel(progress: RunProgress | null, now: number, t: (key: string) => string) {
+  const attempt = String(progress?.retry_attempt ?? 1);
+  const max = String(Math.max(progress?.retry_attempt ?? 1, progress?.retry_max ?? 1));
+  const seconds = Math.ceil(((progress?.retry_at_ms ?? 0) - now) / 1000);
+  const template = seconds > 0 ? t("chat.runPhase.retrying") : t("chat.runPhase.retryingNow");
+  return template
+    .replace("{attempt}", attempt)
+    .replace("{max}", max)
+    .replace("{seconds}", String(seconds));
+}
+
 function phaseLabel(
   phase: RunPhase,
   target: RunPhaseTarget,
@@ -112,6 +125,7 @@ function phaseLabel(
   t: (key: string) => string,
 ) {
   // The detailed view names the raw backend stage while it is current.
+  if (target.stage === "retrying" && phase === "retrying") return null;
   if (detailed && target.stage && target.phase === phase) {
     return t(`chat.runProgress.${target.stage}`);
   }
@@ -200,7 +214,8 @@ export function LiveTurnStatus(props: {
     : [];
   const label = awaitingDecision
     ? t("chat.work.awaitingDecision")
-    : phaseLabel(phase, target, detailed, toolActivity?.label, t);
+    : (phaseLabel(phase, target, detailed, toolActivity?.label, t) ??
+      retryLabel(progress, Date.now(), t));
   const elapsed = formatElapsedTime(elapsedMs);
   const tooltip = [
     phase === "tool" && toolActivity?.title ? toolActivity.title : null,

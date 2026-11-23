@@ -103,6 +103,13 @@ export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
 
 export const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini", "xai", "deepseek"];
 
+/** The first vendor tab with a configured provider, else the first tab. */
+export function defaultProviderTab(providers: readonly { type: ProviderId }[]): ProviderId {
+  return (
+    PROVIDER_TABS.find((type) => providers.some((item) => item.type === type)) ?? "claude_code"
+  );
+}
+
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",

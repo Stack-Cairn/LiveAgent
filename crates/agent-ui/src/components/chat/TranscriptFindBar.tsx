@@ -52,6 +52,9 @@ export function TranscriptFindBar(props: TranscriptFindBarProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: <search> is unknown to older WebKit/WebKitGTK webviews the desktop app still runs on.
     <div
+      ref={(element) => {
+        find.barRef.current = element;
+      }}
       role="search"
       data-transcript-find=""
       aria-label={t("chat.find.label")}

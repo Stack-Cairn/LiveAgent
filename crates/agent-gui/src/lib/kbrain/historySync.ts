@@ -1,8 +1,10 @@
 import type { UserMessage } from "@liveagent/app/lib/agentTypes";
 import {
   appendMessagesToConversation,
+  appendRenderOnlyMessagesToConversation,
   type ConversationViewState,
 } from "../chat/conversation/conversationState";
+import { stoppedReplyAfter } from "./unpersistedReply";
 
 // Protect individual inputs, not the history reader: an older background run can
 // still commit results after a newer POST was rejected or its outcome is unknown.
@@ -35,10 +37,19 @@ export function hasUnacceptedKBrainInput(conversationId: string): boolean {
   return unacceptedInputs.has(conversationId);
 }
 
+// A turn stopped before any output has no stored reply; keep showing it stopped
+// while its prompt still ends the history.
+function withStoppedReply(state: ConversationViewState): ConversationViewState {
+  const last = state.segments?.at(-1)?.messages.at(-1);
+  const stopped = last?.role === "user" && last.id ? stoppedReplyAfter(last.id) : undefined;
+  return stopped ? appendRenderOnlyMessagesToConversation(state, [stopped]) : state;
+}
+
 export function mergeUnacceptedKBrainInputs(
   conversationId: string,
-  state: ConversationViewState,
+  authority: ConversationViewState,
 ): ConversationViewState {
+  const state = withStoppedReply(authority);
   const inputs = unacceptedInputs.get(conversationId);
   if (!inputs) return state;
   const committedIds = new Set(

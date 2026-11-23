@@ -14,6 +14,7 @@ import {
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { CompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
+import { isKBrainErrorMessageId } from "@liveagent/ui/lib/chat/turnError";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
@@ -404,6 +405,7 @@ export function buildAssistantMeta(params: {
   model?: unknown;
   api?: unknown;
   stopReason?: unknown;
+  errorMessage?: unknown;
   usage?: unknown;
   contextRelevant?: unknown;
 }) {
@@ -421,6 +423,8 @@ export function buildAssistantMeta(params: {
   if (api !== undefined) meta.api = api;
   const stopReason = readString(params.stopReason) || undefined;
   if (stopReason !== undefined) meta.stopReason = stopReason;
+  const errorMessage = readString(params.errorMessage).trim() || undefined;
+  if (errorMessage !== undefined) meta.errorMessage = errorMessage;
   if (usage !== undefined) meta.usage = usage;
   if (typeof params.contextRelevant === "boolean") {
     meta.contextRelevant = params.contextRelevant;
@@ -813,7 +817,11 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
       currentRound += 1;
       const round = currentRound;
       const messageTimestamp = readMessageTimestamp(message.timestamp);
-      const blocks = normalizeAssistantBlocks(message.content);
+      // K-brain records a run that failed before the model replied as a synthetic
+      // message whose text is the error: it becomes the round's error, not a reply.
+      const failed = isKBrainErrorMessageId(message.id);
+      const allBlocks = normalizeAssistantBlocks(message.content);
+      const blocks = failed ? [] : allBlocks;
       // 重建 meta 不带 contextRelevant 是有意为之（issue #359 缺陷 #8）：桌面端只对
       // render-only 轮次（记忆抽取等）标 contextRelevant:false，而这类轮次仅经
       // appendRenderOnlyMessagesToConversation 进入 UI transcript.items 供展示，
@@ -825,7 +833,11 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
         provider: message.provider,
         model: message.model,
         api: message.api,
-        stopReason: message.stopReason,
+        stopReason: failed ? "error" : message.stopReason,
+        errorMessage: failed
+          ? allBlocks.map((block) => (block.type === "text" ? block.text : "")).join("") ||
+            "Request failed"
+          : undefined,
         usage: message.usage,
       });
       let textBuffer = "";

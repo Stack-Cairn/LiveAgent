@@ -24,6 +24,7 @@ import {
 } from "../../../lib/chat/history/chatHistory";
 import {
   createConversationIdentity,
+  isAutoConversationTitle,
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
 import {
@@ -815,8 +816,18 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           return;
         }
 
+        // Apply by conversation id while the row still shows an automatic
+        // title; a manual rename in the meantime wins.
         const currentItem = sidebarStore.peek(conversationId);
-        if (!currentItem || currentItem.title !== initialStoredTitle) return;
+        if (
+          !currentItem ||
+          !isAutoConversationTitle(currentItem.title, [
+            initialStoredTitle,
+            fallbackTitle,
+            pendingConversationTitle,
+          ])
+        )
+          return;
 
         if (currentItem.isPending) {
           sidebarStore.upsertLocal({

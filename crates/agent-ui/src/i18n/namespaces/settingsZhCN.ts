@@ -722,6 +722,7 @@ export const SETTINGS_ZH_CN = {
   "settings.activeModels": "个激活模型",
   "settings.noBaseUrl": "未设置 Base URL",
   "settings.noProvidersHint": "还没有配置任何供应商",
+  "settings.noProvidersForService": "还没有配置 {service} 供应商",
   "settings.customSettings": "高级设置",
   "settings.closeCustomSettings": "关闭高级设置",
   "settings.customSettingsModelsTitle": "生成模型",

@@ -28,6 +28,7 @@ import {
 import {
   applyEventToTurn,
   createTurn,
+  entryErrorText,
   optimisticUserEntryId,
   rebuildTurnFromSnapshot,
   seededUserEntryId,
@@ -814,12 +815,10 @@ export function createTranscriptStore(options?: {
         ? adoptRun(turn, runId)
         : rebuildTurnFromSnapshot(adoptRun(turn, runId), parsed);
     if (realErrorEntries.length > 0) {
-      const errorTexts = new Set(
-        next.entries
-          .filter((entry) => entry.kind === "error" || entry.kind === "assistant")
-          .map((entry) => entry.text),
+      const errorTexts = new Set(next.entries.map(entryErrorText));
+      const missingErrors = realErrorEntries.filter(
+        (entry) => !errorTexts.has(entryErrorText(entry)),
       );
-      const missingErrors = realErrorEntries.filter((entry) => !errorTexts.has(entry.text));
       if (missingErrors.length > 0) {
         next = { ...next, entries: [...next.entries, ...missingErrors] };
       }
@@ -1429,12 +1428,7 @@ export function createTranscriptStore(options?: {
     appendLocalError: (message) => {
       const alreadyShown = turns.some(
         (turn) =>
-          !turn.folded &&
-          turn.entries.some(
-            (entry) =>
-              (entry.kind === "assistant" || entry.kind === "error") &&
-              entry.text.trim() === message.trim(),
-          ),
+          !turn.folded && turn.entries.some((entry) => entryErrorText(entry) === message.trim()),
       );
       if (alreadyShown) {
         return;

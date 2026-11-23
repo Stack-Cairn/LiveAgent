@@ -61,7 +61,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.navAgents": "提示词模板",
   "settings.navSsh": "SSH",
   "settings.navCron": "定时任务",
-  "settings.navRemote": "Remote",
+  "settings.navRemote": "远程",
   "settings.navSkills": "Skills",
   "settings.navImageStudio": "图像工作台",
   "settings.imageStudioUnsupported": "当前主机尚未接入图像工作台。聊天功能可以继续使用。",

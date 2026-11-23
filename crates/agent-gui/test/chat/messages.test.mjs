@@ -493,9 +493,10 @@ test("UI message builder marks stopped replies without raw abort text but keeps 
   assert.deepEqual(empty[0].blocks, []);
   assert.equal(assistantStatus.isStoppedReply(empty), true);
 
-  // Real failures still show their error.
+  // Real failures still show their error, as the round's error row rather than reply text.
   const failed = roundsFor(assistant([], "error", "provider exploded"));
-  assert.equal(uiMessages.getRoundText(failed[0]), "Request failed：provider exploded");
+  assert.equal(uiMessages.getRoundText(failed[0]), "");
+  assert.equal(assistantStatus.turnErrorOf(failed), "provider exploded");
   assert.equal(assistantStatus.isStoppedReply(failed), false);
 });
 
@@ -1928,7 +1929,6 @@ test("tool call summaries and argument display avoid dumping large payloads", ()
       base64: "base64Chars=900",
     },
   );
-  assert.match(uiMessages.previewText("x".repeat(1300)), /len=1300/);
 });
 
 test("seed tool call recovery converts XML-like markup into structured tool calls", () => {

@@ -22,7 +22,6 @@ export type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 export { deriveFileToolPreview, FILE_TOOL_TEXT_FIELDS } from "@liveagent/ui/lib/chat/toolPreview";
 export {
   isDynamicMcpToolName,
-  previewText,
   safeStringify,
   shouldDisplayToolTraceItem,
   summarizeToolCall,

@@ -236,6 +236,11 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     });
   }
 
+  /** Generic workspace filesystem resource (`/v1/fs`, e.g. action "list"). */
+  async function filesystem<T>(input: Record<string, unknown>): Promise<T> {
+    return request<T>("/v1/fs", { method: "POST", body: JSON.stringify(input) });
+  }
+
   async function searchHistory<T>(args: Record<string, unknown> = {}): Promise<T> {
     return request<T>("/v1/history/search", {
       method: "POST",
@@ -1201,6 +1206,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
     ...createKBrainQueueClient(inputOptions),
     createSession,
     requestMemory,
+    filesystem,
     searchHistory,
     importLegacyHistory,
     listSessions,

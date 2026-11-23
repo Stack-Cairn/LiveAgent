@@ -281,6 +281,13 @@ export const MAX_SUGGESTIONS = 30;
 export const MAX_CONVERSATION_MENTIONS = MAX_CONVERSATION_MENTION_REFERENCES;
 export const MENTION_INDEX_MAX_RESULTS = 5000;
 export const MENTION_REFETCH_DEBOUNCE_MS = 150;
+
+/** Translated file-index failure that keeps the backend's reason visible. */
+export function formatMentionIndexError(t: (key: string) => string, error: unknown): string {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const reason = raw.replace(/\s+/g, " ").trim().slice(0, 240) || String(error ?? "");
+  return t("chat.composer.fileIndexFailed").replace("{reason}", reason);
+}
 export const MENTION_TAG_ATTR = "data-mention-path";
 export const MENTION_KIND_ATTR = "data-mention-kind";
 export const QUOTE_TEXT_ATTR = "data-quote-text";
