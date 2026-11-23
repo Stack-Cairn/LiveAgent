@@ -76,6 +76,9 @@ function createToolArgsRenderer() {
         Markdown: NullComponent,
       },
       "@liveagent/ui/lib/chat/assistantBubbleAdapter": realAdapterFunctions,
+      "@liveagent/ui/components/ui/copy-button": {
+        CopyButton: NullComponent,
+      },
       "../../IconSet": {
         Search: NullComponent,
       },

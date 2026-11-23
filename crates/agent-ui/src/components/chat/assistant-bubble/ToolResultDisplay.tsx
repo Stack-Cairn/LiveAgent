@@ -10,6 +10,7 @@ import {
   ToolSurfaceLabel,
 } from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { CopyButton } from "@liveagent/ui/components/ui/copy-button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type BrowserResultDetails,
@@ -47,7 +48,7 @@ import type {
   SubagentCardDetails,
   SubagentMessageDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search } from "../../IconSet";
 import {
   displayString,
@@ -66,6 +67,8 @@ import { TruncatedPreviewText } from "./TruncatedPreviewText";
 // 距底部不超过这么多像素视为“跟随最新输出”；用户上翻查看时不抢滚动位置。
 const LIVE_OUTPUT_STICK_THRESHOLD_PX = 24;
 const SHELL_PREVIEW_CHARS = 6000;
+// "Show all" still bounds what goes into the DOM; Copy always takes the whole output.
+const SHELL_FULL_CHARS = 200_000;
 
 type ShellResultDetails = {
   exit_code: number;
@@ -469,6 +472,7 @@ export function ShellToolDisplay({
   const isLive = liveOutput !== "";
   const preRef = useRef<HTMLPreElement>(null);
   const followRef = useRef(true);
+  const [showAll, setShowAll] = useState(false);
   useEffect(() => {
     const element = preRef.current;
     if (!element || !isLive) return;
@@ -491,6 +495,7 @@ export function ShellToolDisplay({
     timedOut: t("chat.tool.run.timedOut"),
   });
   if (!command && !body) return null;
+  const outputTruncated = output.length > SHELL_PREVIEW_CHARS;
 
   return (
     <section
@@ -510,6 +515,14 @@ export function ShellToolDisplay({
           >
             {runInfo}
           </span>
+        ) : null}
+        {output ? (
+          <CopyButton
+            value={output}
+            label={t("chat.tool.output.copy")}
+            copiedLabel={t("chat.tool.output.copied")}
+            className="-my-1 self-center"
+          />
         ) : null}
       </div>
       <ToolScrollablePre
@@ -531,9 +544,25 @@ export function ShellToolDisplay({
             {liveOutput}
           </span>
         ) : output ? (
-          <TruncatedPreviewText text={output} maxChars={SHELL_PREVIEW_CHARS} />
+          <TruncatedPreviewText
+            text={output}
+            maxChars={showAll ? SHELL_FULL_CHARS : SHELL_PREVIEW_CHARS}
+          />
         ) : null}
       </ToolScrollablePre>
+      {outputTruncated ? (
+        <div className="border-t border-border/60 px-3 py-1.5">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            aria-expanded={showAll}
+            data-shell-show-all=""
+            onClick={() => setShowAll((value) => !value)}
+          >
+            {showAll ? t("chat.tool.output.showLess") : t("chat.tool.output.showAll")}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
