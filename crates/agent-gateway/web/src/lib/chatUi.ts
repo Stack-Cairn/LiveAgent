@@ -14,7 +14,7 @@ import {
 } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { CompactionSeam } from "@liveagent/ui/lib/chat/replyContinuity";
-import { isKBrainErrorMessageId } from "@liveagent/ui/lib/chat/turnError";
+import { isKBrainErrorMessageId, readTurnErrorDetail } from "@liveagent/ui/lib/chat/turnError";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
@@ -92,6 +92,9 @@ type StoredMessage = {
   model?: unknown;
   api?: unknown;
   stopReason?: unknown;
+  errorMessage?: unknown;
+  errorDetail?: unknown;
+  cancelReason?: unknown;
   usage?: unknown;
   timestamp?: unknown;
   summaryMeta?: unknown;
@@ -406,6 +409,8 @@ export function buildAssistantMeta(params: {
   api?: unknown;
   stopReason?: unknown;
   errorMessage?: unknown;
+  errorDetail?: unknown;
+  cancelReason?: unknown;
   usage?: unknown;
   contextRelevant?: unknown;
 }) {
@@ -425,6 +430,11 @@ export function buildAssistantMeta(params: {
   if (stopReason !== undefined) meta.stopReason = stopReason;
   const errorMessage = readString(params.errorMessage).trim() || undefined;
   if (errorMessage !== undefined) meta.errorMessage = errorMessage;
+  const errorDetail =
+    errorMessage !== undefined ? readTurnErrorDetail(params.errorDetail) : undefined;
+  if (errorDetail) meta.errorDetail = errorDetail;
+  const cancelReason = readString(params.cancelReason).trim() || undefined;
+  if (cancelReason !== undefined && stopReason === "aborted") meta.cancelReason = cancelReason;
   if (usage !== undefined) meta.usage = usage;
   if (typeof params.contextRelevant === "boolean") {
     meta.contextRelevant = params.contextRelevant;
@@ -834,10 +844,15 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
         model: message.model,
         api: message.api,
         stopReason: failed ? "error" : message.stopReason,
+        // A reply cut off by a failure keeps its text; the failure rides along.
         errorMessage: failed
           ? allBlocks.map((block) => (block.type === "text" ? block.text : "")).join("") ||
             "Request failed"
-          : undefined,
+          : message.stopReason === "error"
+            ? message.errorMessage
+            : undefined,
+        errorDetail: message.errorDetail,
+        cancelReason: message.cancelReason,
         usage: message.usage,
       });
       let textBuffer = "";

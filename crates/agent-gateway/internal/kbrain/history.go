@@ -434,6 +434,15 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 				stop = "toolUse"
 			}
 			entry["stopReason"] = stop
+			if stop == "error" && strings.TrimSpace(message.Error) != "" {
+				entry["errorMessage"] = strings.TrimSpace(message.Error)
+			}
+			if detail := historyErrorDetail(message.ErrorDetail); detail != nil {
+				entry["errorDetail"] = detail
+			}
+			if message.CancelReason != "" {
+				entry["cancelReason"] = message.CancelReason
+			}
 			if message.Usage != nil {
 				u := message.Usage
 				// K-brain's input includes cache reads and writes; LiveAgent's excludes them.
@@ -444,4 +453,19 @@ func historyMessagesJSON(messages []Message, firstOffset int32) (string, error) 
 	}
 	data, err := json.Marshal(out)
 	return string(data), err
+}
+
+// historyErrorDetail is a failure's classification in the WebUI's field names.
+func historyErrorDetail(detail *ErrorDetail) map[string]any {
+	if detail == nil || strings.TrimSpace(detail.Kind) == "" {
+		return nil
+	}
+	out := map[string]any{"kind": strings.TrimSpace(detail.Kind)}
+	if detail.UpstreamStatus > 0 {
+		out["upstreamStatus"] = detail.UpstreamStatus
+	}
+	if message := strings.TrimSpace(detail.ProviderMessage); message != "" {
+		out["providerMessage"] = message
+	}
+	return out
 }

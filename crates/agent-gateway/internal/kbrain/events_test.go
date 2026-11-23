@@ -70,6 +70,13 @@ func TestModelRetryMapsToRetryingStatus(t *testing.T) {
 		t.Fatalf("unexpected progress: %s", status)
 	}
 
+	// retries_remaining is exact when the backend sends it: the second of five
+	// attempts with one retry left counts to 2, not to max-1.
+	event, _, err = ToChatEvent(Event{ConversationID: "c1", RunID: "r1", Type: "trajectory.retry", Payload: json.RawMessage(`{"attempt":2,"max":5,"retries_remaining":1,"delay_ms":10}`)})
+	if err != nil || event == nil || !strings.Contains(event.Data, `\"retry_max\":2`) {
+		t.Fatalf("retries_remaining: event=%+v err=%v", event, err)
+	}
+
 	// A background task's retries are not the turn's.
 	event, control, err = ToChatEvent(Event{ConversationID: "c1", RunID: "r1", Type: "trajectory.retry", Payload: json.RawMessage(`{"task_id":"t1","attempt":1,"max":3,"delay_ms":10}`)})
 	if err != nil || event != nil || control != nil {

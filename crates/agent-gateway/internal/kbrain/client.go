@@ -127,10 +127,24 @@ type Message struct {
 	HostedSearch []json.RawMessage `json:"hosted_search,omitempty"`
 	StopReason   string            `json:"stop_reason,omitempty"`
 	CreatedAt    time.Time         `json:"created_at,omitempty"`
+	// Error is why a reply that streamed part of its text stopped (stop_reason
+	// "error"); ErrorDetail classifies a failure; CancelReason says why a run
+	// was cancelled ("shutdown" when the backend restarted).
+	Error        string       `json:"error,omitempty"`
+	ErrorDetail  *ErrorDetail `json:"error_detail,omitempty"`
+	CancelReason string       `json:"cancel_reason,omitempty"`
 	// Origin is "background" on a user-role notice K-brain delivered on its own
 	// (a wait result, a process exit, a background task report).
 	Origin   string `json:"origin,omitempty"`
 	Authored bool   `json:"authored,omitempty"`
+}
+
+// ErrorDetail classifies a failed run: kind is a stable code (invalid_api_key,
+// rate_limited, context_limit, ...) and the upstream fields are optional.
+type ErrorDetail struct {
+	Kind            string `json:"kind"`
+	UpstreamStatus  int    `json:"upstream_status,omitempty"`
+	ProviderMessage string `json:"provider_message,omitempty"`
 }
 
 // OriginBackground marks a user-role message the user did not write.
