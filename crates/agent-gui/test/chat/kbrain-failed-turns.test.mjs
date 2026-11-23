@@ -10,6 +10,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const { classifyTurnError } = loader.loadModule("@liveagent/ui/lib/chat/turnError.ts");
 const { runKBrainTurn } = loader.loadModule("src/lib/kbrain/turn.ts");
+const { parseRunProgress } = loader.loadModule("@liveagent/ui/lib/chat/runProgress.ts");
+const { resolveRunPhaseTarget } = loader.loadModule("@liveagent/ui/lib/chat/runPhase.ts");
 const { buildUiMessages } = loader.loadModule("src/lib/chat/messages/uiMessages.ts");
 const { turnErrorOf } = loader.loadModule("@liveagent/ui/lib/chat/assistantStatus.ts");
 
@@ -104,6 +106,39 @@ test("a stream that drops mid-reply keeps the streamed text and reports the erro
   );
   assert.equal(message.errorMessage, "unexpected EOF");
   assert.deepEqual(message.content, [{ type: "text", text: "Here is the first part " }]);
+});
+
+test("a model request retry shows a live retrying status with the countdown target", async () => {
+  const statuses = [];
+  const before = Date.now();
+  await runKBrainTurn(
+    turnParams(
+      sseFixture([
+        [
+          "trajectory.retry",
+          { request_id: "q", task_id: "t1", attempt: 1, max: 3, delay_ms: 9000, error: "429" },
+        ],
+        [
+          "trajectory.retry",
+          { request_id: "q", task_id: "", attempt: 2, max: 3, delay_ms: 4000, error: "429" },
+        ],
+        ["assistant.text.delta", { text: "ok" }],
+        ["assistant.message.created", { role: "assistant", content: [{ type: "text", text: "ok" }] }],
+        ["run.completed", {}],
+      ]),
+      "retry-status",
+      { onStatus: (status) => statuses.push(status) },
+    ),
+  );
+  const retrying = statuses.map(parseRunProgress).filter((progress) => progress?.stage === "retrying");
+  // The background task's retry is not the turn's; three attempts allow two retries.
+  assert.equal(retrying.length, 1);
+  assert.equal(retrying[0].retry_attempt, 2);
+  assert.equal(retrying[0].retry_max, 2);
+  assert.ok(retrying[0].retry_at_ms >= before + 4000 && retrying[0].retry_at_ms <= Date.now() + 4000);
+  const target = resolveRunPhaseTarget(statuses.find((status) => parseRunProgress(status)?.stage === "retrying"));
+  assert.equal(target.phase, "retrying");
+  assert.equal(target.delayMs, 0);
 });
 
 test("a failed round renders its error once, as round meta, even with no content", () => {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	v2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
@@ -116,6 +117,26 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 	case "run.progress":
 		base.Type = v2.ChatEvent_TOOL_STATUS
 		payload = map[string]any{"status": "kbrain-progress:" + string(data)}
+	case "trajectory.retry":
+		// A failed model request waits before its next attempt: the turn's status
+		// counts down to it. Background tasks report their own retries.
+		if taskID, _ := payload["task_id"].(string); taskID != "" {
+			return nil, nil, nil
+		}
+		attempt, _ := payload["attempt"].(float64)
+		attempts, _ := payload["max"].(float64)
+		delay, _ := payload["delay_ms"].(float64)
+		progress, err := json.Marshal(map[string]any{
+			"stage":         "retrying",
+			"retry_attempt": int64(attempt),
+			"retry_max":     int64(max(attempt, attempts-1)),
+			"retry_at_ms":   time.Now().UnixMilli() + int64(max(delay, 0)),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		base.Type = v2.ChatEvent_TOOL_STATUS
+		payload = map[string]any{"status": "kbrain-progress:" + string(progress)}
 	case "run.completed":
 		return nil, &v2.ChatControlEvent{RequestId: event.RunID, ConversationId: event.ConversationID, Type: "completed"}, nil
 	case "run.failed":

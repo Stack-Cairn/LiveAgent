@@ -20,6 +20,7 @@ export type RunPhase =
   | "reconnecting"
   | "waiting_session"
   | "compacting"
+  | "retrying"
   | "custom";
 
 export type RunPhaseTarget = {
@@ -53,6 +54,7 @@ const STAGE_PHASES: Record<
   responding: { phase: "responding", delayMs: RUN_PHASE_DEBOUNCE_MS, showOnMount: true },
   tool: { phase: "tool", delayMs: RUN_PHASE_DEBOUNCE_MS, showOnMount: true },
   persisting: { phase: "persisting", delayMs: RUN_PHASE_DEBOUNCE_MS, showOnMount: false },
+  retrying: { phase: "retrying", delayMs: 0, showOnMount: true },
 };
 
 /**

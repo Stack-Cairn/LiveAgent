@@ -1,4 +1,5 @@
-// Failed turns: the typed error row under a failed reply.
+// Failed and retrying turns: the typed error row under a failed reply and the
+// live "retrying" status of a turn whose model request is being retried.
 // The modules that render these messages import this file, which registers
 // both locales before they render.
 import { registerTranslations } from "../hostTranslations";
@@ -19,6 +20,8 @@ registerTranslations({
     "chat.turnError.details": "错误详情",
     "chat.turnError.retry": "重试",
     "chat.turnError.openProviderSettings": "打开供应商设置",
+    "chat.runPhase.retrying": "{seconds} 秒后重试（{attempt}/{max}）",
+    "chat.runPhase.retryingNow": "正在重试（{attempt}/{max}）",
   },
   "en-US": {
     "chat.turnError.auth.title": "Invalid API key",
@@ -40,5 +43,7 @@ registerTranslations({
     "chat.turnError.details": "Error details",
     "chat.turnError.retry": "Retry",
     "chat.turnError.openProviderSettings": "Open provider settings",
+    "chat.runPhase.retrying": "Retrying ({attempt}/{max}) in {seconds}s",
+    "chat.runPhase.retryingNow": "Retrying ({attempt}/{max})",
   },
 });

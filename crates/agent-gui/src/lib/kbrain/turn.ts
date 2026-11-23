@@ -921,6 +921,25 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         } else finalMessage = created;
         break;
       }
+      case "trajectory.retry": {
+        // A failed model request waits before its next attempt; background tasks
+        // report their own retries.
+        const retry = eventPayload<{
+          task_id?: string;
+          attempt?: number;
+          max?: number;
+          delay_ms?: number;
+        }>(event);
+        if (!retry || retry.task_id || typeof retry.attempt !== "number") break;
+        reportProgress({
+          ...progress,
+          stage: "retrying",
+          retry_attempt: retry.attempt,
+          retry_max: Math.max(retry.attempt, (retry.max ?? retry.attempt + 1) - 1),
+          retry_at_ms: Date.now() + Math.max(0, retry.delay_ms ?? 0),
+        });
+        break;
+      }
       case "usage.updated": {
         // One report per model call, after its stream and before its tool calls run.
         // Replayed events after a reconnect arrive here again in order, so the latest
