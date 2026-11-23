@@ -271,7 +271,7 @@ function assertBrowserWhitelist(localStorage, marker) {
   assert.ok(!raw.includes(marker), "credentials and runtime prompt text must be removed from the stored JSON");
   const saved = JSON.parse(raw);
   assert.deepEqual(Object.keys(saved).sort(), ["chatRuntimeControls", "customSettings", "locale", "system", "theme"]);
-  assert.deepEqual(Object.keys(saved.system).sort(), ["defaultTimeZone", "executionMode", "workdir"]);
+  assert.deepEqual(Object.keys(saved.system).sort(), ["commandSafetyMode", "defaultTimeZone", "executionMode", "workdir"]);
   assert.deepEqual(saved.customSettings.rightDock.projects, {});
   assert.doesNotMatch(raw, /"(?:apiKey|headers|usageQuery|password|token|providers|customProviders|agents|remote|stt|ssh)"/);
   return saved;
@@ -572,3 +572,31 @@ for (const raw of ['{"apiKey":"corrupt-key-secret",', "null", '[{"headers":{"Aut
     });
   });
 }
+
+// New installs start at "Always ask"; any stored snapshot keeps its effective mode.
+test("safety mode defaults to ask only for a new install and never rewrites a saved choice", async () => {
+  await withSettingsFixture({}, async ({ storage, loader }) => {
+    const settingsApi = loader.loadModule("src/lib/settings/index.ts");
+    assert.equal(settingsApi.getDefaultSettings().system.commandSafetyMode, "ask");
+    assert.equal(settingsApi.normalizeSettings({}).system.commandSafetyMode, "ask");
+    // A stored system snapshot without the key predates the new default.
+    assert.equal(settingsApi.normalizeSettings({ system: { executionMode: "tools" } }).system.commandSafetyMode, "always");
+    const fresh = await storage.loadPersistedSettings();
+    assert.equal(fresh.system.commandSafetyMode, "ask");
+    const next = { ...fresh, system: { ...fresh.system, commandSafetyMode: "autoEdit" } };
+    await storage.persistSettings(fresh, next);
+    assert.equal((await storage.loadPersistedSettings()).system.commandSafetyMode, "autoEdit");
+  });
+  const existing = createMemoryLocalStorage({ [BROWSER_SETTINGS_STORAGE_KEY]: JSON.stringify({ theme: "dark", system: { workdir: "" } }) });
+  await withSettingsFixture({ localStorage: existing }, async ({ storage }) => {
+    assert.equal((await storage.loadPersistedSettings()).system.commandSafetyMode, "always");
+  });
+  for (const [system, expected] of [[undefined, "ask"], [{ commandSafetyMode: "always" }, "always"], [{ commandSafetyMode: "sandbox" }, "sandbox"]]) {
+    await withSettingsFixture({
+      browser: false,
+      invoke: async (command) => command === "settings_load_all" ? (system ? { system } : {}) : {},
+    }, async ({ storage }) => {
+      assert.equal((await storage.loadPersistedSettings()).system.commandSafetyMode, expected);
+    });
+  }
+});
