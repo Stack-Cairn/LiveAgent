@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { cloneElement, type ReactElement, type ReactNode, useId } from "react";
 import {
   FormField,

@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/planning";
+import "@liveagent/ui/i18n/namespaces/scheduledTasks";
 import {
   AlertTriangle,
   BrushCleaning,

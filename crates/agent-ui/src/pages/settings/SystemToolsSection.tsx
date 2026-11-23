@@ -6,6 +6,7 @@
 // 说明:MCP 工具按 server、插件工具按工具的策略已就地内联到各自 Hub 卡片旁
 //(需运行时数据),不在本节;本节聚焦内置工具,补上内置工具此前不可管控的缺口。
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import {
   BROWSER_AUTOMATION_MODES,
   type BrowserAutomationMode,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 // Review guards that PASS today: they pin the author's claims that the review attacked and found
 // sound. Real wire parsers, real reducer and real ImageStudioPage.
@@ -13,6 +14,7 @@ const { errorAction, errorActionMessage, isSlowDirectDownload, jobErrorLines, ap
 const { parseImageError, responseError } = loader.loadModule("@liveagent/ui/lib/imaging/errors");
 const { parseEvent } = loader.loadModule("@liveagent/ui/lib/imaging/wire");
 const { t } = loader.loadModule("@liveagent/app/i18n/config");
+loadTranslationNamespaces(loader);
 const zh = (key, params) => t(key, "zh-CN", params);
 const en = (key, params) => t(key, "en-US", params);
 

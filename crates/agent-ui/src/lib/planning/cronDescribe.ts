@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import type { Locale } from "@liveagent/app/i18n/config";
 import { planningDateLocale, translate } from "./i18n";
 

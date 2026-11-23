@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import type { ClawHubSkillCard } from "@liveagent/ui/lib/skills/clawHub";
 import type { SkillInstallJobSnapshot } from "@liveagent/ui/lib/skills/index";
 

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
 import {
   type CSSProperties,

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
 import { AlertTriangle, McpLogo, Plus, Save } from "@liveagent/ui/components/IconSet";
 import {

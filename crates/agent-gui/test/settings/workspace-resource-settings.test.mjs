@@ -100,6 +100,11 @@ const webRemotePathPicker = readFileSync(
   new URL("../../../agent-gateway/web/src/components/RemotePathPickerModal.tsx", import.meta.url),
   "utf8",
 );
+// The hook that opens the picker; the modal itself loads on demand.
+const webRemotePathPickerHook = readFileSync(
+  new URL("../../../agent-gateway/web/src/components/useRemotePathPicker.tsx", import.meta.url),
+  "utf8",
+);
 const sharedSkillsHub = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   "utf8",
@@ -169,16 +174,16 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(webDirectoryPickerAdapter, /useRemotePathPicker/);
   assert.match(webDirectoryPickerAdapter, /suspendsParentModal: true/);
   assert.doesNotMatch(sharedProjectSettings, /window\.requestAnimationFrame/);
-  assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
-  assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
+  assert.match(webRemotePathPickerHook, /selectedPathRef\.current = path/);
+  assert.match(webRemotePathPickerHook, /pending\.resolve\(selectedPathRef\.current\)/);
   assert.match(webRemotePathPicker, /h-dialog-650px-vh/);
   assert.match(webRemotePathPicker, /max-h-92vh/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
   assert.doesNotMatch(webRemotePathPicker, /forceRender/);
   assert.doesNotMatch(webRemotePathPicker, /overlayClassName|viewportClassName|z-\[\d+\]/);
   assert.ok(
-    webRemotePathPicker.indexOf("selectedPathRef.current = path") <
-      webRemotePathPicker.indexOf("pending.resolve(selectedPathRef.current)"),
+    webRemotePathPickerHook.indexOf("selectedPathRef.current = path") <
+      webRemotePathPickerHook.indexOf("pending.resolve(selectedPathRef.current)"),
   );
   assert.doesNotMatch(webGatewayApp, /useDirectoryPicker|directoryPickerElement/);
   assert.match(sharedResourceTabs, /<TabsList[\s\S]*<TabsTrigger/);

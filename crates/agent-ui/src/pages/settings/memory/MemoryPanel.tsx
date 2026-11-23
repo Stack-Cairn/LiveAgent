@@ -4,6 +4,7 @@
 //
 // Shared implementation owned by @liveagent/ui.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { CheckCircle2, Download, Key, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button, RefreshButton } from "@liveagent/ui/components/ui/button";

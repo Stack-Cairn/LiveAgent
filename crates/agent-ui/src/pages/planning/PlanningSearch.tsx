@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useMemo, useState } from "react";
 import { Circle, Search } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";

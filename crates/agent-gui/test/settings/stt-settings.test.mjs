@@ -79,12 +79,13 @@ test("STT connection test saves the current form and identifies the active runti
     fileURLToPath(new URL("../../../agent-ui/src/pages/settings/SettingsPage.tsx", import.meta.url)),
     "utf8",
   );
-  const zhCNSettings = readFileSync(
-    fileURLToPath(
-      new URL("../../../agent-ui/src/i18n/translations/zhCNSettings.ts", import.meta.url),
-    ),
-    "utf8",
-  );
+  // Chinese settings copy: the core table plus the lazily loaded settings namespace.
+  const zhCNSettings = [
+    "../../../agent-ui/src/i18n/translations/zhCNSettings.ts",
+    "../../../agent-ui/src/i18n/namespaces/settingsZhCN.ts",
+  ]
+    .map((file) => readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8"))
+    .join("\n");
   const webService = readFileSync(
     fileURLToPath(
       new URL(

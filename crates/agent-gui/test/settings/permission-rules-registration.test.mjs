@@ -3,6 +3,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { completeSharedTranslations } from "../helpers/translation-namespaces.mjs";
 
 // LA-3a: Settings lists 权限 only when the host can reach the K-brain rules API (the desktop
 // adapter today; the WebUI gets it in LA-3b). Both locales carry the page's text.
@@ -72,9 +73,7 @@ test("the permissions page is listed only for hosts with the rules API", async (
 });
 
 test("both locales carry the same permission page keys", () => {
-  const loader = createTsModuleLoader();
-  const zh = loader.loadModule("../agent-ui/src/i18n/translations/zhCNSettings.ts").ZH_CN_SETTINGS_TRANSLATIONS;
-  const en = loader.loadModule("../agent-ui/src/i18n/translations/enUSSettings.ts").EN_US_SETTINGS_TRANSLATIONS;
+  const { "zh-CN": zh, "en-US": en } = completeSharedTranslations(createTsModuleLoader());
   const keys = (table) => Object.keys(table).filter((key) => key === "settings.navPermissions" || key.startsWith("settings.permissions.")).sort();
   assert.deepEqual(keys(zh), keys(en));
   assert.equal(keys(zh).length >= 20, true);

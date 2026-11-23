@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,

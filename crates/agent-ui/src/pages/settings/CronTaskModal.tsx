@@ -1,3 +1,6 @@
+import "@liveagent/ui/i18n/namespaces/planning";
+import "@liveagent/ui/i18n/namespaces/scheduledTasks";
+import "@liveagent/ui/i18n/namespaces/settings";
 import {
   type CustomProvider,
   type ExecutionMode,

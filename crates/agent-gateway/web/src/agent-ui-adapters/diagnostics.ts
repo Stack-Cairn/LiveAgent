@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import {
   type DiagnosticsBundle,
   type DiagnosticsSaveResult,

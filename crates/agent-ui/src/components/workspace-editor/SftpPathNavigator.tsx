@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { AlertTriangle, ChevronRight, FolderTree, Loader2 } from "@liveagent/ui/components/IconSet";
 import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";

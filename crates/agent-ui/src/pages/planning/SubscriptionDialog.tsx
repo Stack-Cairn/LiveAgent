@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { useState } from "react";
 import { ExternalLink } from "../../components/IconSet";

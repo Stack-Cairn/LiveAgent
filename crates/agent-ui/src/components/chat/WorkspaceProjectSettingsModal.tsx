@@ -1,3 +1,6 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
+import "@liveagent/ui/i18n/namespaces/settings";
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import {
   type AppSettings,

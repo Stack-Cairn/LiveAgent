@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { completeSharedTranslations } from "../helpers/translation-namespaces.mjs";
 
 // The shared shortcut formatter in agent-ui lib/shortcuts/shortcutKeys.ts: every
 // Kbd cap, tooltip, menu hint and settings row reads its label from here.
@@ -151,11 +152,8 @@ test("no surface hand-builds a shortcut label", () => {
     assert.doesNotMatch(code, /<kbd\b/, `${file}: raw <kbd>`);
     assert.doesNotMatch(code, /formatShortcutText|globalShortcutDisplayToken/, file);
   }
-  for (const [locale, file] of [
-    ["en-US", "../../../agent-ui/src/i18n/translations/enUSCommon.ts"],
-    ["zh-CN", "../../../agent-ui/src/i18n/translations/zhCNCommon.ts"],
-  ]) {
-    const source = read(file);
+  const tables = completeSharedTranslations(createTsModuleLoader());
+  for (const locale of ["en-US", "zh-CN"]) {
     for (const key of [
       "chat.goalBar.editHint",
       "chat.find.previous",
@@ -165,7 +163,7 @@ test("no surface hand-builds a shortcut label", () => {
       "projectTools.gitReview.lineComments.saveHint",
       "workspaceSftp.pathKeyboardHint",
     ]) {
-      const line = source.slice(source.indexOf(`"${key}"`)).split(",\n")[0];
+      const line = tables[locale][key];
       assert.match(line, /\{(keys|save|select)\}/, `${locale} ${key} takes formatted keys`);
       assert.doesNotMatch(line, /Ctrl|⌘|Enter|Esc|Shift/, `${locale} ${key}`);
     }

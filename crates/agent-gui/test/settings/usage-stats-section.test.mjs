@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { completeSharedTranslations } from "../helpers/translation-namespaces.mjs";
 
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const shift = (days) => new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
@@ -242,9 +243,7 @@ test("the usage page is listed in General only for hosts that can fetch usage", 
 });
 
 test("both locales carry the same usage page keys", () => {
-  const loader = createTsModuleLoader();
-  const zh = loader.loadModule("../agent-ui/src/i18n/translations/zhCNSettings.ts").ZH_CN_SETTINGS_TRANSLATIONS;
-  const en = loader.loadModule("../agent-ui/src/i18n/translations/enUSSettings.ts").EN_US_SETTINGS_TRANSLATIONS;
+  const { "zh-CN": zh, "en-US": en } = completeSharedTranslations(createTsModuleLoader());
   const keys = (table) => Object.keys(table).filter((key) => key === "settings.navUsage" || key.startsWith("settings.usage.")).sort();
   assert.deepEqual(keys(zh), keys(en));
   assert.equal(keys(zh).length >= 40, true);

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import type { McpServerConfig } from "@liveagent/app/lib/settings/index";
 import { AlertTriangle, Plus, Sparkles } from "@liveagent/ui/components/IconSet";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";

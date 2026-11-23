@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/sharing";
 import { copyImagePreviewData, saveImagePreviewData } from "@liveagent/adapters/imagePreview";
 import { Check, Copy, Download, Loader2, Share2 } from "@liveagent/ui/components/IconSet";
 import { domToBlob } from "modern-screenshot";

@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/onboarding";
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import {
   discoverProviderModels,

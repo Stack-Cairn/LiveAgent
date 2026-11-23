@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import {
   type AppSettings,
   removeWorkspaceResourceReferences,
@@ -94,7 +96,12 @@ import {
   toggleBulkSelection,
   updateBulkSelection,
 } from "./skillBulkSelection";
-import { buildSkillDiscoverySignature, summarizeSkillScan } from "./skillScanSummary";
+import {
+  buildSkillDiscoverySignature,
+  type SkillScanFeedback,
+  summarizeSkillScan,
+  waitForMinimumScanDuration,
+} from "./skillScanSummary";
 import {
   buildSkillStoreCatalogKey,
   isSkillStoreCatalogFresh,
@@ -111,18 +118,6 @@ function isSkillsHubView(value: unknown): value is SkillsHubView {
 
 const STORE_PAGE_LIMIT = 24;
 const SCAN_FEEDBACK_DURATION_MS = 6500;
-const MIN_SCAN_LOADING_DURATION_MS = 600;
-
-async function waitForMinimumScanDuration(startedAt: number) {
-  const remaining = MIN_SCAN_LOADING_DURATION_MS - (Date.now() - startedAt);
-  if (remaining > 0) {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
-  }
-}
-
-type SkillScanFeedback =
-  | { status: "success"; total: number; added: number; updated: number; removed: number }
-  | { status: "error"; message: string };
 
 const INSTALLED_SORT_OPTIONS: Array<{ value: InstalledSkillSort; labelKey: string }> = [
   { value: "name-asc", labelKey: "settings.skillsInstalledSortNameAsc" },

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { ImageIcon as ImagePlus, Loader2, Plus, X } from "../../components/IconSet";
 import { useLocale } from "../../i18n";
 import type { ImageStudioClient } from "../../lib/imaging/types";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import type { ComponentProps } from "react";
 import { translate } from "../../lib/planning/i18n";
 import { taskListLayer, taskLists } from "../../lib/planning/taskLists";

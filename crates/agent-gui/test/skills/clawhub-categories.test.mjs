@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 const loader = createTsModuleLoader();
 const categories = loader.loadModule("@liveagent/ui/lib/skills/clawHubCategories.ts");
 const webRoot = fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url));
 const hostTranslations = [
-  ["GUI", loader.loadModule("src/i18n/config.ts").translations],
+  ["GUI", hostTables(loader)],
   [
     "WebUI",
-    createTsModuleLoader({ rootDir: webRoot }).loadModule("src/i18n/config.ts").translations,
+    hostTables(createTsModuleLoader({ rootDir: webRoot })),
   ],
 ];
 
@@ -21,6 +22,13 @@ function classify(card) {
     summary: card.summary ?? "",
     topics: card.topics ?? [],
   });
+}
+
+/** A host table with every feature namespace loaded. */
+function hostTables(hostLoader) {
+  const { translations } = hostLoader.loadModule("src/i18n/config.ts");
+  loadTranslationNamespaces(hostLoader);
+  return translations;
 }
 
 test("exposes the ClawHub category taxonomy", () => {

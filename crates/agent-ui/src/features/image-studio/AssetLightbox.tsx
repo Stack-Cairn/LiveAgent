@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ImagePreviewSlide } from "../../components/chat/imagePreviewModel";
 import { Loader2, X } from "../../components/IconSet";

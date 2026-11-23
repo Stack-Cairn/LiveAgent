@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useLocale } from "../../i18n";
 import type { ImageJob } from "../../lib/imaging/types";
 import { splitFramedPrompt } from "./framing";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { Fragment, useState } from "react";
 import {
   Check,

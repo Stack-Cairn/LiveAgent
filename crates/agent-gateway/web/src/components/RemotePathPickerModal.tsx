@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   AlertTriangle,

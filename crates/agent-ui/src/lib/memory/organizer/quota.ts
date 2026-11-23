@@ -2,6 +2,7 @@
 // level that biases the organizer prompt (compression target) and drives the
 // settings-panel banner. Pure derivation — no auto-archival happens here.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { MemoryQuotaScopeSummary, MemoryQuotaSummaryResponse } from "../api";
 import { QUOTA_LADDER_THRESHOLDS } from "../config";
 

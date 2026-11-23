@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/scheduledTasks";
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
 import {
   FrostSpinner,

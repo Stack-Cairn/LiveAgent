@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { ExternalLink } from "@liveagent/ui/components/IconSet";
 import {
   SettingsCard,

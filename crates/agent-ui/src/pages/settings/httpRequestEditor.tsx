@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { ChevronDown, Globe, Trash2 } from "@liveagent/ui/components/IconSet";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { useLocale } from "@liveagent/ui/i18n/index";

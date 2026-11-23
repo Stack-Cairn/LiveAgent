@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useMemo } from "react";
 import { type Locale, useLocale } from "../../i18n/index";
 import { SettingsCombobox, type SettingsComboboxOption } from "./SettingsCombobox";

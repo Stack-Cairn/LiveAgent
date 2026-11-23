@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { ChevronRight } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";
 import { planningDateLocale, translate, weekdayNames } from "../../lib/planning/i18n";

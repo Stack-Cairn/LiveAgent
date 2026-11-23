@@ -1,6 +1,7 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
+import "@liveagent/ui/i18n/namespaces/settings";
 import { sshLocalForwardClient } from "@liveagent/adapters/sshLocalForwardClient";
 import type { SshHostConfig } from "@liveagent/app/lib/settings";
-import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -59,6 +60,14 @@ import type {
   TerminalSshPrompt,
 } from "@liveagent/ui/lib/terminal/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  sessionBelongsToProject,
+  sessionEndpointLabel,
+  sessionProjectLabel,
+  sessionTitle,
+  sshSessionConnected,
+  sshSessionStatus,
+} from "./sshTunnelSessions";
 
 type SshTunnelScope = "project" | "all";
 type SshTunnelView = "list" | "settings" | "create";
@@ -126,38 +135,6 @@ export function hostSecretReady(host: SshHostConfig) {
 export function hostStatusMessage(host: SshHostConfig, t: (key: string) => string) {
   if (!hostSecretReady(host)) return t("projectTools.sshTunnelMissingSecret");
   return "";
-}
-
-function sessionBelongsToProject(session: TerminalSession, projectPathKey: string) {
-  const wantedProjectKey = workspaceProjectPathKey(projectPathKey);
-  if (!wantedProjectKey) return false;
-  const sessionProjectKey = workspaceProjectPathKey(session.projectPathKey || session.cwd);
-  return sessionProjectKey === wantedProjectKey;
-}
-
-function sessionTitle(session: TerminalSession, fallback: string) {
-  return session.title || session.ssh?.hostName || fallback;
-}
-
-function sessionEndpointLabel(session: TerminalSession) {
-  const ssh = session.ssh;
-  if (!ssh) return session.cwd || session.projectPathKey;
-  const userPrefix = ssh.username.trim() ? `${ssh.username.trim()}@` : "";
-  return `${userPrefix}${ssh.host}:${ssh.port}`;
-}
-
-function sessionProjectLabel(session: TerminalSession) {
-  return session.projectPathKey || session.cwd || "";
-}
-
-function sshSessionStatus(session: TerminalSession) {
-  const status = session.ssh?.status ?? (session.running ? "connected" : "disconnected");
-  if (status === "connected" && !session.running) return "disconnected";
-  return status;
-}
-
-function sshSessionConnected(session: TerminalSession) {
-  return sshSessionStatus(session) === "connected" && session.running;
 }
 
 function sshStatusLabel(session: TerminalSession, t: (key: string) => string) {

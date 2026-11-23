@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/sharing";
 import { AlertCircle, Loader2, MessageSquareText } from "@liveagent/ui/components/IconSet";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { useLocale } from "@liveagent/ui/i18n/index";

@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import type { Tool, ToolCall, ToolResultMessage } from "@liveagent/app/lib/agentTypes";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";

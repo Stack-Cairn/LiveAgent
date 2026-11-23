@@ -1,5 +1,6 @@
 // One plugin UI panel: the sandboxed frame plus the host.* bridge (docs/sandboxed-ui.md).
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { AlertTriangle, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { EmptyState } from "@liveagent/ui/components/ui/empty-state";

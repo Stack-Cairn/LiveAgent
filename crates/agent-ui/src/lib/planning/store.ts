@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { backend } from "@liveagent/app/lib/planning/backend";
 import { useSyncExternalStore } from "react";
 import { localizePlanningError, translate } from "./i18n";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useId, useState } from "react";
 import { Link2, Maximize2 } from "../../components/IconSet";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";

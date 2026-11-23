@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
+import "@liveagent/ui/i18n/namespaces/settings";
 import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useState } from "react";
 import { RotateCcw, Trash2 } from "../../components/IconSet";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";

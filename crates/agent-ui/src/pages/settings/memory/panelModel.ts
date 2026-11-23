@@ -5,6 +5,7 @@
 // Shared implementation owned by @liveagent/ui. Platform-specific capabilities
 // remain in their host adapter modules.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { ProviderId } from "@liveagent/app/lib/settings";
 import type {
   MemoryListResponse,

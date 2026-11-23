@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useEffect, useState } from "react";
 import { useLocale } from "../../i18n";
 import type { ImageStudioClient } from "../../lib/imaging/types";

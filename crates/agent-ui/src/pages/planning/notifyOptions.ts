@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 type Translate = (key: string, vars?: Record<string, string>) => string;
 
 /** Preset offsets (minutes before the start) shared by calendars and events. */

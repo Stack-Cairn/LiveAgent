@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useState } from "react";
 import { ChevronDown } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";

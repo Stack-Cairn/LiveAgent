@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/scheduledTasks";
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import { AlertTriangle, BookOpen, Lock, SkillIcon } from "@liveagent/ui/components/IconSet";
 import { DocumentMarkdown } from "@liveagent/ui/components/markdown/DocumentMarkdown";
 import { Badge } from "@liveagent/ui/components/ui/badge";

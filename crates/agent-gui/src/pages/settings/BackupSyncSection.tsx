@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
   AlertTriangle,

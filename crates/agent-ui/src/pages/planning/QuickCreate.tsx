@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { type ReactNode, useState } from "react";
 import { CalendarDays, Clock3, List, ListChecks, Target, X } from "../../components/IconSet";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";

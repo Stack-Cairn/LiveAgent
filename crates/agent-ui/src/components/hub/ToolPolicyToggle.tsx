@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import type { ToolPolicy } from "@liveagent/app/lib/settings";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { SettingsToggleGroup, SettingsToggleGroupItem } from "../settings/SettingsToggleGroup";

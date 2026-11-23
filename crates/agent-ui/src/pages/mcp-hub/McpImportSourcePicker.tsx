@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import {
   EXTERNAL_TOOL_SOURCE_LABELS,
   ExternalToolSourceIcon,

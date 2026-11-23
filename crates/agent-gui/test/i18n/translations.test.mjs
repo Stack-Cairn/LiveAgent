@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 const loader = createTsModuleLoader();
 const i18n = loader.loadModule("src/i18n/config.ts");
+loadTranslationNamespaces(loader);
 
 test("supported locales, fallback, and system language detection are stable", () => {
   assert.equal(i18n.DEFAULT_LOCALE, "zh-CN");

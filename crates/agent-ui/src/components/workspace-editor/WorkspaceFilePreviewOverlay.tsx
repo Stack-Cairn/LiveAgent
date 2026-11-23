@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import {
   copyWorkspacePreviewImage,
   saveWorkspacePreviewImage,
@@ -60,6 +61,7 @@ import {
   type WorkspaceTextRangeSource,
 } from "@liveagent/ui/components/workspace-editor/workspaceTextRange";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { base64ToBytes } from "@liveagent/ui/lib/browser/embeddedBrowser";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { copyTextToClipboard as copySharedTextToClipboard } from "@liveagent/ui/lib/shared/clipboard";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -133,15 +135,6 @@ function toMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
   const text = String(error ?? "").trim();
   return text || fallback;
-}
-
-function base64ToBytes(data: string) {
-  const binary = window.atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {

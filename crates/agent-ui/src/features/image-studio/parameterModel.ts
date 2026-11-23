@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import type { ImageTarget, ParameterSpec } from "../../lib/imaging/types";
 import { type Message, message } from "./studioText";
 

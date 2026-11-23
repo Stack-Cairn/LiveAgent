@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import type {
   CreateJobRequest,
   ExportDestination,

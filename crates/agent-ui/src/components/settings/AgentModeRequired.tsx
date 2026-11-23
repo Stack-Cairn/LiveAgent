@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useLocale } from "../../i18n/index";
 import { Button } from "../ui/button";
 
