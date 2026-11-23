@@ -1,14 +1,14 @@
+import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import {
   GATEWAY_AUTH_ERROR_KEYS,
   normalizeGatewayAccessToken,
   verifyGatewayAccessToken,
 } from "@/lib/gatewayAuth";
-import { resetGatewayWebSocketClient } from "@/lib/gatewaySocket";
+import { resetGatewaySocketClientIfLoaded } from "@/lib/gatewaySocketReset";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
 
-import { asErrorMessage } from "../chatEventUtils";
+export type GatewaySession = ReturnType<typeof useGatewaySession>;
 
 export function useGatewaySession(historyShareToken: string | null) {
   const initialStoredTokenRef = useRef(historyShareToken ? "" : loadToken());
@@ -27,7 +27,7 @@ export function useGatewaySession(historyShareToken: string | null) {
 
     let cancelled = false;
     setAuthError(null);
-    resetGatewayWebSocketClient();
+    resetGatewaySocketClientIfLoaded();
 
     void verifyGatewayAccessToken(storedToken)
       .then((verifiedToken) => {
@@ -45,9 +45,9 @@ export function useGatewaySession(historyShareToken: string | null) {
         }
         initialStoredTokenRef.current = "";
         clearToken();
-        resetGatewayWebSocketClient();
+        resetGatewaySocketClientIfLoaded();
         setToken("");
-        setAuthError(asErrorMessage(error, GATEWAY_AUTH_ERROR_KEYS.failed));
+        setAuthError(errorMessageWithFallback(error, GATEWAY_AUTH_ERROR_KEYS.failed));
         setLoginToken(storedToken);
       })
       .finally(() => {
@@ -71,7 +71,7 @@ export function useGatewaySession(historyShareToken: string | null) {
 
     setAuthSubmitting(true);
     setAuthError(null);
-    resetGatewayWebSocketClient();
+    resetGatewaySocketClientIfLoaded();
 
     try {
       const verifiedToken = await verifyGatewayAccessToken(draftToken);
@@ -82,9 +82,9 @@ export function useGatewaySession(historyShareToken: string | null) {
     } catch (error) {
       initialStoredTokenRef.current = "";
       clearToken();
-      resetGatewayWebSocketClient();
+      resetGatewaySocketClientIfLoaded();
       setToken("");
-      setAuthError(asErrorMessage(error, GATEWAY_AUTH_ERROR_KEYS.failed));
+      setAuthError(errorMessageWithFallback(error, GATEWAY_AUTH_ERROR_KEYS.failed));
     } finally {
       setAuthSubmitting(false);
     }
@@ -92,7 +92,7 @@ export function useGatewaySession(historyShareToken: string | null) {
 
   const clearSession = useCallback(() => {
     clearToken();
-    resetGatewayWebSocketClient();
+    resetGatewaySocketClientIfLoaded();
     initialStoredTokenRef.current = "";
     setAuthSubmitting(false);
     setAuthError(null);

@@ -18,3 +18,14 @@ export function loadWebLocale(): Locale {
   }
   return detectSystemLocale();
 }
+
+/** The saved WebUI theme preference (unnormalized), for screens shown before the app loads. */
+export function loadWebThemePreference(): unknown {
+  try {
+    const raw = window.localStorage.getItem(WEB_SETTINGS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as { theme?: unknown } | null) : null;
+    return parsed?.theme;
+  } catch {
+    return undefined;
+  }
+}

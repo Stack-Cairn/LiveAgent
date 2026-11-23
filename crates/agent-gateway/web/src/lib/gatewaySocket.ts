@@ -35,6 +35,7 @@ import type {
   ChatCommandAccepted,
   ConversationStreamHandlers,
 } from "@/lib/chat/stream/streamTypes";
+import { registerGatewaySocketReset } from "./gatewaySocketReset";
 import { GatewayWebSocketRpcClient } from "./gatewaySocketRpc";
 import type {
   ChatActivityListener,
@@ -504,3 +505,5 @@ export function resetGatewayWebSocketClient() {
   activeClient = null;
   activeToken = "";
 }
+
+registerGatewaySocketReset(resetGatewayWebSocketClient);
