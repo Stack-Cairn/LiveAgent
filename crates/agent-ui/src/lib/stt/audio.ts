@@ -1,3 +1,5 @@
+import { SttError } from "@liveagent/ui/lib/stt/errors";
+
 export const STT_SAMPLE_RATE = 16_000;
 export const STT_CHANNELS = 1;
 export const STT_CHUNK_MS = 100;
@@ -86,10 +88,10 @@ export class SttStreamingResampler {
     private readonly outputRate = STT_SAMPLE_RATE,
   ) {
     if (!Number.isFinite(inputRate) || inputRate <= 0) {
-      throw new Error("麦克风采样率无效");
+      throw new SttError("invalidSampleRate", `microphone rate ${inputRate}`);
     }
     if (!Number.isFinite(outputRate) || outputRate <= 0) {
-      throw new Error("语音识别采样率无效");
+      throw new SttError("invalidSampleRate", `recognition rate ${outputRate}`);
     }
     this.ratio = inputRate / outputRate;
   }
@@ -179,7 +181,7 @@ export function pcmRms(samples: Float32Array): number {
 export type SttAudioCaptureOptions = {
   onChunk: (chunk: PcmChunk, hasVoice: boolean) => void;
   onSilenceTimeout?: () => void;
-  onCaptureError?: (message: string) => void;
+  onCaptureError?: (error: SttError) => void;
   vadThreshold?: number;
 };
 
@@ -203,7 +205,7 @@ export class SttAudioCapture {
   }
 
   async start() {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("当前环境不支持麦克风");
+    if (!navigator.mediaDevices?.getUserMedia) throw new SttError("microphoneUnsupported");
     try {
       const preferredConstraints: MediaStreamConstraints = {
         audio: {
@@ -248,7 +250,7 @@ export class SttAudioCapture {
       }, 250);
     } catch (cause) {
       await this.releaseResources();
-      throw new Error(mediaCaptureErrorMessage(cause));
+      throw mediaCaptureError(cause);
     }
   }
 
@@ -257,7 +259,7 @@ export class SttAudioCapture {
   }
 
   private readonly handleTrackEnded = () => {
-    if (!this.stopped) this.options.onCaptureError?.("麦克风设备已断开或权限已撤销");
+    if (!this.stopped) this.options.onCaptureError?.(new SttError("microphoneDisconnected"));
   };
 
   private consume(input: Float32Array) {
@@ -341,21 +343,21 @@ export class SttAudioCapture {
   }
 }
 
-function mediaCaptureErrorMessage(cause: unknown): string {
+function mediaCaptureError(cause: unknown): Error {
   const name = mediaErrorName(cause);
   if (name === "NotAllowedError" || name === "SecurityError") {
-    return "麦克风权限已拒绝，请在系统设置中允许访问";
+    return new SttError("microphonePermissionDenied", name);
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-    return "未检测到可用麦克风设备";
+    return new SttError("microphoneNotFound", name);
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
-    return "麦克风设备不可用或正被其他应用占用";
+    return new SttError("microphoneBusy", name);
   }
   if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
-    return "未检测到可用麦克风设备，或设备不支持录音参数";
+    return new SttError("microphoneConstraints", name);
   }
-  return cause instanceof Error && cause.message ? cause.message : "无法启动麦克风";
+  return cause instanceof Error && cause.message ? cause : new SttError("microphoneStartFailed");
 }
 
 function isMediaConstraintError(cause: unknown): boolean {

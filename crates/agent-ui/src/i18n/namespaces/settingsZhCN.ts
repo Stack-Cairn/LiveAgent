@@ -1040,6 +1040,8 @@ export const SETTINGS_ZH_CN = {
   "settings.stt.secretsCleared": "密钥已清空",
   "settings.stt.enableDescription": "在聊天输入框中显示麦克风按钮。",
   "settings.stt.runtime": "当前运行端：{runtime}",
+  "settings.stt.runtimeDesktop": "桌面端（同步到 Gateway WebUI）",
+  "settings.stt.runtimeWebui": "WebUI（与桌面端同步，凭据由 Gateway 安全托管）",
   "settings.stt.configured": "已配置",
   "settings.stt.notConfigured": "未配置",
   "settings.stt.manage": "管理",

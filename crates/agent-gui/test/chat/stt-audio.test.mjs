@@ -88,8 +88,12 @@ test("streaming resampler has the correct long-run count at 44.1 kHz", () => {
 });
 
 test("streaming resampler rejects invalid rates and handles empty blocks", () => {
-  assert.throws(() => new SttStreamingResampler(0), /采样率/);
-  assert.throws(() => new SttStreamingResampler(Number.NaN), /采样率/);
+  for (const rate of [0, Number.NaN]) {
+    assert.throws(
+      () => new SttStreamingResampler(rate),
+      (error) => error.name === "SttError" && error.code === "invalidSampleRate",
+    );
+  }
   const resampler = new SttStreamingResampler(16_000);
   assert.deepEqual(resampler.process(new Float32Array()), new Float32Array());
   assert.deepEqual(resampler.process(new Float32Array([0.25, -0.25])), new Float32Array([0.25, -0.25]));

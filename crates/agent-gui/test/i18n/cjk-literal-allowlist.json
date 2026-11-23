@@ -1,5 +1,5 @@
 {
-  "$comment": "CJK string literals allowed in UI .tsx sources (checked by no-cjk-ui-literals.test.mjs). UI text belongs in i18n modules; list only intentional locale-specific literals here, each with a reason. Entries under deferred are temporary.",
+  "$comment": "CJK string literals allowed in UI .ts and .tsx sources (checked by no-cjk-ui-literals.test.mjs). UI text belongs in i18n modules; list only intentional locale-specific literals here, each with a reason. Entries under deferred are temporary.",
   "intentional": [
     {
       "file": "crates/agent-ui/src/components/settings/TimeZonePicker.tsx",
@@ -105,6 +105,265 @@
         "（Cherry Studio ·",
         "）"
       ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/chatUi.ts",
+      "reason": "Full-width bars in the DSML tool-call marker pattern matched in model output.",
+      "literals": [
+        "(?:｜{2}||{2})s*DSMLs*(?:｜{2}||{2})"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/page/chatPageHelpers.ts",
+      "reason": "Title-generation prompt sent to the model; not interface text.",
+      "literals": [
+        "你负责生成简洁的会话标题。只输出标题本身，不要解释、不要引号。标题必须使用简体中文；专有名词（如 Grok、API）可保留原文。",
+        "根据以下内容，为本次会话生成一个简练的简体中文标题（约 8～18 个字，概括主题，不要照抄整句问话），直接输出标题，不要其他内容："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/debug/seedLongConversation.ts",
+      "reason": "Developer-only seed conversation used to exercise long transcripts; sample message content, not interface text.",
+      "literals": [
+        "这里是一段较长的说明文字，模拟真实回复中的多段 Markdown 内容。",
+        "它包含**加粗**、`inline code`、以及一个列表：",
+        "- 第一个要点，解释实现思路与取舍",
+        "- 第二个要点，说明边界条件与失败模式",
+        "- 第三个要点，给出后续可以验证的步骤",
+        "结尾再补充一句总结，让段落高度更接近真实回复。",
+        "这是第",
+        "轮的长提问：",
+        "第",
+        "轮提问：请继续优化上一步的实现，并解释关键改动。",
+        "思考第",
+        "轮：",
+        "轮回复。",
+        "下面是本轮的核心代码：\n\n```ts",
+        "```\n\n代码后的收尾说明。",
+        "压缩检查点：覆盖前",
+        "轮。",
+        "种子会话",
+        "轮（",
+        "条）",
+        "[seedLongConversation] 已写入会话",
+        "：",
+        "条消息、",
+        "个分段。刷新侧边栏后打开。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/memory/prompts/extraction.ts",
+      "reason": "Memory extraction prompt for the model; the Chinese phrases are examples of user input it must recognise.",
+      "literals": [
+        "- 用户身份/角色 (\"我是数据科学家\") — explicit identity outranks git blame inferences.",
+        "- 跨项目偏好 (\"在 Go 项目里我习惯用 Docker\") — workspace only reflects one project; the preference is reusable.",
+        "- 选型动机 (\"我们用 X 是因为 Y\") — workspace shows the choice, not the reasoning.",
+        "- Workflow corrections (\"以后跑测试前先 lint\") — process rules are durable feedback even when tooling configs already encode them.",
+        "- 仅讨论/阅读项目代码而本轮没有 workspace mutation (\"帮我看下 src/foo.ts 的逻辑\", \"这个项目用什么打包?\") — gate fails. If durable, save as feedback/user/global; otherwise skip.",
+        "- 项目结构问答 (\"这个仓库是 monorepo 吗?\") — anyone can grep this; skip unless paired with a non-obvious preference.",
+        "- 本轮只有只读活动 (reads/searches/status checks) — gate fails even if the conversation was about the workspace.",
+        "- 助手计划但未落地的修改 (\"我建议把 X 重构成 Y\", 但本轮没有真正 Edit) — gate fails until an actual mutation is performed.",
+        "- <workspace-mutations-this-turn> shows an Edit on crates/foo/src/bar.rs and the user said \"以后这种字段都加 #[serde(default)]\" → scope=\"project\" type=\"project\"; reasoning cites the Edit.",
+        "- <workspace-mutations-this-turn> shows `pnpm add lodash` and the user said \"本项目默认用 pnpm 不要混 npm\" → scope=\"project\"; reasoning cites the install + explicit pin.",
+        "- 用户显式说 \"记住本项目 API 路由放在 routes/v2/ 下\" — explicit project-pin satisfies the gate without a tool call; reasoning=\"explicit user pin for this project\".",
+        "- \"今天我用了 vim\" / \"just for now\" / \"试试\" — transient experiments; require an explicit signal word before promoting.",
+        "- 简单事实陈述 (\"项目用 Python 3.11\") that any reader could grep in a few seconds — only save if paired with a preference or motive."
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/memory/prompts/shared.ts",
+      "reason": "Memory prompt for the model; the Chinese phrases are signal words it must recognise in user input.",
+      "literals": [
+        "- Override exception: the latest USER message contains an explicit project-pin instruction (e.g. \"记住本项目...\", \"在这个项目里以后...\", \"for this repo always...\", \"remember for this workspace\") AND names a fact that is genuinely workspace-specific (not a portable preference). The explicit pin alone satisfies the gate; record it as source_quote and set reasoning=\"explicit user pin for this project\".",
+        "- For any write/update on scope=\"project\", the reasoning field MUST cite the qualifying evidence in one short clause (e.g. \"edited src/foo.ts this turn\" or \"explicit user pin: \\\"记住本项目用 pnpm\\\"\"). A project-scope plan item without such evidence in reasoning is invalid and must be rewritten as global or SKIP.",
+        "- Signal words (Chinese): 我叫, 请记住, 以后, 默认, 一直, 永远, 千万别, 必须, 一定, 从今往后, 我需要你, 我希望你, 帮我记, 我习惯, 一向.",
+        "- NOT signal words (treat as medium ceiling): 我喜欢, 我用, 通常, 有时, 我觉得, 一般, 大概, I like, I sometimes, I tend to, often, usually, somewhat.",
+        "- Negative cues (force at most low): 也许, 可能, 不确定, 试试看, maybe, perhaps, not sure, let me try, just for now."
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/tools/askUserQuestionTools.ts",
+      "reason": "Tool description sent to the model, not interface text.",
+      "literals": [
+        "options (3-4 is ideal); different questions may have different option counts.\n- Options must be short, concrete, and mutually exclusive. Set recommended=true on your suggested choice (at most one per question) — it is shown first and becomes the timeout fallback.\n- The UI automatically appends an \"Other\" free-text option to every question, so the user can always type their own answer. Do NOT add your own catch-all option (e.g. \"Other\", \"Custom\", \"其他\", \"自定义\"). When the user types an answer, the result marks it as user-typed and returns their exact words instead of a listed label — treat it as authoritative.\n- Give each question a short header (2-6 chars works best) — it becomes the tab label when several questions show at once.\n- Do not use this for questions answerable from the code or the conversation, and never ask for confirmation of work you can safely do."
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/tools/cuaSelfGuard.ts",
+      "reason": "Tool refusal returned to the model as the tool result so it changes course; not interface text.",
+      "literals": [
+        "该目标是 LiveAgent 自身的窗口，已被拒绝：让模型操作宿主界面可以绕过工具审批、",
+        "改写权限设置或直接关闭应用。请改为操作其他应用。（如确需自动化 LiveAgent 本身，",
+        "在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）",
+        "该坐标落在 LiveAgent 自身的窗口范围内，已被拒绝：以桌面为目标按屏幕坐标操作宿主界面，",
+        "同样可以点掉审批弹窗或改写权限设置。请改为操作其他应用的窗口。（如确需自动化 LiveAgent",
+        "本身，在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）",
+        "LiveAgent 当前是前台应用，这次无明确目标的桌面键盘输入会直接落在宿主界面上",
+        "（可以按掉审批弹窗、用快捷键关闭应用），已被拒绝。请先聚焦目标应用（例如先点击它的窗口），",
+        "或改用带 pid / window_id 的显式窗口目标。（如确需自动化 LiveAgent 本身，",
+        "无法确认当前前台应用，已拒绝这次无明确目标的桌面键盘输入：确认不了它不会落在 LiveAgent",
+        "自己身上。请改用带 pid / window_id 的显式窗口目标，或稍后重试。",
+        "调用参数的嵌套层级超出了安全检查的上限，已被拒绝：无法确认它是否以 LiveAgent 自身为目标。",
+        "请用扁平一些的参数重试。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/tools/planModeTools.ts",
+      "reason": "Chinese approval words matched against the user's reply; input vocabulary, not interface text.",
+      "literals": [
+        "同意",
+        "批准",
+        "可以",
+        "好",
+        "好的",
+        "行",
+        "开始",
+        "开始吧",
+        "开始执行",
+        "执行",
+        "执行吧",
+        "开干",
+        "干吧",
+        "去吧",
+        "没问题"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/tools/sshManagerTools.ts",
+      "reason": "Tool error returned to the model as the tool result; not interface text.",
+      "literals": [
+        "请先在 SSH 隧道 Tab 手动完成连接/信任/MFA 后重试。",
+        "该主机使用键盘交互登录，SSHManager 不会自行发起连接；请先在 SSH 隧道 Tab 建立连接，再复用运行中的会话。"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/chat/clarify/clarifyProtocol.ts",
+      "reason": "Prompt text sent to the model by the clarify flow; not interface text.",
+      "literals": [
+        "请直接输出最终优化后的提示词：回复以",
+        "开头，不要再提问。"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/features/image-studio/framing.ts",
+      "reason": "Framing line appended to the image prompt and parsed back on restore; wire format for the model, not interface text.",
+      "literals": [
+        "【画面参数】",
+        "画面比例",
+        "分辨率",
+        "（约",
+        "像素）",
+        "；"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/chat/hostedSearch.ts",
+      "reason": "Full-width colon recognised when parsing source titles out of model output.",
+      "literals": [
+        "："
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/chat/mentionReferences.ts",
+      "reason": "Fixed code-mention chip format (file：line～line) shared with MentionComposerInternals.tsx; not prose.",
+      "literals": [
+        "～"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/memory/config.ts",
+      "reason": "Locale-keyed greeting and thanks prefixes matched against user input for memory gating; input vocabulary, not interface text.",
+      "literals": [
+        "你好",
+        "您好",
+        "哈喽",
+        "早安",
+        "晚安",
+        "早上好",
+        "晚上好",
+        "谢谢",
+        "多谢",
+        "感谢",
+        "辛苦了",
+        "好的",
+        "好",
+        "收到",
+        "明白了",
+        "明白",
+        "是",
+        "是的",
+        "对",
+        "对的",
+        "没错",
+        "正确",
+        "确认",
+        "是这样",
+        "不是",
+        "不是的",
+        "不对",
+        "否",
+        "没有"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/providers/errorMessage.ts",
+      "reason": "Matched against backend error text to detect a cancellation; not displayed.",
+      "literals": [
+        "已取消"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/usage/usageStats.ts",
+      "reason": "Chinese number units in the zh-CN branch of compact number formatting; en-US uses K/M/B.",
+      "literals": [
+        "亿",
+        "万"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/planning/calendarDisplay.ts",
+      "reason": "Chinese lunar-calendar names, shown only when the lunar calendar is enabled.",
+      "literals": [
+        "初一",
+        "初二",
+        "初三",
+        "初四",
+        "初五",
+        "初六",
+        "初七",
+        "初八",
+        "初九",
+        "初十",
+        "十一",
+        "十二",
+        "十三",
+        "十四",
+        "十五",
+        "十六",
+        "十七",
+        "十八",
+        "十九",
+        "二十",
+        "廿一",
+        "廿二",
+        "廿三",
+        "廿四",
+        "廿五",
+        "廿六",
+        "廿七",
+        "廿八",
+        "廿九",
+        "三十"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/settings/providerUtils.ts",
+      "reason": "Provider preset names that include the vendor's own Chinese brand name next to the English one.",
+      "literals": [
+        "Zhipu GLM (智谱)",
+        "Zhipu GLM Team (智谱团队)",
+        "火山方舟 (Volcengine)"
+      ]
     }
   ],
   "deferred": [
@@ -130,6 +389,617 @@
       "reason": "owned by parallel work; migrate after merge",
       "literals": [
         "退出 LiveAgent 失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/chatDraft.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "项目目录未选择，无法发送大段粘贴内容。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/chatEventUtils.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "已取消"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/constants.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "分享会话"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/gatewayChatCommandActions.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Agent 已切换，已取消发送本次大段粘贴内容。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/gatewayConversationActions.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "编辑后重发失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySession.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Access Token 验证失败。",
+        "请输入 Access Token。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySettingsSync.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "缓存桌面端设置失败。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySharedHistory.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "读取已分享历史列表失败",
+        "Gateway 尚未连接，无法读取分享状态。",
+        "读取分享状态失败",
+        "开启分享失败",
+        "关闭分享失败",
+        "更新分享脱敏设置失败",
+        "Gateway 尚未连接，无法关闭分享。",
+        "Gateway 尚未连接，无法更新分享脱敏设置。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/hooks/useGatewayWorkspaceProjects.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "网关未连接。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/app/hooks/usePendingUploads.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "请先选择或创建会话后再上传文件。",
+        "上传目标已失效，已忽略本次导入的文件",
+        "所选文件均无法导入：",
+        "以下文件已跳过：",
+        "导入文件失败",
+        "无法读取剪贴板中的文件，请尝试拖拽或点击上传。",
+        "读取剪贴板文件失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/adminApi.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "请输入管理 Token。",
+        "加载 Agent 目录失败。",
+        "签发凭证失败。",
+        "签发响应缺少凭证明文。",
+        "修改客户端名称失败。",
+        "删除客户端失败。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/chatUi.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "执行结果",
+        "工具执行结果",
+        "Request failed：",
+        "历史消息解析失败：",
+        "历史消息载荷不是数组，无法渲染。",
+        "会话",
+        "新对话"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/gatewayAuth.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Access Token 错误，请检查后重试。",
+        "请输入 Access Token。",
+        "Access Token 验证失败。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Gateway 正在重新连接..."
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/historyShare.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "分享链接无效",
+        "分享链接不存在或已关闭",
+        "读取分享会话失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/uploadDirectory.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "文件夹名称不能为空。",
+        "文件夹为空，无法导入。",
+        "导入文件夹失败",
+        "导入文件夹失败：服务端未返回目录路径"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/lib/uploadReadableFiles.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "（HTTP",
+        "）",
+        "文件过大，服务器拒绝接收（HTTP 413）。请压缩文件后重试，或调大反向代理的请求体大小限制。",
+        "项目目录未选择，无法导入文件。",
+        "导入文件失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gateway/web/src/shims/tauriCore.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "未配置 Gateway Token"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/automation/hookRunner.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Hook 执行失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/conversation/conversationState.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "记忆整理完成。",
+        "本轮无需更新记忆。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/history/chatHistory.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "历史窗口缺少活跃分段",
+        "历史摘要数据格式无效",
+        "历史上下文元数据格式无效",
+        "忽略无法解析的历史任务清单状态",
+        "历史替换结果缺少活跃分段",
+        "无法持久化缺少活跃分段的会话",
+        "已存在的历史会话缺少持久化游标",
+        "不支持的历史分段回退：",
+        "活跃历史分段身份与持久化游标不一致",
+        "追加历史分段时缺少待封存的上一活跃分段",
+        "追加历史分段时缺少目标分段：",
+        "待封存历史分段身份与持久化游标不一致",
+        "不支持的历史分段跳变："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/history/chatHistoryParser.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "历史消息解析失败：",
+        "历史分段消息格式无效",
+        "历史消息解析 Worker 失败：",
+        "历史消息解析 Worker 消息反序列化失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/page/chatPageHelpers.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "新分支",
+        "新对话"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/chat/search/providerNativeSearchStatus.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "正在联网搜索..."
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/debug/agentDebug.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "写入 Agent dev 调试日志失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/kbrain/catalog.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "K-brain 模型目录加载失败："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/kbrain/turn.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "该会话上一轮仍在运行，已等待 3 分钟仍未结束。请点击停止按钮结束当前任务后重新发送，或稍后再试。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/startup/render.ts",
+      "reason": "Startup and migration screen text rendered by a .ts module; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "等待检查",
+        "正在读取旧数据",
+        "正在整理会话",
+        "正在导入会话",
+        "已处理当前会话",
+        "检查与迁移结束",
+        "读取未完成，请进入应用后查看",
+        "正在连接本地服务",
+        "正在检查旧版数据",
+        "正在迁移旧版会话",
+        "正在准备主界面",
+        "启动未完成",
+        "首次升级需要整理历史数据，数据较多时可能需要一些时间。",
+        "即将打开工作区…",
+        "正在准备启动环境…",
+        "已处理",
+        "条 · 本次迁移",
+        "· 已迁移",
+        "· 跳过",
+        "· 问题",
+        "· 当前步骤",
+        "秒",
+        "旧版会话",
+        "其他历史会话",
+        "已等待",
+        "当前步骤耗时较长。可以跳过直接进入应用，未完成的迁移会在后台继续；也可以重启本地服务后重试。",
+        "当前步骤耗时较长，仍在等待处理结果。",
+        "重启本地服务并重试",
+        "LiveAgent 启动进度",
+        "重试",
+        "跳过，进入应用",
+        "本地服务或数据准备未能完成，请重试。若仍失败，请查看诊断日志。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/lib/tools/mcpTools.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "MCP tools 加载失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/composer/composerDraftText.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "请先在项目栏选择或创建项目后再发送大段粘贴内容。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/gateway/chatRuntimeSnapshot.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "执行结果",
+        "工具执行结果"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/gateway/useGatewayBridgeReadiness.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "历史窗口缺少活跃分段"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/history/useConversationHistoryActions.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "历史消息已发生变化，请重新选择要重试或分支的消息",
+        "历史窗口缺少活跃分段",
+        "历史分页游标未向前推进",
+        "无法替换未加载的历史会话",
+        "历史会话缺少 revision，无法安全替换消息",
+        "重新加载会话后缺少活跃分段",
+        "历史消息已发生变化，请重新选择要编辑的消息",
+        "历史替换结果缺少活跃分段"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/history/useSharedHistory.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "读取已分享历史列表失败",
+        "读取分享状态失败",
+        "Remote 尚未配置并连接成功，暂时不能分享会话。",
+        "Remote 尚未配置并连接成功，暂时不能开启分享。",
+        "开启分享失败",
+        "关闭分享失败",
+        "更新分享脱敏设置失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/hooks/useEditResend.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "编辑重发未启动，原历史保持不变。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/hooks/useNotifyToasts.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "上下文压缩失败："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/hooks/usePendingUploads.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "请先选择或创建会话后再上传文件。",
+        "上传目标已失效，已忽略本次导入的文件",
+        "已合并",
+        "个重复文件",
+        "最多上传",
+        "个文件，已忽略",
+        "个额外文件",
+        "：",
+        "以下文件已跳过：",
+        "当前正在上传文件，请稍候",
+        "文件上传仅在 tools 模式可用。",
+        "请先在项目栏选择或创建项目后再上传文件。",
+        "所选文件均不受当前 Read 支持",
+        "导入文件失败",
+        "拖入文件均不受当前 Read 支持",
+        "剪贴板文件均不受当前 Read 支持",
+        "导入剪贴板文件失败"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/hooks/useUploadZoneDrop.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "文件投放目标会话已失效，请重试"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/queue/useChatTurnQueue.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "正在停止当前任务..."
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/runtime/chatPageRuntime.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "Request failed：",
+        "Hook「",
+        "」在",
+        "执行失败："
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/runtime/modelSelection.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "请先在输入框左下角选择一个模型（或先去设置添加模型）。",
+        "所选供应商不存在，请重新选择模型。",
+        "所选模型未启用，请重新选择模型。",
+        "远程请求携带的模型配置无效，请在 WebUI 重新选择模型后重试。",
+        "远程请求所选模型对应的供应商不存在，请同步桌面端设置后在 WebUI 重新选择模型。",
+        "远程请求所选模型的供应商类型与桌面端配置不一致，请同步桌面端设置后在 WebUI 重新选择模型。",
+        "远程请求所选模型未在桌面端启用，请同步桌面端设置后在 WebUI 重新选择模型。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/runtime/useChatModelSelection.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "保存会话思考设置失败，请重新选择重试。",
+        "保存会话模型选择失败，请重新选择重试。"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/runtime/useSendChatTurn.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "当前会话仍在加载，请稍候。",
+        "当前会话加载失败，请重新打开该会话后再继续。",
+        "当前模型配置不可用，请重新选择后重试。",
+        "大段粘贴内容导入附件失败",
+        "替换编辑消息失败，原历史保持不变。",
+        "启动远程对话运行失败",
+        "历史记录保存失败，已取消发送。",
+        "历史保存后的启动操作失败",
+        "找不到以下 Skills：",
+        "（请先重新扫描固定 Skills 目录）"
+      ]
+    },
+    {
+      "file": "crates/agent-gui/src/pages/chat/workspace/useWorkspaceProjects.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "选择项目目录失败",
+        "添加拖入的工作空间失败"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/components/project-tools/git-review/model.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "找不到 origin remote",
+        "还没有设置远端仓库"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/features/image-studio/studioController.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "图像工作台"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/chat/composerDraft.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "部分大段粘贴内容未能导入为附件。"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/chat/uiMessages.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "...（展示已截断，超出参数显示预算）",
+        "...（已截断，len=",
+        "）",
+        "...（len=",
+        "...（已截断预览，len=",
+        "）..."
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/providers/errorMessage.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "："
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/providers/modelVendor.ts",
+      "reason": "Model vendor group names double as identifiers (KnownModelVendor); they need a display-label map before translation.",
+      "literals": [
+        "其他",
+        "智谱",
+        "字节豆包",
+        "百度",
+        "腾讯",
+        "零一万物"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/settings/index.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "未命名供应商",
+        "未命名模板",
+        "未命名 SSH"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/settings/workspaceProjects.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "未命名分组"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/skills/index.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "发现 Skill 元数据无效：",
+        "（",
+        "）"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/skills/useChatSkills.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "加载 skills 失败"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/lib/ssh/scan.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "无法定位用户目录。"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/settings/cuaDriverForm.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "trycua/cua — CUA 驱动（跨平台）"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/settings/imageSettingsAdapter.ts",
+      "reason": "Image service and operation labels mixed with vendor product names; predates .ts scanning. Move the labels to i18n.",
+      "literals": [
+        "火山方舟 Images",
+        "即梦 Visual OpenAPI",
+        "RunningHub 工作流",
+        "RunningHub 模型 API",
+        "Security Token（可选）",
+        "文字生成",
+        "参考生成",
+        "编辑",
+        "遮罩编辑",
+        "新图像连接",
+        "新图像目标",
+        "请先移除或改用其他连接的目标。",
+        "参数定义无效：检查唯一 key、类型、必填、枚举、范围和默认值。",
+        "工作流映射无效：需要正整数版本、输入字段和至少一个输出节点；节点和字段不能重复。",
+        "连接标识无效或重复。",
+        "请填写连接名称和供应商。",
+        "连接并发必须为 1–16。",
+        "请填写已有供应商 ID。",
+        "连接地址不能包含凭据、查询参数或片段。",
+        "请填写有效连接地址。",
+        "请选择有效认证方式。",
+        "凭据必须使用后端返回的引用。",
+        "目标标识无效或重复。",
+        "目标缺少连接。",
+        "已启用的目标不能使用已停用的连接，请先启用连接或停用目标。",
+        "请填写目标名称、协议版本及模型或工作流标识。",
+        "至少声明一种有效且不重复的操作。",
+        "输入图片数量须为 0–16，输出数量须为 1–16。",
+        "参考或编辑需要至少一张输入图；遮罩需要至少两张。",
+        "请选择有效且不重复的输出格式。",
+        "参数 schema 无效，请检查类型、枚举和默认值。",
+        "工作流必须为每个已声明参数提供唯一输入映射。",
+        "工作流需要有效版本和节点映射。",
+        "模型目标不能包含工作流映射。",
+        "RunningHub 协议需要工作流目标。",
+        "设置已被其他页面更新。草稿已保留，请读取最新版本并处理冲突。",
+        "连接或目标仍被任务引用。请等待任务结束，并先移除依赖目标。",
+        "当前身份无法修改图像设置，请检查登录状态和权限。",
+        "设置未被接受，请检查连接、模型标识、参数和工作流映射。",
+        "连接或目标已不存在，请读取最新设置。",
+        "当前后端不支持此操作，请检查后端版本。",
+        "操作未能确认完成。草稿已保留，请检查后端连接后读取最新设置。",
+        "凭据未能确认写入。"
+      ]
+    },
+    {
+      "file": "crates/agent-ui/src/pages/settings/memory/panelModel.ts",
+      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
+      "literals": [
+        "手动应用结果：已选择",
+        "条建议，",
+        "条写入成功。",
+        "条写入成功，",
+        "条失败或跳过。",
+        "条建议，全部未写入，",
+        "手动应用结果",
+        "模型原始总结："
       ]
     }
   ]

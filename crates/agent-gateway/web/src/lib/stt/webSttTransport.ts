@@ -1,4 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { SttError, type SttErrorCode } from "@liveagent/ui/lib/stt/errors";
 import type {
   SttRuntimeEvent,
   SttTransport,
@@ -37,14 +38,15 @@ class WebSttTransport implements SttTransport {
       const timer = window.setTimeout(() => {
         settled = true;
         socket.close();
-        reject(new Error("Gateway STT 连接超时"));
+        reject(new SttError("gatewayTimeout"));
       }, 10_000);
-      const settleError = (message: string) => {
+      const settleError = (error: Error) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timer);
-        reject(new Error(message));
+        reject(error);
       };
+      const settleCode = (code: SttErrorCode) => settleError(new SttError(code));
 
       socket.onopen = () => {
         this.sendFrame({
@@ -55,20 +57,22 @@ class WebSttTransport implements SttTransport {
           }),
         });
       };
-      socket.onerror = () => settleError("Gateway STT 网络连接失败");
+      socket.onerror = () => settleCode("gatewayNetwork");
       socket.onmessage = (message) => {
         if (!(message.data instanceof ArrayBuffer)) return;
         let frame: SttServerFrame;
         try {
           frame = fromBinary(SttServerFrameSchema, new Uint8Array(message.data));
         } catch {
-          settleError("Gateway STT 返回了无效协议帧");
+          settleCode("gatewayProtocol");
           return;
         }
         const payload = frame.payload;
         if (payload.case === "hello") {
           if (!payload.value.ok) {
-            settleError(payload.value.message || "Gateway STT 鉴权失败");
+            // The Gateway's own reason, when it gives one, is more specific than the code.
+            const reason = payload.value.message.trim();
+            settleError(reason ? new Error(reason) : new SttError("gatewayAuth"));
             return;
           }
           if (!settled) {
@@ -111,7 +115,7 @@ class WebSttTransport implements SttTransport {
         }
       };
       socket.onclose = () => {
-        settleError("Gateway STT 连接已关闭");
+        settleCode("gatewayClosed");
         this.handler?.({ type: "closed", sessionId: options.sessionId });
       };
     });
@@ -142,7 +146,7 @@ class WebSttTransport implements SttTransport {
   private sendFrame(payload: SttClientPayload) {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      throw new Error("Gateway STT 未连接");
+      throw new SttError("gatewayNotConnected");
     }
     socket.send(toBinary(SttClientFrameSchema, create(SttClientFrameSchema, { payload })));
   }

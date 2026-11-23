@@ -167,6 +167,7 @@ function createHarness(options = {}) {
       disabled: false,
       sessionKey: "conversation-a",
       hidden: false,
+      t: (key) => `t:${key}`,
       ...overrides,
     });
   };
@@ -252,6 +253,47 @@ test("missing provider configuration uses the dedicated guidance callback withou
   assert.equal(configurationRequired, 1);
   assert.deepEqual(errors, []);
   assert.deepEqual(harness.calls, []);
+});
+
+test("missing provider configuration without a guidance callback reports the translated message", async () => {
+  const harness = createHarness();
+  const errors = [];
+  const result = harness.render({
+    providerConfigured: false,
+    onError: (message) => errors.push(message),
+  });
+  await result.toggle();
+  await settle();
+  assert.deepEqual(errors, ["t:chat.stt.error.providerIncomplete"]);
+  assert.equal(harness.render().error, "t:chat.stt.error.providerIncomplete");
+});
+
+test("recognition failures are translated, while provider messages are shown as sent", async () => {
+  for (const [message, expected] of [
+    ["", "t:chat.stt.error.recognitionFailed"],
+    ["quota exceeded", "quota exceeded"],
+  ]) {
+    const harness = createHarness();
+    const errors = [];
+    const result = harness.render({ onError: (text) => errors.push(text) });
+    await result.toggle();
+    await settle();
+    harness.callbacks[0]({ type: "error", sessionId: harness.sessionIds[0], code: "x", message });
+    await settle();
+    assert.deepEqual(errors, [expected]);
+  }
+});
+
+test("an unexpected close is reported with the translated message", async () => {
+  const harness = createHarness();
+  const errors = [];
+  const result = harness.render({ onError: (text) => errors.push(text) });
+  await result.toggle();
+  await settle();
+  harness.callbacks[0]({ type: "ready", sessionId: harness.sessionIds[0] });
+  harness.callbacks[0]({ type: "closed", sessionId: harness.sessionIds[0] });
+  await settle();
+  assert.deepEqual(errors, ["t:chat.stt.error.connectionClosed"]);
 });
 
 test("stop halts capture, sends four 100 ms tail chunks, then finishes transport", async () => {
