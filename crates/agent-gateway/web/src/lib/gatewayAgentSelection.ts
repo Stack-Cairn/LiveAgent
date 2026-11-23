@@ -4,7 +4,7 @@ import type { AgentStatus } from "./gatewayTypes";
 // The gateway registers a watcher under this prefix when a browser subscribes
 // to a workspace whose Agent is not connected. It forwards file activity only:
 // it can never chat, so it is not a target a user should land on.
-export const GATEWAY_LOCAL_WORKSPACE_AGENT_PREFIX = "gateway-local-workspace-";
+const GATEWAY_LOCAL_WORKSPACE_AGENT_PREFIX = "gateway-local-workspace-";
 
 function agentIdOf(agent: AgentStatus | null | undefined): string {
   return (agent?.agent_id ?? "").trim();
@@ -38,7 +38,7 @@ function rankAgent(agent: AgentStatus): number {
 }
 
 /** Chat-capable first, then online, then offline; ties sort by id. */
-export function compareAgentsForSelection(left: AgentStatus, right: AgentStatus): number {
+function compareAgentsForSelection(left: AgentStatus, right: AgentStatus): number {
   const rankDelta = rankAgent(left) - rankAgent(right);
   if (rankDelta !== 0) return rankDelta;
   return agentIdOf(left).localeCompare(agentIdOf(right));

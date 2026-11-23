@@ -4,7 +4,7 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useRef, useState } from "react";
 
 // How long "Reconnected" stays visible after the connection comes back.
-export const GATEWAY_RECONNECTED_NOTICE_MS = 2_500;
+const GATEWAY_RECONNECTED_NOTICE_MS = 2_500;
 
 type GatewayConnectionBannerProps = {
   // The Gateway connection is down (dropped after it was up, or the first

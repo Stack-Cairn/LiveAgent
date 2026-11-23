@@ -502,7 +502,6 @@ export class AsyncEventQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
 export {
   GATEWAY_RECONNECTING_NOTICE,
   isConnectionSetupTimeoutError,
-  isGatewayTransportFailure,
   isRecoverableGatewayTransportError,
 } from "./gatewayTransportErrors";
 // Single source of truth for error-message coercion lives in the shared UI

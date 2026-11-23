@@ -85,7 +85,7 @@ export function useGatewayTargetOffline(
   });
 }
 
-export function GatewayTargetOfflineBanner({
+function GatewayTargetOfflineBanner({
   target,
   onSwitch,
 }: {
