@@ -124,12 +124,11 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 			return nil, nil, nil
 		}
 		attempt, _ := payload["attempt"].(float64)
-		attempts, _ := payload["max"].(float64)
 		delay, _ := payload["delay_ms"].(float64)
 		progress, err := json.Marshal(map[string]any{
 			"stage":         "retrying",
 			"retry_attempt": int64(attempt),
-			"retry_max":     int64(max(attempt, attempts-1)),
+			"retry_max":     retryMax(payload, attempt),
 			"retry_at_ms":   time.Now().UnixMilli() + int64(max(delay, 0)),
 		})
 		if err != nil {
@@ -156,6 +155,17 @@ func toChatEvent(event Event, callArgs func(id string) map[string]any) (*v2.Chat
 	}
 	base.Data = string(data)
 	return base, nil, nil
+}
+
+// retryMax is how many retries the turn's status counts to. K-brain's max counts
+// every attempt including the first; retries_remaining, when present, is the
+// exact number still to come after this one.
+func retryMax(payload map[string]any, attempt float64) int64 {
+	if remaining, ok := payload["retries_remaining"].(float64); ok && remaining >= 0 {
+		return int64(max(attempt, attempt+remaining-1))
+	}
+	attempts, _ := payload["max"].(float64)
+	return int64(max(attempt, attempts-1))
 }
 
 func payloadAsMap(payload map[string]any) (map[string]any, bool) { return payload, payload != nil }

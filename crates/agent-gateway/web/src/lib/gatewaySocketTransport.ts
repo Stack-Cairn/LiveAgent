@@ -1287,7 +1287,7 @@ export class GatewayWebSocketTransport {
     host.clearTimeout(pending.timeoutId);
     this.pending.delete(decoded.requestId);
     if (decoded.kind === "error") {
-      pending.reject(new Error(decoded.message || "Request failed"));
+      pending.reject(Object.assign(new Error(decoded.message || "Request failed"), decoded.detail));
       return;
     }
     pending.resolve(decoded.payload);

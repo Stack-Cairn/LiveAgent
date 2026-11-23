@@ -1563,6 +1563,14 @@ message PongResponse {
 message ErrorResponse {
   int32 code = 1;
   string message = 2;
+  // Machine-readable reason of a failed K-brain request, when K-brain gave one.
+  // A failed model discovery sets invalid_api_key, not_found, rate_limited,
+  // unreachable or upstream_error.
+  string error_code = 3;
+  // HTTP status the upstream provider answered with (0 when it gave none).
+  int32 upstream_status = 4;
+  // Short, redacted error text from the upstream provider.
+  string upstream_message = 5;
 }
 
 message ProviderCustomHeader {

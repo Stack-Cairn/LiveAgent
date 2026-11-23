@@ -158,7 +158,7 @@ func (c *browserConn) handleKBrainProviderModels(requestID, agentID string, requ
 	defer cancel()
 	response, err := c.srv.kbrainRelay.ProviderModels(ctx, request)
 	if err != nil {
-		_ = c.sendLocalError(requestID, errorMessage(err))
+		_ = c.sendLocalErrorFrom(requestID, err)
 		return
 	}
 	c.sendKBrainResponse(requestID, agentID, &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_ProviderModelsResp{ProviderModelsResp: response}})

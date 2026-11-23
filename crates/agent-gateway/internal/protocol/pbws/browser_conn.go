@@ -1,6 +1,7 @@
 package pbws
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/liveagent/agent-gateway/internal/config"
+	"github.com/liveagent/agent-gateway/internal/kbrain"
 	"github.com/liveagent/agent-gateway/internal/observability"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
@@ -352,6 +354,23 @@ func (c *browserConn) sendLocalError(requestID string, message string) error {
 		Payload: &gatewayv2.WebServerFrame_LocalError{
 			LocalError: &gatewayv2.ErrorResponse{Message: message},
 		},
+	})
+}
+
+// sendLocalErrorFrom is sendLocalError for err, forwarding the machine-readable
+// reason of a failed K-brain request (a model discovery's errorCode, upstream
+// status and message) so the browser can explain it.
+func (c *browserConn) sendLocalErrorFrom(requestID string, err error) error {
+	response := &gatewayv2.ErrorResponse{Message: errorMessage(err)}
+	var failure *kbrain.RequestFailure
+	if errors.As(err, &failure) {
+		response.ErrorCode = failure.Code
+		response.UpstreamStatus = int32(failure.UpstreamStatus)
+		response.UpstreamMessage = failure.UpstreamMessage
+	}
+	return c.send(wscore.FrameControl, "local_error", &gatewayv2.WebServerFrame{
+		RequestId: requestID,
+		Payload:   &gatewayv2.WebServerFrame_LocalError{LocalError: response},
 	})
 }
 

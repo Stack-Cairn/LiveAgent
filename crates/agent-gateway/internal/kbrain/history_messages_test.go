@@ -128,3 +128,51 @@ func TestHistoryMessagesJSONMarksLegacyBackgroundNotices(t *testing.T) {
 		}
 	}
 }
+
+// A reply cut off by a failure keeps its text and gains the error; a failure's
+// classification and a cancel's reason reach the WebUI in its field names.
+func TestHistoryMessagesJSONCarriesFailureAndCancelOutcome(t *testing.T) {
+	var messages []Message
+	if err := json.Unmarshal([]byte(`[
+		{"id":"u1","role":"user","content":[{"type":"text","text":"q"}]},
+		{"id":"m1","role":"assistant","content":[{"type":"text","text":"Here is the first part"}],"stop_reason":"error","error":"unexpected EOF","error_detail":{"kind":"connection_lost"}},
+		{"id":"u2","role":"user","content":[{"type":"text","text":"again"}]},
+		{"id":"assistant-error-r2","role":"assistant","content":[{"type":"text","text":"401 Unauthorized"}],"stop_reason":"error","error_detail":{"kind":"invalid_api_key","upstream_status":401,"provider_message":"Incorrect API key"}},
+		{"id":"u3","role":"user","content":[{"type":"text","text":"more"}]},
+		{"id":"assistant-stopped-r3","role":"assistant","stop_reason":"cancelled","cancel_reason":"shutdown"},
+		{"id":"m4","role":"assistant","content":[{"type":"text","text":"done"}]}
+	]`), &messages); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := historyMessagesJSON(messages, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatal(err)
+	}
+	partial := out[1]
+	if partial["stopReason"] != "error" || partial["errorMessage"] != "unexpected EOF" || len(partial["content"].([]any)) != 1 {
+		t.Fatalf("partial reply = %v", partial)
+	}
+	if detail, _ := partial["errorDetail"].(map[string]any); detail["kind"] != "connection_lost" || len(detail) != 1 {
+		t.Fatalf("partial reply detail = %v", partial["errorDetail"])
+	}
+	failed, _ := out[3]["errorDetail"].(map[string]any)
+	if failed["kind"] != "invalid_api_key" || failed["upstreamStatus"] != float64(401) || failed["providerMessage"] != "Incorrect API key" {
+		t.Fatalf("failed detail = %v", out[3])
+	}
+	if _, has := out[3]["errorMessage"]; has {
+		t.Fatalf("a no-output failure keeps its text as the error, got %v", out[3])
+	}
+	stopped := out[5]
+	if stopped["stopReason"] != "aborted" || stopped["cancelReason"] != "shutdown" {
+		t.Fatalf("stopped marker = %v", stopped)
+	}
+	for _, key := range []string{"errorMessage", "errorDetail", "cancelReason"} {
+		if _, has := out[6][key]; has {
+			t.Fatalf("a finished reply carries no %s: %v", key, out[6])
+		}
+	}
+}

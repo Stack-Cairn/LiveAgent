@@ -9,7 +9,7 @@ import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapte
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { isPermissionDeniedToolResult } from "@liveagent/ui/lib/chat/toolPermissionDenied";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { Fragment, memo, type ReactNode, useMemo } from "react";
+import { memo, useMemo } from "react";
 import {
   AppWindow,
   Bot,
@@ -43,9 +43,7 @@ import {
   type ToolActivityCategory,
 } from "./assistantBubbleUtils";
 import { getConciseToolTarget } from "./conciseToolTarget";
-import { ThinkingDisclosure } from "./ThinkingDisclosure";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
-import type { WorkTraceReasoningSlot } from "./workTraceDisplay";
 
 function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]) {
   const runningIds = new Set(runningToolCallIds);
@@ -171,15 +169,6 @@ function ToolTraceGroupInner(props: {
    * already says a tool is running, so the header drops its own running status.
    */
   showTurnStatus?: boolean;
-  /**
-   * Reasoning that happened between (and around) these calls, folded into the
-   * batch in chronological order instead of splitting it into separate rows.
-   */
-  reasoning?: WorkTraceReasoningSlot[];
-  /** Key of the reasoning segment that is still streaming, if any. */
-  activeReasoningKey?: string | null;
-  renderMode?: "streaming" | "static";
-  workdir?: string;
 }) {
   const {
     items,
@@ -189,10 +178,6 @@ function ToolTraceGroupInner(props: {
     redactToolContent = false,
     onOpenFileLink,
     showTurnStatus = false,
-    reasoning = EMPTY_REASONING,
-    activeReasoningKey = null,
-    renderMode,
-    workdir,
   } = props;
   const { locale, t } = useLocale();
   const detailedProgress = useDetailedProgress();
@@ -275,21 +260,6 @@ function ToolTraceGroupInner(props: {
         counts.running > 0 ||
         counts.waiting > 0 ||
         (counts.denied > 0 && !deniedOnly));
-  const visibleReasoning = redactToolContent ? EMPTY_REASONING : reasoning;
-  const renderReasoningBefore = (index: number): ReactNode =>
-    visibleReasoning
-      .filter((slot) => slot.beforeIndex === index)
-      .map((slot) => (
-        <ThinkingDisclosure
-          key={slot.key}
-          segments={slot.segments}
-          activeKey={activeReasoningKey}
-          renderMode={renderMode}
-          readOnly={readOnly}
-          workdir={workdir}
-          onOpenFileLink={onOpenFileLink}
-        />
-      ));
   const BatchIcon =
     TOOL_BATCH_ICONS[runningActivity?.category ?? batchCounts[0]?.category ?? "other"];
 
@@ -339,51 +309,24 @@ function ToolTraceGroupInner(props: {
               )}
             >
               {items.map((item, index) => (
-                <Fragment key={getToolTraceKey(item, index)}>
-                  {renderReasoningBefore(index)}
-                  <MemoToolCallItem
-                    item={item}
-                    readOnly={readOnly}
-                    redactToolContent={redactToolContent}
-                    onOpenFileLink={onOpenFileLink}
-                    compactChip
-                    isRunning={Boolean(
-                      item.toolCall.id && runningToolCallIds.includes(item.toolCall.id),
-                    )}
-                  />
-                </Fragment>
+                <MemoToolCallItem
+                  key={getToolTraceKey(item, index)}
+                  item={item}
+                  readOnly={readOnly}
+                  redactToolContent={redactToolContent}
+                  onOpenFileLink={onOpenFileLink}
+                  compactChip
+                  isRunning={Boolean(
+                    item.toolCall.id && runningToolCallIds.includes(item.toolCall.id),
+                  )}
+                />
               ))}
-              {renderReasoningBefore(items.length)}
             </div>
           </div>
         )}
       </LazyCollapse>
     </div>
   );
-}
-
-const EMPTY_REASONING: WorkTraceReasoningSlot[] = [];
-
-function areReasoningSlotsEqual(
-  previous: WorkTraceReasoningSlot[] = EMPTY_REASONING,
-  next: WorkTraceReasoningSlot[] = EMPTY_REASONING,
-) {
-  if (previous === next) return true;
-  if (previous.length !== next.length) return false;
-  return previous.every((slot, index) => {
-    const other = next[index];
-    return (
-      other !== undefined &&
-      slot.key === other.key &&
-      slot.beforeIndex === other.beforeIndex &&
-      slot.segments.length === other.segments.length &&
-      slot.segments.every(
-        (segment, segmentIndex) =>
-          segment.key === other.segments[segmentIndex]?.key &&
-          segment.text === other.segments[segmentIndex]?.text,
-      )
-    );
-  });
 }
 
 function areRunningIdsEqual(previous?: string[], next?: string[]) {
@@ -403,10 +346,6 @@ export const ToolTraceGroup = memo(
     previous.showTurnStatus === next.showTurnStatus &&
     previous.live === next.live &&
     previous.onOpenFileLink === next.onOpenFileLink &&
-    previous.activeReasoningKey === next.activeReasoningKey &&
-    previous.renderMode === next.renderMode &&
-    previous.workdir === next.workdir &&
-    areReasoningSlotsEqual(previous.reasoning, next.reasoning) &&
     previous.items.length === next.items.length &&
     previous.items.every(
       (item, index) =>

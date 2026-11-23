@@ -36,7 +36,12 @@ import {
 } from "@liveagent/ui/lib/chat/runProgress";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
-import { isKBrainErrorMessageId } from "@liveagent/ui/lib/chat/turnError";
+import {
+  isKBrainErrorMessageId,
+  isKBrainStoppedMarkerId,
+  readTurnErrorDetail,
+  type TurnErrorDetail,
+} from "@liveagent/ui/lib/chat/turnError";
 import type { Locale } from "../../i18n/config";
 import type { ConversationViewState } from "../chat/conversation/conversationState";
 import { appendMessagesToConversation } from "../chat/conversation/conversationState";
@@ -170,6 +175,10 @@ function canonicalMessage(message: Message): KBrainMessage | null {
   };
 }
 
+function isStopMarker(message: Message | undefined): boolean {
+  return message?.role === "assistant" && isKBrainStoppedMarkerId((message as { id?: unknown }).id);
+}
+
 export function contextToKBrainMessages(context: Context): KBrainMessage[] {
   const messages: KBrainMessage[] = [];
   if (context.systemPrompt?.trim())
@@ -180,6 +189,8 @@ export function contextToKBrainMessages(context: Context): KBrainMessage[] {
   // K-brain `question` calls show as AskUserQuestion; send them back under their own name.
   const renamed = new Set<string>();
   for (const message of context.messages) {
+    // A stop marker records that nothing was produced; it is not a reply to replay.
+    if (isStopMarker(message)) continue;
     const canonical = canonicalMessage(message);
     if (!canonical) continue;
     for (const call of canonical.tool_calls ?? []) {
@@ -634,7 +645,8 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
   });
   const model = params.model;
   const promptContent = canonicalPromptContent(params);
-  const tail = params.context.messages.at(-1) as
+  // The prompt being resumed sits under any stop marker a stopped run left.
+  const tail = params.context.messages.filter((message) => !isStopMarker(message)).at(-1) as
     | (Message & { id?: string; kbrainEditPending?: boolean })
     | undefined;
   let resumeMessageId =
@@ -795,6 +807,8 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
   let afterSeq = accepted.accepted_seq;
   let terminal: "stop" | "error" | "aborted" = "stop";
   let errorMessage: string | undefined;
+  let errorDetail: TurnErrorDetail | undefined;
+  let cancelReason: string | undefined;
   let sawTerminal = false;
   let permissionFailure: Error | undefined;
   const pendingPermissions = new Map<string, AbortController>();
@@ -928,6 +942,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           task_id?: string;
           attempt?: number;
           max?: number;
+          retries_remaining?: number;
           delay_ms?: number;
         }>(event);
         if (!retry || retry.task_id || typeof retry.attempt !== "number") break;
@@ -935,7 +950,7 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
           ...progress,
           stage: "retrying",
           retry_attempt: retry.attempt,
-          retry_max: Math.max(retry.attempt, (retry.max ?? retry.attempt + 1) - 1),
+          retry_max: retryMax(retry.attempt, retry.max, retry.retries_remaining),
           retry_at_ms: Date.now() + Math.max(0, retry.delay_ms ?? 0),
         });
         break;
@@ -1305,15 +1320,19 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
         reportStatus(null);
         break;
       }
-      case "run.failed":
+      case "run.failed": {
         terminal = "error";
-        errorMessage = eventPayload<{ error?: string }>(event)?.error ?? "K-brain run failed";
+        const failed = eventPayload<{ error?: string; error_detail?: unknown }>(event);
+        errorMessage = failed?.error ?? "K-brain run failed";
+        errorDetail = readTurnErrorDetail(failed?.error_detail);
         sawTerminal = true;
         streamAbortController.abort();
         cancelPendingPermissions();
         break;
+      }
       case "run.cancelled":
         terminal = "aborted";
+        cancelReason = eventPayload<{ cancel_reason?: string }>(event)?.cancel_reason || undefined;
         sawTerminal = true;
         streamAbortController.abort();
         cancelPendingPermissions();
@@ -1401,6 +1420,8 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     usage: usage(finalMessage),
     stopReason: terminal,
     ...(errorMessage ? { errorMessage } : {}),
+    ...(terminal === "error" && errorDetail ? { errorDetail } : {}),
+    ...(terminal === "aborted" && cancelReason ? { cancelReason } : {}),
     timestamp: Date.now(),
   };
   if (params.applyConversationState && params.getConversationState) {
@@ -1409,6 +1430,18 @@ async function executeKBrainTurn(params: KBrainTurnParams): Promise<AssistantMes
     );
   }
   return message;
+}
+
+/**
+ * Retries of a failed model request, for "Retrying (n/max)": `max` counts the
+ * first attempt too. Newer backends also send `retries_remaining` (attempts
+ * still to come), which is read first.
+ */
+export function retryMax(attempt: number, max?: number, retriesRemaining?: number) {
+  if (typeof retriesRemaining === "number" && retriesRemaining >= 0) {
+    return Math.max(attempt, attempt + retriesRemaining - 1);
+  }
+  return Math.max(attempt, (max ?? attempt + 1) - 1);
 }
 
 // Scope only goes with allow_always and a reason only with reject, so a stray field

@@ -65,6 +65,7 @@ import {
   previousOnboardingStep,
 } from "@liveagent/ui/lib/onboarding/onboardingState";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import { describeModelDiscoveryError } from "@liveagent/ui/pages/settings/modelDiscoveryError";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { ProviderModal } from "@liveagent/ui/pages/settings/ProviderModal";
 import { ProviderBrandIcon } from "@liveagent/ui/pages/settings/ProviderPresentation";
@@ -323,7 +324,7 @@ function ModelStep(props: Pick<OnboardingDialogProps, "settings" | "setSettings"
       });
     } catch (error) {
       if (generation !== testGeneration.current) return;
-      setTest({ phase: "failed", error: error instanceof Error ? error.message : String(error) });
+      setTest({ phase: "failed", error: describeModelDiscoveryError(error, t) });
     }
   };
 

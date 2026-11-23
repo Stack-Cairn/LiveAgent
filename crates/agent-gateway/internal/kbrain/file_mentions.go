@@ -10,17 +10,26 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// K-brain has no mention index yet, so @ file mentions are built from its
-// generic /v1/fs "list" walk with the desktop command's filtering and ranking
-// (agent-gui src-tauri commands/workspace/fs.rs fs_mention_list_sync). The walk
-// does not read .gitignore and rejects trees over 10000 entries, so deep
-// workspaces fall back to shallower depths and report truncation.
+// @ file mentions come from K-brain's /v1/fs "mention_list" on backends with
+// capability filesystem_mention_list: the backend applies the ignore rules
+// (.gitignore, node_modules, ...) and the ranking and returns at most 500
+// matches. Older backends get them built from the generic "list" walk with the
+// desktop command's filtering and ranking (agent-gui src-tauri
+// commands/workspace/fs.rs fs_mention_list_sync); that walk does not read
+// .gitignore and rejects trees over 10000 entries, so deep workspaces fall back
+// to shallower depths and report truncation.
 
 var mentionListDepths = []int{8, 4, 2, 1}
 
 const (
 	mentionListWalkLimit     = 10000
 	mentionDefaultMaxResults = 5000
+	// mentionListMaxResults is the most K-brain's mention_list answers (more is a 422).
+	mentionListMaxResults = 500
+	// An unfiltered request for more than mentionDefaultMaxResults is a
+	// whole-workspace index (quick open asks for 20000), which mention_list's
+	// 500-match cap cannot serve, so it keeps the list walk.
+	mentionFullIndexMinResults = mentionDefaultMaxResults + 1
 )
 
 var mentionIgnoredDirNames = map[string]bool{
@@ -56,6 +65,18 @@ func (r *Relay) fileMentions(ctx context.Context, req *gatewayv2.FileMentionList
 		maxResults = mentionDefaultMaxResults
 	}
 	query := normalizeMentionQuery(req.GetQuery())
+	if maxResults < mentionFullIndexMinResults || query != "" {
+		health, err := r.client.verifiedHealth(ctx, handshakeCapabilityMaxAge)
+		if err == nil && health.CapabilityAtLeast("filesystem_mention_list", 1) {
+			out, supported, err := r.mentionList(ctx, workdir, query, min(maxResults, mentionListMaxResults), req.GetShowHidden())
+			if err != nil {
+				return nil, true, err
+			}
+			if supported {
+				return &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_FileMentionListResp{FileMentionListResp: out}}, true, nil
+			}
+		}
+	}
 	var lastErr error
 	for index, depth := range mentionListDepths {
 		input := map[string]any{"action": "list", "workdir": workdir, "path": "", "depth": depth, "max_results": mentionListWalkLimit, "show_hidden": req.GetShowHidden()}
@@ -81,6 +102,50 @@ func (r *Relay) fileMentions(ctx context.Context, req *gatewayv2.FileMentionList
 		return &gatewayv2.AgentEnvelope{Payload: &gatewayv2.AgentEnvelope_FileMentionListResp{FileMentionListResp: out}}, true, nil
 	}
 	return nil, true, lastErr
+}
+
+// mentionList asks K-brain's mention index. supported is false when the backend
+// turns the action down as unknown: "unsupported filesystem action" (422), or a
+// 400 for the unknown `query` field, which older backends reject before reading
+// the action.
+func (r *Relay) mentionList(ctx context.Context, workdir, query string, maxResults int, showHidden bool) (*gatewayv2.FileMentionListResponse, bool, error) {
+	input := map[string]any{"action": "mention_list", "workdir": workdir, "path": "", "query": query, "max_results": maxResults}
+	var raw json.RawMessage
+	response, err := r.client.requestLimited(ctx, "POST", "/v1/fs", input, &raw, 64<<10, 1<<20)
+	if err != nil {
+		return nil, true, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body := string(raw)
+		if (response.StatusCode == 422 && strings.Contains(body, "unsupported filesystem action")) ||
+			(response.StatusCode == 400 && strings.Contains(body, "unknown field")) {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("kbrain command: %s: %s", response.Status, raw)
+	}
+	var list struct {
+		Entries []struct {
+			Path string `json:"path"`
+			Kind string `json:"kind"`
+		} `json:"entries"`
+		Truncated bool `json:"truncated"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, true, err
+	}
+	out := &gatewayv2.FileMentionListResponse{Entries: make([]*gatewayv2.FileMentionEntry, 0, len(list.Entries)), Truncated: list.Truncated}
+	for _, entry := range list.Entries {
+		hidden := strings.HasPrefix(entry.Path, ".") || strings.Contains(entry.Path, "/.")
+		if entry.Path == "" || (hidden && !showHidden) {
+			continue
+		}
+		kind := "file"
+		if entry.Kind == "dir" {
+			kind = "dir"
+		}
+		out.Entries = append(out.Entries, &gatewayv2.FileMentionEntry{Path: entry.Path, Kind: kind, Hidden: hidden})
+	}
+	return out, true, nil
 }
 
 func normalizeMentionQuery(query string) string {

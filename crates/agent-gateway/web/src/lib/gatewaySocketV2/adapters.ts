@@ -132,6 +132,7 @@ import {
   WorkspaceSubscribeRequestSchema,
   WorkspaceUnsubscribeRequestSchema,
 } from "@/lib/proto/gen/proto/v2/gateway_ws_pb";
+import { type GatewayErrorFrame, localErrorFields } from "./errorDetail";
 
 // v2 WebSocket 子协议名（服务端必须回显）。
 export const GATEWAY_V2_SUBPROTOCOL = "liveagent.v2.pb";
@@ -1198,7 +1199,7 @@ export type DecodedServerFrame =
     }
   | { kind: "ping"; timestamp: number }
   | { kind: "response"; requestId: string; agentId: string; payload: unknown }
-  | { kind: "error"; requestId: string; agentId: string; message: string }
+  | GatewayErrorFrame
   | { kind: "event"; type: string; agentId: string; payload: unknown }
   | {
       kind: "progress";
@@ -1236,12 +1237,7 @@ export function decodeServerFrame(
     case "ping":
       return { kind: "ping", timestamp: num(payload.value.timestamp) };
     case "localError":
-      return {
-        kind: "error",
-        requestId,
-        agentId,
-        message: payload.value.message || "Request failed",
-      };
+      return { kind: "error", requestId, agentId, ...localErrorFields(payload.value) };
     case "agentResponse": {
       if (payload.value.payload.case === "clarifyTurnDelta") {
         return {

@@ -13,6 +13,7 @@ import {
   resolveHostedSearchTextBoundary,
   splitTextAroundHostedSearch,
 } from "@liveagent/ui/lib/chat/hostedSearch";
+import type { RoundMeta } from "@liveagent/ui/lib/chat/roundMeta";
 import {
   getUserMessageAttachments,
   type PendingUploadedFile,
@@ -64,18 +65,7 @@ export type UiRound = {
   // the `r<n>` pattern when round numbers shift so keys stay collision-free.
   key: string;
   blocks: UiRoundContentBlock[];
-  meta?: {
-    provider?: string;
-    model?: string;
-    api?: string;
-    stopReason?: string;
-    /** The error a failed round ended with; the transcript shows it as an error row. */
-    errorMessage?: string;
-    usage?: Usage;
-    contextRelevant?: boolean;
-    /** Leading blocks a mid-run usage report already covers (see contextUsage). */
-    usageBlockCount?: number;
-  };
+  meta?: RoundMeta;
 };
 
 export type LiveRound = UiRound & {
@@ -572,6 +562,10 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
             ...(errorMessage ? { errorMessage } : {}),
+            ...(errorMessage && assistant.errorDetail
+              ? { errorDetail: assistant.errorDetail }
+              : {}),
+            ...(assistant.cancelReason ? { cancelReason: assistant.cancelReason } : {}),
             usage: assistant.usage as Usage | undefined,
           },
         });

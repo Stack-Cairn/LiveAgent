@@ -12,7 +12,11 @@ import { StreamingSplitMarkdown } from "@liveagent/ui/components/chat/StreamingS
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { UiRound } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
-import { isStoppedReply, normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
+import {
+  isInterruptedByShutdown,
+  isStoppedReply,
+  normalizeLiveToolStatus,
+} from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { useStreamingReveal } from "@liveagent/ui/lib/chat/streamingReveal";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -36,6 +40,7 @@ import {
   countWorkTraceToolCalls,
   findLatestRunningToolItem,
   resolveActiveWorkItem,
+  trailingReplyTextLength,
   type WorkTraceItem,
 } from "./workTraceDisplay";
 
@@ -97,6 +102,28 @@ export function useRunningToolActivity(entries: readonly AssistantTurnLayoutEntr
   }, [entries, t]);
 }
 
+/** Reasoning shorter than this stays out of the trace (it would only add noise). */
+const MIN_VISIBLE_REASONING_MS = 1_000;
+
+/**
+ * Whether the turn's merged reasoning row is worth a row. A settled turn shows
+ * it unless its measured total is under a second (an unmeasured history turn
+ * shows it untimed). While the turn runs it appears once a second of reasoning
+ * has settled, so the status row stays the only live indicator; the detailed
+ * view also shows it while it streams.
+ */
+export function shouldShowReasoningRow(options: {
+  running: boolean;
+  active: boolean;
+  detailed: boolean;
+  settledMs: number | null;
+}) {
+  const { running, active, detailed, settledMs } = options;
+  if (running && active && detailed) return true;
+  if (settledMs === null) return !running;
+  return settledMs >= MIN_VISIBLE_REASONING_MS;
+}
+
 /** One row of the processing trace (see buildWorkTraceItems for the merge rule). */
 export function WorkTraceItemView(props: {
   item: WorkTraceItem;
@@ -118,6 +145,7 @@ export function WorkTraceItemView(props: {
     workdir,
     onOpenFileLink,
   } = props;
+  const detailed = useDetailedProgress();
   if (item.kind === "entry") {
     const { entry } = item;
     return (
@@ -142,6 +170,14 @@ export function WorkTraceItemView(props: {
   // sensitive, so it disappears entirely there.
   if (item.kind === "reasoning") {
     if (redactToolContent) return null;
+    const active = item.segments.some((segment) => segment.key === model.activeThinkingKey);
+    const visible = shouldShowReasoningRow({
+      running,
+      active,
+      detailed,
+      settledMs: model.stats.thinkingMs,
+    });
+    if (!visible) return null;
     return (
       <div data-assistant-operation="">
         <ThinkingDisclosure
@@ -162,12 +198,8 @@ export function WorkTraceItemView(props: {
         runningToolCallIds={running ? item.runningToolCallIds : EMPTY_RUNNING_TOOL_CALL_IDS}
         live={running && item.key === model.trailingKey}
         showTurnStatus={running && item.key === model.latestActivityKey}
-        reasoning={item.reasoning}
-        activeReasoningKey={model.activeThinkingKey}
-        renderMode={renderMode}
         readOnly={readOnly}
         redactToolContent={redactToolContent}
-        workdir={workdir}
         onOpenFileLink={onOpenFileLink}
       />
     </div>
@@ -449,7 +481,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
 
       {layout.interaction.map((entry) => renderEntry(entry, true))}
       {layout.answer.map((entry) => renderEntry(entry, false))}
-      {stopped ? <GenerationStoppedNotice /> : null}
+      {stopped ? <GenerationStoppedNotice interrupted={isInterruptedByShutdown(rounds)} /> : null}
       {/* The turn's one live status row: phase, elapsed time, nothing else. */}
       {running ? (
         <LiveAssistantStatus
@@ -458,6 +490,7 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
           awaitingDecision={attentionRequired}
           startedAtMs={startedAtMs}
           toolActivity={toolActivity}
+          replyTextLength={trailingReplyTextLength(layout.work)}
         />
       ) : null}
     </div>

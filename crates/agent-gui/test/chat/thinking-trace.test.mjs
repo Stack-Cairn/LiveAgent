@@ -34,8 +34,8 @@ test("reasoning renders as expandable disclosures instead of vanishing status te
   assert.match(disclosureSource, /resolveThinkingDurationMs/);
   assert.match(disclosureSource, /chat\.thoughtDuration/);
   assert.match(disclosureSource, /chat\.thinkingProcess/);
-  // Reasoning between tool calls folds into the tool group instead of its own rows.
-  assert.match(toolTraceSource, /<ThinkingDisclosure/);
+  // A turn's reasoning is one row of its own; tool groups never embed reasoning.
+  assert.doesNotMatch(toolTraceSource, /<ThinkingDisclosure/);
 });
 
 test("collapsing the live work trace re-homes the active block below the header", () => {

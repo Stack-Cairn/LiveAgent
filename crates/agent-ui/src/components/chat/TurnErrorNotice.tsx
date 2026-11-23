@@ -2,7 +2,11 @@ import "@liveagent/ui/i18n/namespaces/turnErrors";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { createContext, memo, useContext, useMemo } from "react";
 import { useLocale } from "../../i18n/index";
-import { classifyTurnError, type TurnErrorKind } from "../../lib/chat/turnError";
+import {
+  classifyTurnError,
+  type TurnErrorDetail,
+  type TurnErrorKind,
+} from "../../lib/chat/turnError";
 import { cn } from "../../lib/shared/utils";
 import { AlertCircle, ChevronRight, RotateCcw, Settings } from "../IconSet";
 
@@ -11,6 +15,9 @@ const COPY_KEYS: Record<TurnErrorKind, string> = {
   rate_limit: "rateLimit",
   server: "server",
   connection: "connection",
+  timeout: "timeout",
+  context_limit: "contextLimit",
+  bad_request: "badRequest",
   unknown: "unknown",
 };
 
@@ -29,12 +36,15 @@ export const TurnErrorSettingsProvider = TurnErrorSettingsContext.Provider;
  */
 export const TurnErrorNotice = memo(function TurnErrorNotice({
   error,
+  errorDetail,
   onRetry,
   retryDisabled = false,
   className,
 }: {
   /** The failure exactly as the backend reported it. */
   error: string;
+  /** The backend's structured classification; preferred over reading the text. */
+  errorDetail?: TurnErrorDetail | null;
   /** Resend the failed turn's prompt; the Retry button is hidden without it. */
   onRetry?: () => void;
   retryDisabled?: boolean;
@@ -42,7 +52,7 @@ export const TurnErrorNotice = memo(function TurnErrorNotice({
 }) {
   const { t } = useLocale();
   const openProviderSettings = useContext(TurnErrorSettingsContext);
-  const info = useMemo(() => classifyTurnError(error), [error]);
+  const info = useMemo(() => classifyTurnError(error, errorDetail), [error, errorDetail]);
   const copy = COPY_KEYS[info.kind];
   const showDetail = info.detail && info.detail !== info.raw;
 

@@ -27,6 +27,7 @@ import {
   EXIT_PLAN_MODE_APPROVED_ARG,
   EXIT_PLAN_MODE_PENDING_ARG,
 } from "@liveagent/ui/lib/chat/planMode";
+import type { RoundMeta } from "@liveagent/ui/lib/chat/roundMeta";
 import {
   TOOL_APPROVAL_ALLOW_SESSION_ARG,
   TOOL_APPROVAL_DEADLINE_ARG,
@@ -92,17 +93,7 @@ export type UiRoundContentBlock =
 export type UiRound = {
   round: number;
   blocks: UiRoundContentBlock[];
-  meta?: {
-    provider?: string;
-    model?: string;
-    api?: string;
-    stopReason?: string;
-    errorMessage?: string; // a failed round's error, rendered as the turn's error row
-    usage?: Usage;
-    contextRelevant?: boolean;
-    /** Leading blocks a mid-run usage report already covers (see contextUsage). */
-    usageBlockCount?: number;
-  };
+  meta?: RoundMeta;
 };
 
 export type UiMessage = {

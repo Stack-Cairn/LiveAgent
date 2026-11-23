@@ -191,9 +191,13 @@ function isCheckpointResult(value: unknown): value is KBrainCheckpointResult {
 async function readError(response: Response) {
   const body = await response.text();
   let message = body.trim();
+  // A failed model discovery also says why (errorCode, upstreamStatus,
+  // upstreamMessage); keep those for the provider editor to explain.
+  let reason: Record<string, string | number> = {};
   try {
-    const parsed = JSON.parse(body) as { error?: string; message?: string };
-    message = parsed.error || parsed.message || message;
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    message = stringField(parsed.error) || stringField(parsed.message) || message;
+    reason = discoveryFailureReason(parsed);
   } catch {
     // Keep the original response body for non-JSON server errors.
   }
@@ -206,8 +210,27 @@ async function readError(response: Response) {
   Object.assign(error, {
     status: response.status,
     ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}),
+    ...reason,
   });
   return error;
+}
+
+function stringField(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function discoveryFailureReason(body: Record<string, unknown>): Record<string, string | number> {
+  const errorCode = stringField(body.errorCode).trim();
+  if (!errorCode) return {};
+  const status = body.upstreamStatus;
+  const upstreamMessage = stringField(body.upstreamMessage).trim();
+  return {
+    errorCode,
+    ...(typeof status === "number" && Number.isInteger(status) && status > 0
+      ? { upstreamStatus: status }
+      : {}),
+    ...(upstreamMessage ? { upstreamMessage } : {}),
+  };
 }
 
 export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {

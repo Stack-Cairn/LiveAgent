@@ -1,5 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@liveagent/ui/lib/chat/agentTypes";
-import { turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
+import { isStoppedReply, turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
 import {
   assembleContinuousReply,
   type ReplyStitchClass,
@@ -275,9 +275,10 @@ function buildRawRowsFromEntries(
     // The content gate: rounds that never produced anything renderable
     // (meta-only token carriers, empty leading flushes) are dropped, and a
     // group whose every round dropped emits no row at all. A failed round keeps
-    // its error even without content.
+    // its error even without content, and a turn stopped before any output
+    // keeps its stop so the transcript can say so.
     const rounds = assistantGroup.rounds.filter(
-      (round) => hasRoundContent(round) || turnErrorOf([round]) !== null,
+      (round) => hasRoundContent(round) || turnErrorOf([round]) !== null || isStoppedReply([round]),
     );
     if (rounds.length > 0) {
       rows.push({

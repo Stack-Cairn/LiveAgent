@@ -1,6 +1,7 @@
 import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { isPendingUserInteractionBlock } from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
 import { useRunningToolActivity } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
+import { trailingReplyTextLength } from "@liveagent/ui/components/chat/assistant-bubble/workTraceDisplay";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
@@ -100,6 +101,7 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
           awaitingDecision={awaitingDecision}
           startedAtMs={workTrace?.startedAtMs}
           toolActivity={toolActivity}
+          replyTextLength={workTrace ? trailingReplyTextLength(workTrace.entries) : 0}
         />
       ) : null}
     </div>

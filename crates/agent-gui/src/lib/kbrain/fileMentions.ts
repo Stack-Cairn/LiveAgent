@@ -1,9 +1,12 @@
 // `fs_mention_list` for hosts without the native command (the K-brain browser
-// host). K-brain has no mention index yet, so this builds one from its generic
-// `/v1/fs` "list" walk and applies the native command's filtering and ranking
-// (src-tauri commands/workspace/fs.rs `fs_mention_list_sync`). The walk does
-// not read .gitignore and fails past 10000 entries, so deep trees fall back to
-// shallower depths and report `truncated`.
+// host). K-brain backends with capability `filesystem_mention_list` answer it
+// with `/v1/fs` "mention_list": ignore rules (.gitignore, node_modules, ...),
+// ranking and the walk all happen in the backend, which returns at most 500
+// ranked matches. Older backends get the index built from the generic "list"
+// walk with the native command's filtering and ranking (src-tauri
+// commands/workspace/fs.rs `fs_mention_list_sync`); that walk does not read
+// .gitignore and fails past 10000 entries, so deep trees fall back to shallower
+// depths and report `truncated`.
 
 export type KBrainFsListEntry = { path: string; kind: string; hidden?: boolean };
 export type KBrainFsListResponse = { entries?: KBrainFsListEntry[]; has_more?: boolean };
@@ -14,6 +17,17 @@ export type KBrainFsListRequest = {
   depth: number;
   max_results: number;
   show_hidden: boolean;
+};
+export type KBrainFsMentionListRequest = {
+  action: "mention_list";
+  workdir: string;
+  path: string;
+  query: string;
+  max_results: number;
+};
+export type KBrainFsMentionListResponse = {
+  entries?: Array<{ path: string; kind: string }>;
+  truncated?: boolean;
 };
 export type FileMentionListResult = {
   entries: Array<{ path: string; kind: "file" | "dir"; hidden: boolean }>;
@@ -137,7 +151,7 @@ function isTreeTooLarge(error: unknown) {
   return /exceeds \d+ entries/i.test(message);
 }
 
-export async function listFileMentionsViaFsList(
+async function listFileMentionsViaFsList(
   list: (request: KBrainFsListRequest) => Promise<KBrainFsListResponse>,
   args: Record<string, unknown> | undefined,
 ): Promise<FileMentionListResult> {
@@ -170,4 +184,75 @@ export async function listFileMentionsViaFsList(
     }
   }
   throw lastError;
+}
+
+/** K-brain rejects a mention_list request for more than this many results. */
+const MENTION_LIST_MAX_RESULTS = 500;
+/**
+ * An unfiltered request for more than this is a whole-workspace index (quick
+ * open asks for 20000) rather than a mention lookup: mention_list caps its
+ * answer at 500 matches, so such a request keeps the list walk.
+ */
+const FULL_INDEX_MIN_RESULTS = 5001;
+
+/**
+ * Older backends do not know the action: "unsupported filesystem action"
+ * (422) without a query, and a 400 "unknown field \"query\"" with one, since
+ * they reject unknown request fields before reading the action.
+ */
+function isMentionListUnsupported(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (status === 422) return /unsupported filesystem action|unknown action/i.test(message);
+  if (status === 400) return /unknown field/i.test(message);
+  return false;
+}
+
+function isHiddenPath(path: string) {
+  return path.split("/").some((segment) => segment.startsWith("."));
+}
+
+/**
+ * The browser host's `fs_mention_list`: K-brain's mention_list when the backend
+ * has it (`supported`), otherwise, or when the backend turns the action down,
+ * the list walk above.
+ */
+export async function listFileMentions(
+  fs: {
+    supported: () => Promise<boolean>;
+    mentionList: (request: KBrainFsMentionListRequest) => Promise<KBrainFsMentionListResponse>;
+    list: (request: KBrainFsListRequest) => Promise<KBrainFsListResponse>;
+  },
+  args: Record<string, unknown> | undefined,
+): Promise<FileMentionListResult> {
+  const workdir = typeof args?.workdir === "string" ? args.workdir.trim() : "";
+  const query = normalizeFileMentionQuery(args?.query);
+  const requested =
+    typeof args?.max_results === "number" && args.max_results > 0
+      ? args.max_results
+      : DEFAULT_MAX_RESULTS;
+  const fullIndex = !query && requested >= FULL_INDEX_MIN_RESULTS;
+  if (workdir && !fullIndex && (await fs.supported().catch(() => false))) {
+    try {
+      const response = await fs.mentionList({
+        action: "mention_list",
+        workdir,
+        path: "",
+        query,
+        max_results: Math.min(requested, MENTION_LIST_MAX_RESULTS),
+      });
+      const showHidden = args?.show_hidden === true;
+      const entries = (response.entries ?? [])
+        .map((entry) => ({
+          path: entry.path,
+          kind: entry.kind === "dir" ? ("dir" as const) : ("file" as const),
+          hidden: isHiddenPath(entry.path),
+        }))
+        .filter((entry) => entry.path && (showHidden || !entry.hidden));
+      return { entries, truncated: response.truncated === true };
+    } catch (error) {
+      if (!isMentionListUnsupported(error)) throw error;
+    }
+  }
+  return listFileMentionsViaFsList(fs.list, args);
 }

@@ -25,7 +25,11 @@ import {
 import { UserMessageBubbleBody } from "@liveagent/ui/components/chat/UserMessageBubbleBody";
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
-import { normalizeLiveToolStatus, turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
+import {
+  normalizeLiveToolStatus,
+  turnErrorDetailOf,
+  turnErrorOf,
+} from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { ReplyShareSource } from "@liveagent/ui/lib/chat/replyShare";
@@ -989,6 +993,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 {turnError ? (
                   <TurnErrorNotice
                     error={turnError}
+                    errorDetail={turnErrorDetailOf(row.rounds)}
                     retryDisabled={isStreaming}
                     onRetry={
                       retryTarget && retryRef && onResendFromEdit
