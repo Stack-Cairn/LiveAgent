@@ -141,17 +141,6 @@ function countTurnEntries(entries: ChatEntry[], matcher: (entry: ChatEntry) => b
   return count;
 }
 
-function segmentHasAssistantText(entries: ChatEntry[]): boolean {
-  const start = segmentStartIndex(entries);
-  for (let index = start; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (entry?.kind === "assistant" && entry.text.trim()) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function hasSegmentEntry(entries: ChatEntry[], matcher: (entry: ChatEntry) => boolean): boolean {
   const start = segmentStartIndex(entries);
   for (let index = start; index < entries.length; index += 1) {
@@ -602,6 +591,13 @@ function applyHostedSearchEvent(
   return withEntries(turn, enrichSegmentHostedSearches(next));
 }
 
+/** The failure an entry shows: an error entry's text or a failed round's error. */
+export function entryErrorText(entry: ChatEntry): string | null {
+  if (entry.kind === "error") return entry.text.trim();
+  if (entry.kind !== "assistant") return null;
+  return entry.meta?.errorMessage?.trim() || entry.text.trim() || null;
+}
+
 function applyErrorEvent(turn: Turn, event: Extract<ChatEvent, { type: "error" }>): Turn {
   const round = readRound(event.round);
   const rawMessage = event.message ?? "";
@@ -609,23 +605,19 @@ function applyErrorEvent(turn: Turn, event: Extract<ChatEvent, { type: "error" }
   if (isAbortLikeError(message)) {
     return turn;
   }
-  const alreadyShown = turn.entries.some((entry) => {
-    if (entry.kind === "error" || entry.kind === "assistant") {
-      return entry.text.trim() === message;
-    }
-    return false;
-  });
-  if (alreadyShown) {
+  if (turn.entries.some((entry) => entryErrorText(entry) === message)) {
     return turn;
   }
-  const text = `${segmentHasAssistantText(turn.entries) ? "\n\n" : ""}${message}`;
+  // The error is the round's, not reply text: the transcript renders it as the
+  // turn's error row under whatever the reply streamed.
   return withEntries(turn, [
     ...turn.entries,
     {
       id: `${turnNamespace(turn)}:err:${round ?? 0}:${hashText(message)}`,
       kind: "assistant",
       round,
-      text,
+      text: "",
+      meta: { stopReason: "error", errorMessage: message },
     },
   ]);
 }

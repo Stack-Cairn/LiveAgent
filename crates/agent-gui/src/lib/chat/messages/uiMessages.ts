@@ -69,6 +69,8 @@ export type UiRound = {
     model?: string;
     api?: string;
     stopReason?: string;
+    /** The error a failed round ended with; the transcript shows it as an error row. */
+    errorMessage?: string;
     usage?: Usage;
     contextRelevant?: boolean;
     /** Leading blocks a mid-run usage report already covers (see contextUsage). */
@@ -493,8 +495,9 @@ function buildUiRoundBlocks(
     }
   }
   const hasTextBlock = blocks.some((block) => block.kind === "text" && block.text.trim());
-  // Stopped replies get no fallback text: the transcript renders a localized stopped notice.
-  if (!hasTextBlock && assistant.stopReason === "error") {
+  // Stopped replies get no fallback text: the transcript renders a localized stopped
+  // notice. A failed reply with an error message renders it as an error row instead.
+  if (!hasTextBlock && assistant.stopReason === "error" && !assistant.errorMessage?.trim()) {
     const fallbackText = getMessageText(assistant);
     if (fallbackText.trim()) {
       blocks = appendTextLikeBlock(blocks, "text", fallbackText);
@@ -549,11 +552,17 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
           toolResultById.set(toolResult.toolCallId, toolResult);
         }
 
-        const blocks = buildUiRoundBlocks(assistant, toolResultById);
+        const errorMessage =
+          assistant.stopReason === "error" ? assistant.errorMessage?.trim() : undefined;
+        // Replies saved before failed rounds carried their error separately repeat it
+        // as text; the error row shows it once.
+        const blocks = buildUiRoundBlocks(assistant, toolResultById).filter(
+          (block) => !errorMessage || block.kind !== "text" || block.text.trim() !== errorMessage,
+        );
         const hasContent = hasRoundContent({ blocks });
 
-        // Keep an empty stopped round so the reply still shows its stopped state.
-        if (!hasContent && assistant.stopReason !== "aborted") continue;
+        // Keep an empty stopped or failed round so the reply still shows that state.
+        if (!hasContent && assistant.stopReason !== "aborted" && !errorMessage) continue;
 
         rounds.push({
           round: roundNum,
@@ -564,6 +573,7 @@ export function buildUiMessages(messages: Message[], indexOffset = 0): UiMessage
             model: String(assistant.model ?? ""),
             api: String(assistant.api ?? ""),
             stopReason: String(assistant.stopReason ?? ""),
+            ...(errorMessage ? { errorMessage } : {}),
             usage: assistant.usage as Usage | undefined,
           },
         });

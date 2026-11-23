@@ -10,6 +10,7 @@ const { createConversationStateFromContext } = loader.loadModule("src/lib/chat/c
 const approval = loader.loadModule("src/lib/tools/toolApproval.ts");
 const planMode = loader.loadModule("src/lib/tools/planModeTools.ts");
 const { buildUiMessages } = loader.loadModule("src/lib/chat/messages/uiMessages.ts");
+const { turnErrorOf } = loader.loadModule("@liveagent/ui/lib/chat/assistantStatus.ts");
 const { setKBrainRuntimeConnection, clearKBrainRuntimeConnection } = loader.loadModule("src/lib/kbrain/runtimeConnection.ts");
 
 for (const [mode, runTurn] of [["text", runTextConversationTurn], ["agent", runAgentConversationTurn]]) {
@@ -157,7 +158,11 @@ test("K-brain failed runs with no assistant content remain visible after final p
       timestamp: 2,
     },
   ]);
-  assert.match(directFailureUi.at(-1).text, /native web search is unsupported for Chat Completions/);
+  // The error renders as the turn's error row (round meta), not as reply text.
+  assert.equal(
+    turnErrorOf(directFailureUi.at(-1).rounds),
+    "native web search is unsupported for Chat Completions",
+  );
 
   const server = http.createServer(async (request, response) => {
     let body = "";

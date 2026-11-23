@@ -3,6 +3,7 @@ import { ChatFileLinkContextMenuHost } from "@liveagent/ui/components/chat/ChatF
 import { TranscriptCommentProvider } from "@liveagent/ui/components/chat/TranscriptCommentContext";
 import { TranscriptFindBar } from "@liveagent/ui/components/chat/TranscriptFindBar";
 import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
+import { TurnErrorSettingsProvider } from "@liveagent/ui/components/chat/TurnErrorNotice";
 import { ChevronDown, Copy } from "@liveagent/ui/components/IconSet";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -106,6 +107,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   const [transcriptContextMenu, setTranscriptContextMenu] =
     useState<TranscriptContextMenuState | null>(null);
 
+  const openProviderSettings = useCallback(() => onOpenSettings("providers"), [onOpenSettings]);
   const closeTranscriptContextMenu = useCallback(() => {
     setTranscriptContextMenu(null);
   }, []);
@@ -325,42 +327,44 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           ) : null}
 
           <div className={cn("select-text", isTranscriptSettling && "invisible")}>
-            <RowInteractionProvider value={rowInteractionStore}>
-              {/* Keyed remount per conversation: per-conversation state
+            <TurnErrorSettingsProvider value={openProviderSettings}>
+              <RowInteractionProvider value={rowInteractionStore}>
+                {/* Keyed remount per conversation: per-conversation state
                   (row model, entrance registry, virtualizer measurements)
                   initializes fresh, and row keys can never collide across
                   conversations in the virtualizer's itemSizeCache. */}
-              <TranscriptList
-                key={conversationId}
-                conversationId={conversationId}
-                historyItems={historyItems}
-                hasMoreHistory={hasMoreHistory}
-                onLoadEarlierHistory={onLoadEarlierHistory}
-                isHistorySwitching={isHistorySwitching}
-                liveTranscriptStore={liveTranscriptStore}
-                scrollViewport={scrollViewport}
-                layoutWidth={contentWidth}
-                isViewportFollowing={scrollFollowHandle.isFollowing}
-                viewportFollowing={following}
-                onRestoreFollowing={scrollFollowHandle.restoreFollowing}
-                isSending={isSending}
-                isCompactionRunning={isCompactionRunning}
-                showUsage={showUsage}
-                usageContextWindow={usageContextWindow}
-                workspaceRoot={workspaceRoot}
-                onOpenFileLink={onOpenFileLink}
-                gitClient={gitClient}
-                navRef={transcriptNavRef}
-                saveReadingPositionRef={saveReadingPositionRef}
-                onAnchorUserRowChange={activeFloorStore.set}
-                onResendFromEdit={onResendFromEdit}
-                onBranchConversation={onBranchConversation}
-                onFirstLayoutSettled={
-                  shouldDeferTranscriptReveal ? handleFirstLayoutSettled : undefined
-                }
-                findSource={findSource}
-              />
-            </RowInteractionProvider>
+                <TranscriptList
+                  key={conversationId}
+                  conversationId={conversationId}
+                  historyItems={historyItems}
+                  hasMoreHistory={hasMoreHistory}
+                  onLoadEarlierHistory={onLoadEarlierHistory}
+                  isHistorySwitching={isHistorySwitching}
+                  liveTranscriptStore={liveTranscriptStore}
+                  scrollViewport={scrollViewport}
+                  layoutWidth={contentWidth}
+                  isViewportFollowing={scrollFollowHandle.isFollowing}
+                  viewportFollowing={following}
+                  onRestoreFollowing={scrollFollowHandle.restoreFollowing}
+                  isSending={isSending}
+                  isCompactionRunning={isCompactionRunning}
+                  showUsage={showUsage}
+                  usageContextWindow={usageContextWindow}
+                  workspaceRoot={workspaceRoot}
+                  onOpenFileLink={onOpenFileLink}
+                  gitClient={gitClient}
+                  navRef={transcriptNavRef}
+                  saveReadingPositionRef={saveReadingPositionRef}
+                  onAnchorUserRowChange={activeFloorStore.set}
+                  onResendFromEdit={onResendFromEdit}
+                  onBranchConversation={onBranchConversation}
+                  onFirstLayoutSettled={
+                    shouldDeferTranscriptReveal ? handleFirstLayoutSettled : undefined
+                  }
+                  findSource={findSource}
+                />
+              </RowInteractionProvider>
+            </TurnErrorSettingsProvider>
           </div>
 
           <div style={{ height: transcriptBottomReservePx }} />

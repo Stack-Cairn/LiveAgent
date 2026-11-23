@@ -23,7 +23,10 @@ import {
   approvalPreviewFromToolCall,
   clampApprovalText,
 } from "@liveagent/ui/lib/chat/toolApprovalArgs";
-import { appendMessagesToConversation } from "../../../lib/chat/conversation/conversationState";
+import {
+  appendMessagesToConversation,
+  appendRenderOnlyMessagesToConversation,
+} from "../../../lib/chat/conversation/conversationState";
 import { buildConversationStateFromWindow } from "../../../lib/chat/history/chatHistory";
 import {
   appendTextDeltaToRound,
@@ -55,6 +58,7 @@ import type {
   KBrainQuestionRequest,
   KBrainRunOptions,
 } from "../../../lib/kbrain/types";
+import { restoreUnpersistedReply } from "../../../lib/kbrain/unpersistedReply";
 import {
   resolveUploadStagingRoot,
   withUploadStagingRoot,
@@ -645,12 +649,19 @@ export async function runKBrainConversationTurn(params: Params): Promise<void> {
         ...results.values(),
       ]);
       // Cancelled/failed runs can also commit messages and background-task results.
-      // Replace from authority rather than appending replayed messages a second time.
+      // Replace from authority rather than appending replayed messages a second time,
+      // keeping the partial or stopped reply K-brain does not store.
       try {
-        const history = await getKBrainHistoryWindow(params.conversationId);
+        const restored = restoreUnpersistedReply(
+          await getKBrainHistoryWindow(params.conversationId),
+          projected,
+        );
+        const authority = buildConversationStateFromWindow(restored.window);
         state = mergeUnacceptedKBrainInputs(
           params.conversationId,
-          buildConversationStateFromWindow(history),
+          restored.renderOnly
+            ? appendRenderOnlyMessagesToConversation(authority, [restored.renderOnly])
+            : authority,
         );
       } catch (error) {
         gatewayBridgeEvents.emitError(

@@ -69,8 +69,7 @@ export type ToolTraceItem = {
 export type UiRoundContentBlock =
   | {
       kind: "thinking";
-      // Stable render key: assigned when the block is created and never
-      // shifted by later inserts, unlike an array index.
+      // Stable render key, assigned at creation (unlike an array index).
       id: string;
       text: string;
       // OpenAI Responses 重放的 reasoning item 估算；UI 仍只渲染 text 摘要。
@@ -98,6 +97,7 @@ export type UiRound = {
     model?: string;
     api?: string;
     stopReason?: string;
+    errorMessage?: string; // a failed round's error, rendered as the turn's error row
     usage?: Usage;
     contextRelevant?: boolean;
     /** Leading blocks a mid-run usage report already covers (see contextUsage). */

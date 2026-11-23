@@ -13,6 +13,7 @@ import { withMcpUiResourceDetails } from "@liveagent/ui/lib/chat/mcpApps";
 import { withMcpElicitationDetails } from "@liveagent/ui/lib/chat/mcpElicitation";
 import { taskResultDetails } from "@liveagent/ui/lib/chat/taskProgress";
 import { withToolRunInfo } from "@liveagent/ui/lib/chat/toolRunInfo";
+import { isKBrainErrorMessageId } from "@liveagent/ui/lib/chat/turnError";
 import { parseUserMessageContentWithUploads } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import type { SidebarExternalRun } from "@liveagent/ui/lib/sidebar/types";
@@ -273,7 +274,11 @@ function toMessage(
   }
   if (message.role !== "assistant") return null;
   const content: AssistantMessage["content"] = [];
-  for (const block of message.content ?? []) {
+  // A run that failed before the model replied: the message text is the error.
+  const errorMessage = isKBrainErrorMessageId(message.id)
+    ? message.content?.find((block) => block.type === "text")?.text?.trim() || "K-brain run failed"
+    : undefined;
+  for (const block of errorMessage ? [] : (message.content ?? [])) {
     if (block.type === "text" && block.text) content.push({ type: "text", text: block.text });
     if (block.type === "thinking" && block.text)
       content.push({ type: "thinking", thinking: block.text });
@@ -298,7 +303,8 @@ function toMessage(
     responseId: message.id,
     ...(message.id ? { id: message.id } : {}),
     usage: kbrainUsage(message.usage),
-    stopReason: historyStopReason(message.stop_reason),
+    stopReason: errorMessage ? "error" : historyStopReason(message.stop_reason),
+    ...(errorMessage ? { errorMessage } : {}),
     timestamp,
   };
 }

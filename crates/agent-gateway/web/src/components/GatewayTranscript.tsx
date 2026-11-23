@@ -18,10 +18,14 @@ import {
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
 import { TranscriptQuoteSelection } from "@liveagent/ui/components/chat/TranscriptQuoteSelection";
+import {
+  TurnErrorNotice,
+  TurnErrorSettingsProvider,
+} from "@liveagent/ui/components/chat/TurnErrorNotice";
 import { UserMessageBubbleBody } from "@liveagent/ui/components/chat/UserMessageBubbleBody";
 import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
-import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
+import { normalizeLiveToolStatus, turnErrorOf } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ConversationMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import type { ReplyShareSource } from "@liveagent/ui/lib/chat/replyShare";
@@ -943,6 +947,8 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
           const isLatestLiveStreaming = isStreaming && isLatestLiveAssistant;
           const retryTarget = findRetryTarget(rows, rowIndex);
           const durationMs = chatDuration(retryTarget?.timestamp, row.timestamp);
+          const turnError = isLatestLiveStreaming ? null : turnErrorOf(row.rounds);
+          const retryRef = readOnly ? undefined : retryTarget?.messageRef;
           return (
             <article
               key={virtualRow.key}
@@ -979,6 +985,23 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   <div className="ml-9 pt-1">
                     <RetryDetailsBlock attempts={retryAttempts} />
                   </div>
+                ) : null}
+                {turnError ? (
+                  <TurnErrorNotice
+                    error={turnError}
+                    retryDisabled={isStreaming}
+                    onRetry={
+                      retryTarget && retryRef && onResendFromEdit
+                        ? () =>
+                            onResendFromEdit(
+                              retryRef,
+                              retryTarget.text,
+                              retryTarget.attachments,
+                              retryTarget.referencedConversations,
+                            )
+                        : undefined
+                    }
+                  />
                 ) : null}
                 {!readOnly && !isLatestLiveStreaming ? (
                   <GatewayAssistantMessageActions
@@ -1090,8 +1113,17 @@ export function GatewayTranscript({
     if (inlineErrorText.length === 0) {
       return false;
     }
-    return !rows.some((row) => row.kind === "error" && row.text.trim() === inlineErrorText);
+    // The failed turn's error row already says it.
+    return !rows.some((row) =>
+      row.kind === "error"
+        ? row.text.trim() === inlineErrorText
+        : row.kind === "assistant" && turnErrorOf(row.rounds)?.trim() === inlineErrorText,
+    );
   }, [rows, inlineErrorText]);
+  const openProviderSettings = useMemo(
+    () => (onOpenSettings && !readOnly ? () => onOpenSettings("providers") : null),
+    [onOpenSettings, readOnly],
+  );
 
   useLayoutEffect(() => {
     const nextViewport = resolveNearestScrollViewport(transcriptListRef.current);
@@ -1199,7 +1231,9 @@ export function GatewayTranscript({
 
   return (
     <TranscriptCommentProvider onComment={readOnly ? null : onCommentSelection}>
-      {transcriptView}
+      <TurnErrorSettingsProvider value={openProviderSettings}>
+        {transcriptView}
+      </TurnErrorSettingsProvider>
     </TranscriptCommentProvider>
   );
 }

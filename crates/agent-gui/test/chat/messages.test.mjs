@@ -493,9 +493,10 @@ test("UI message builder marks stopped replies without raw abort text but keeps 
   assert.deepEqual(empty[0].blocks, []);
   assert.equal(assistantStatus.isStoppedReply(empty), true);
 
-  // Real failures still show their error.
+  // Real failures still show their error, as the round's error row rather than reply text.
   const failed = roundsFor(assistant([], "error", "provider exploded"));
-  assert.equal(uiMessages.getRoundText(failed[0]), "Request failed：provider exploded");
+  assert.equal(uiMessages.getRoundText(failed[0]), "");
+  assert.equal(assistantStatus.turnErrorOf(failed), "provider exploded");
   assert.equal(assistantStatus.isStoppedReply(failed), false);
 });
 
