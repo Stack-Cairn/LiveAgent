@@ -32,5 +32,5 @@ export function ProviderBrandIcon({ type, className }: { type?: ProviderId; clas
   if (type === "gemini") return <GeminiIcon className={cls} />;
   if (type === "xai") return <GrokIcon className={cls} />;
   if (type === "deepseek") return <DeepseekIcon className={cls} />;
-  return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
+  return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-foreground")} />;
 }

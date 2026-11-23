@@ -402,7 +402,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
                 return (
                   <div
                     key={conversation.id}
-                    className="rounded-2xl border border-border/65 bg-background px-4 py-3 shadow-xs shadow-black/5"
+                    className="rounded-2xl border border-border/65 bg-background px-4 py-3 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

@@ -1371,10 +1371,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               <div
                 className={cn(
                   // 与目标栏同宽：每侧距输入框边缘 30px，底边落在 26px 圆角之外的平直段。
-                  "mx-auto w-inset-2p25rem rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70",
+                  "mx-auto w-inset-2p25rem rounded-t-lg border border-b-0 border-glass-border/80 bg-glass/95",
                   "px-1.5 pb-1 pt-1",
                   "shadow-ui-clarifypanel-22 backdrop-blur-2xl backdrop-saturate-[165%]",
-                  "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-clarifypanel-23",
+                  "dark:shadow-ui-clarifypanel-23",
                 )}
               >
                 <div className="flex min-w-0 items-center gap-1">
@@ -1387,7 +1387,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                     className={cn(
                       "flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2",
                       "text-tiny font-medium text-muted-foreground transition-colors",
-                      "hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]",
+                      "hover:bg-glass-fill/75 hover:text-foreground",
                       "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     )}
                   >
@@ -1416,7 +1416,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       onClick={() => onQueuePausedChange(!queuePaused)}
                       aria-label={t(queuePaused ? "chat.queue.resume" : "chat.queue.pause")}
                       title={t("chat.queue.pauseHint")}
-                      className="h-6 shrink-0 rounded-md px-2 text-tiny font-medium text-muted-foreground hover:bg-black/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 dark:hover:bg-white/[0.06]"
+                      className="h-6 shrink-0 rounded-md px-2 text-tiny font-medium text-muted-foreground hover:bg-glass-fill/75 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                     >
                       {t(queuePaused ? "chat.queue.resume" : "chat.queue.pause")}
                     </button>
@@ -1447,7 +1447,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             className={cn(
                               "relative grid h-7 min-h-7 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5",
                               "rounded-md pl-2 pr-1 text-xs transition-colors",
-                              "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+                              "hover:bg-glass-fill/75",
                             )}
                           >
                             <span className="w-3 shrink-0 text-center text-tiny tabular-nums text-muted-foreground/60">
@@ -1785,7 +1785,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                             "disabled:pointer-events-none disabled:opacity-40",
                             pendingUploadedFiles.length > 0
                               ? "text-info hover:text-info"
-                              : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                              : "text-muted-foreground hover:text-foreground",
                           )}
                         />
                       }

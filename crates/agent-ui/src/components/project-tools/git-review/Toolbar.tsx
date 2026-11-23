@@ -375,8 +375,8 @@ export function GitOperationNoticeToast({
           "pointer-events-auto flex w-80 max-w-full items-start gap-2.5 rounded-lg border",
           "px-3 py-2.5 text-sm shadow-lg backdrop-blur-xl",
           isSuccess
-            ? "border-success/25 bg-emerald-50/95 text-success dark:bg-emerald-950/85"
-            : "border-destructive/30 bg-red-50/95 text-destructive dark:bg-red-950/85",
+            ? "border-success/25 bg-success-surface/95 text-success dark:bg-success-surface/85"
+            : "border-destructive/30 bg-destructive-surface/95 text-destructive dark:bg-destructive-surface/85",
         )}
       >
         {isSuccess ? (
@@ -630,7 +630,7 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
                 return renderBranchRow(branch, isCurrentUpstream, branch.fullName);
               })}
               {hiddenRemoteCount > 0 ? (
-                <div className="px-2 py-1 text-xs text-muted-foreground">
+                <div className="px-row-x py-row-y-dense text-xs text-muted-foreground">
                   {t("git.branchSelector.moreRemoteBranches").replace(
                     "{count}",
                     String(hiddenRemoteCount),
@@ -961,11 +961,11 @@ export function GitReviewToolbar(props: {
       {state.status === "ready" ? (
         <div
           className={cn(
-            "mt-1.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl",
-            "dark:border-white/[0.08] dark:bg-white/[0.03]",
+            "mt-1.5 overflow-hidden rounded-xl border border-glass-highlight/35 bg-glass/55 shadow-sm backdrop-blur-xl",
+            "dark:border-glass-border/80",
           )}
         >
-          <div className="flex items-center gap-1.5 border-b border-black/[0.04] px-3 py-2 dark:border-white/[0.06]">
+          <div className="flex items-center gap-1.5 border-b border-glass-border/55 px-3 py-2">
             <span
               className={cn(
                 "shrink-0 rounded bg-muted/70 px-1.5 py-0.5",
@@ -1016,7 +1016,7 @@ export function GitReviewToolbar(props: {
                 key={item.label}
                 className={cn(
                   "flex flex-col items-center gap-0.5 py-2",
-                  index > 0 && "border-l border-black/[0.04] dark:border-white/[0.06]",
+                  index > 0 && "border-l border-glass-border/55",
                 )}
               >
                 <span

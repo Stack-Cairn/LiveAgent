@@ -23,12 +23,7 @@ export const SearchHighlight = memo(function SearchHighlight(props: {
         return (
           <span key={`${range.start}:${range.end}`}>
             {prefix}
-            <mark
-              className={cn(
-                "rounded-xs bg-amber-300/45 text-inherit dark:bg-amber-400/25",
-                markClassName,
-              )}
-            >
+            <mark className={cn("rounded-xs bg-search-highlight text-inherit", markClassName)}>
               {match}
             </mark>
           </span>

@@ -52,7 +52,7 @@ const TRIGGER_VARIANTS = {
   default: "h-10 rounded-md border-input bg-background text-sm shadow-xs",
   compact: "h-9 rounded-md border-input bg-background text-sm shadow-xs hover:bg-accent/40",
   quiet:
-    "h-9 rounded-lg border-foreground/10 bg-white/70 text-sm shadow-none dark:bg-background/40",
+    "h-9 rounded-lg border-foreground/10 bg-background/70 text-sm shadow-none dark:bg-background/40",
   dashed:
     "h-8 rounded-lg border-dashed border-foreground/[0.13] bg-transparent py-0 text-xs text-muted-foreground shadow-none hover:border-foreground/[0.24] hover:bg-foreground/[0.02]",
 } as const;

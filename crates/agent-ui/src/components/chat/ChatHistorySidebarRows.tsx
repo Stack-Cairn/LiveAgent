@@ -102,14 +102,14 @@ function SidebarDropIndicator({ position }: { position?: "before" | "after" }) {
       aria-hidden="true"
       data-sidebar-drop-indicator={position}
       className={cn(
-        "pointer-events-none absolute inset-x-3 z-20 h-0.5 bg-blue-500",
+        "pointer-events-none absolute inset-x-3 z-20 h-0.5 bg-drop-indicator",
         position === "before" ? "-top-px" : "-bottom-px",
       )}
     >
       <span
         className={cn(
           "absolute left-0 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2",
-          "rounded-full border-2 border-blue-500 bg-settings-rail",
+          "rounded-full border-2 border-drop-indicator bg-settings-rail",
         )}
       />
     </span>
@@ -832,7 +832,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
       <div
         className={cn(
           "chat-history-row rounded-2xl border border-border/70 bg-background px-3 py-2.5",
-          "shadow-xs shadow-black/5 [contain:layout_paint_style]",
+          "shadow-xs [contain:layout_paint_style]",
         )}
       >
         <p className="truncate text-sm leading-5 text-foreground/80">
@@ -1535,7 +1535,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
       <div
         className={cn(
           "rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5",
-          "text-sm text-destructive shadow-xs shadow-black/5",
+          "text-sm text-destructive shadow-xs",
         )}
       >
         <p className="truncate font-medium leading-5 text-destructive">

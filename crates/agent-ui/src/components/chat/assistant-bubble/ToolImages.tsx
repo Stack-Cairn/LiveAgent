@@ -282,15 +282,15 @@ function ToolImageStatusCard(props: {
         "overflow-hidden rounded-md border border-dashed px-4 py-5 text-center",
         isError
           ? "border-destructive/25 bg-destructive/[0.04] text-destructive"
-          : "border-black/[0.08] bg-black/[0.025] text-muted-foreground dark:border-white/[0.1] dark:bg-white/[0.035]",
+          : "border-glass-border bg-glass-fill/45 text-muted-foreground",
         className,
       )}
     >
       <div
         className={cn(
           "flex size-9 items-center justify-center",
-          "rounded-md border bg-white/80 shadow-sm dark:bg-black/20",
-          isError ? "border-destructive/20" : "border-black/[0.06] dark:border-white/[0.08]",
+          "rounded-md border bg-media-frame shadow-sm",
+          isError ? "border-destructive/20" : "border-glass-border/75",
         )}
       >
         <Icon
@@ -374,9 +374,9 @@ export function ToolResultImagePreview(props: {
         type="button"
         className={cn(
           "group flex min-h-28 w-full flex-col items-center justify-center gap-2",
-          "rounded-md border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5",
+          "rounded-md border border-dashed border-glass-border-strong/70 bg-glass-fill/45 px-4 py-5",
           "text-center text-muted-foreground transition-colors",
-          "hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]",
+          "hover:border-glass-border-strong hover:bg-glass-fill/75 hover:text-foreground",
         )}
         onClick={() => setShouldLoad(true)}
         title={alt}
@@ -385,8 +385,8 @@ export function ToolResultImagePreview(props: {
         <div
           className={cn(
             "flex size-9 items-center justify-center",
-            "rounded-md border border-black/[0.06] bg-white/80 shadow-sm transition-colors",
-            "group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]",
+            "rounded-md border border-glass-border/75 bg-media-frame shadow-sm transition-colors",
+            "group-hover:border-glass-border-strong/75",
           )}
         >
           <Eye className="size-4" />

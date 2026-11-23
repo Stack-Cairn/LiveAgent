@@ -133,10 +133,9 @@ const dashboardToneClass: Record<DashboardTone, string> = {
 };
 
 const statusActionClass =
-  "flex h-33px items-center gap-7px rounded-full border border-[rgba(var(--status-cyan),0.2)] bg-white/[0.055] px-12px py-0 text-xs text-foreground uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-[rgba(var(--status-cyan),0.48)] hover:bg-[rgba(var(--status-cyan),0.1)] hover:text-foreground";
+  "flex h-33px items-center gap-7px rounded-full border border-status-cyan/20 bg-status-board-frost/5.5 px-12px py-0 text-xs text-foreground uppercase no-underline whitespace-nowrap shadow-status-board-pill backdrop-blur-16px transition-[transform,border-color,background-color] duration-160ms ease-default hover:-translate-y-1px hover:border-status-cyan/48 hover:bg-status-cyan/10 hover:text-foreground";
 
-const statusEntrySurfaceClass =
-  "border border-[rgba(var(--status-board-tone,191,210,232),0.14)] bg-[rgba(var(--status-board-tone,191,210,232),0.055)]";
+const statusEntrySurfaceClass = "border border-status-board-tone/14 bg-status-board-tone/5.5";
 
 const initialCounters = (): LiveCounters => ({
   events: 0,
@@ -365,7 +364,7 @@ function StatusPill({ online, label }: { online: boolean; label: string }) {
           : "border-destructive/25 bg-destructive/10 text-destructive",
       )}
     >
-      <span className="size-8px rounded-full bg-current shadow-[0_0_var(--spacing-18px)_currentColor]" />
+      <span className="size-8px rounded-full bg-current shadow-status-board-dot-glow" />
       {label}
     </span>
   );
@@ -378,14 +377,14 @@ function MetricTile({ metric }: { metric: MetricCard }) {
       className={cn(
         statusPanelSurfaceClass,
         "relative grid min-h-82px min-w-0 grid-cols-[var(--spacing-34px)_minmax(0,1fr)] items-center gap-9px overflow-hidden",
-        "rounded-xl border border-[rgba(var(--status-cyan),0.12)] bg-rgba-255-255-255-0p045 p-10px",
+        "rounded-xl border border-status-cyan/12 bg-rgba-255-255-255-0p045 p-10px",
         dashboardToneClass[metric.tone],
       )}
     >
       <div
         className={cn(
           "grid size-34px place-items-center",
-          "rounded-12px border border-[rgba(var(--status-cyan),0.3)] bg-[rgba(var(--status-board-tone),0.11)] text-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
+          "rounded-12px border border-status-cyan/30 bg-status-board-tone/11 text-status-board-tone shadow-status-board-icon-glow backdrop-blur-18px",
         )}
       >
         <Icon size={18} strokeWidth={2.2} />
@@ -429,7 +428,7 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
         <div
           key={item.label}
           className={cn(
-            "min-w-0 rounded-13px border border-[rgba(var(--status-board-tone),0.15)] bg-[image:linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),color-mix(in_oklab,_var(--color-white)_4.5%,_transparent)] p-8px [--status-board-tone:191,210,232]",
+            "min-w-0 rounded-13px border border-status-board-tone/15 bg-[image:linear-gradient(135deg,rgba(var(--status-board-tone),0.08),transparent),color-mix(in_oklab,_var(--color-white)_4.5%,_transparent)] p-8px [--status-board-tone:191,210,232]",
             item.tone && dashboardToneClass[item.tone],
           )}
         >
@@ -446,7 +445,7 @@ function FactList({ items, className }: { items: FactItem[]; className?: string 
             {item.value}
           </strong>
           {item.unit && (
-            <b className="ml-5px inline-block text-tiny font-medium text-[rgba(var(--status-board-tone),0.9)] uppercase">
+            <b className="ml-5px inline-block text-tiny font-medium text-status-board-tone/90 uppercase">
               {item.unit}
             </b>
           )}
@@ -1160,15 +1159,15 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
         <header
           className={cn(
             "relative flex items-center justify-between gap-16px",
-            "rounded-20px border border-[rgba(var(--status-cyan),0.2)] bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-[0_var(--spacing-18px)_var(--spacing-60px)_color-mix(in_oklab,_var(--color-black)_26%,_transparent),inset_0_var(--spacing-1px)_0_color-mix(in_oklab,_var(--color-white)_8%,_transparent),inset_0_0_var(--spacing-48px)_rgba(var(--status-cyan),0.05)] backdrop-blur-22px",
-            "before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-[0_0_var(--spacing-18px)_rgba(var(--status-cyan),0.72)] before:content-['']",
+            "rounded-20px border border-status-cyan/20 bg-[linear-gradient(90deg,rgba(var(--status-cyan),0.09),transparent_28%,rgba(var(--status-violet),0.09)),var(--ui-color-rgba-4-11-24-0p72)] px-12px py-9px shadow-status-board-header backdrop-blur-22px",
+            "before:absolute before:inset-x-[22%] before:bottom-minus-1px before:h-1px before:bg-[linear-gradient(90deg,transparent,rgba(var(--status-cyan),0.82),transparent)] before:shadow-status-board-header-line before:content-['']",
           )}
         >
           <div className="flex min-w-0 items-center gap-12px">
             <div
               className={cn(
                 "flex size-38px flex-col place-items-center items-start gap-2px",
-                "rounded-xl border border-[rgba(var(--status-cyan),0.3)] bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-[rgb(var(--status-cyan))] shadow-[0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.2),inset_0_0_var(--spacing-22px)_color-mix(in_oklab,_var(--color-white)_8%,_transparent)] backdrop-blur-18px",
+                "rounded-xl border border-status-cyan/30 bg-[image:linear-gradient(135deg,rgba(var(--status-cyan),0.18),rgba(var(--status-violet),0.14)),color-mix(in_oklab,_var(--color-white)_6%,_transparent)] text-status-cyan shadow-status-board-icon-glow backdrop-blur-18px",
               )}
             >
               <Sparkles size={19} strokeWidth={2.4} />
@@ -1252,15 +1251,15 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
               <div className="grid grid-cols-status-board-reactor-core items-center gap-14px mb-12px">
                 <div
                   className={cn(
-                    "relative grid size-154px place-items-center rounded-full shadow-[0_0_var(--spacing-46px)_rgba(var(--status-cyan),0.22),inset_0_0_var(--spacing-34px)_color-mix(in_oklab,_var(--color-black)_58%,_transparent)]",
-                    "before:absolute before:inset-12px before:rounded-[inherit] before:bg-[radial-gradient(circle,color-mix(in_oklab,_var(--color-white)_12%,_transparent),transparent_42%),var(--ui-color-071226)] before:shadow-[inset_0_0_var(--spacing-28px)_rgba(var(--status-cyan),0.12)] before:content-['']",
+                    "relative grid size-154px place-items-center rounded-full shadow-status-board-reactor",
+                    "before:absolute before:inset-12px before:rounded-inherit before:bg-[radial-gradient(circle,color-mix(in_oklab,_var(--color-white)_12%,_transparent),transparent_42%),var(--ui-color-071226)] before:shadow-status-board-reactor-core before:content-['']",
                   )}
                   style={{
                     background: `conic-gradient(from -90deg, var(--color-status-integrity-start) 0deg, var(--color-status-integrity-end) ${integrityScore * 3.6}deg, var(--color-status-integrity-track) ${integrityScore * 3.6}deg 360deg)`,
                   }}
                 >
-                  <div className="absolute inset-minus-8px rounded-[inherit] border border-[rgba(var(--status-cyan),0.24)]" />
-                  <div className="absolute inset-28px rounded-[inherit] border border-status-violet/28!" />
+                  <div className="absolute inset-minus-8px rounded-inherit border border-status-cyan/24" />
+                  <div className="absolute inset-28px rounded-inherit border border-status-violet/28!" />
                   <div className="relative z-1 grid justify-items-center">
                     <strong className="text-5xl leading-0p92 tracking-minus-0p06em text-foreground [text-shadow:0_0_var(--spacing-30px)_rgba(var(--status-cyan),0.5)]">
                       {integrityScore}
@@ -1302,7 +1301,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
               <div
                 className={cn(
                   "mt-10px grid grid-cols-2 gap-8px",
-                  "[&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-[rgba(var(--status-cyan),0.12)] [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-[rgba(var(--status-cyan),0.84)]",
+                  "[&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-status-cyan/12 [&>div]:bg-rgba-255-255-255-0p045 [&>div]:p-10px [&>div]:text-(--ui-color-rgba-226-242-255-0p7) [&>div>svg]:text-status-cyan/84",
                 )}
               >
                 <div>
@@ -1357,16 +1356,16 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                 <div
                   className={cn(
                     "relative grid size-[min(var(--spacing-42vh),var(--spacing-410px))] place-items-center justify-self-center overflow-hidden",
-                    "rounded-full border border-[rgba(var(--status-cyan),0.22)] bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-[0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.16),inset_0_0_var(--spacing-70px)_rgba(var(--status-cyan),0.08)] status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]",
+                    "rounded-full border border-status-cyan/22 bg-[radial-gradient(circle,rgba(var(--status-cyan),0.13),transparent_7%),repeating-radial-gradient(circle,transparent_0_var(--spacing-54px),rgba(var(--status-cyan),0.13)_var(--spacing-55px)_var(--spacing-56px)),radial-gradient(circle_at_center,var(--ui-color-rgba-7-17-33-0p4),var(--ui-color-rgba-2-7-15-0p92))] shadow-status-board-radar status-compact:size-[min(var(--spacing-38vh),var(--spacing-320px))]",
                   )}
                   role="img"
                   aria-label="live signal radar"
                 >
-                  <div className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
+                  <div className="absolute inset-0 rounded-inherit bg-[linear-gradient(rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px)),linear-gradient(90deg,rgba(var(--status-cyan),0.12)_var(--spacing-1px),transparent_var(--spacing-1px))] bg-[length:var(--spacing-46px)_var(--spacing-46px)] opacity-(--ui-opacity-0p42) [mask-image:radial-gradient(circle,black_0_68%,transparent_69%)]" />
                   <div
                     className={cn(
                       "relative z-2 grid size-126px place-items-center",
-                      "rounded-full border border-[rgba(var(--status-cyan),0.26)] bg-rgba-4-13-28-0p84 shadow-[0_0_var(--spacing-40px)_rgba(var(--status-cyan),0.23),inset_0_0_var(--spacing-26px)_rgba(var(--status-cyan),0.08)] [&>svg]:text-[rgba(var(--status-cyan),0.9)]",
+                      "rounded-full border border-status-cyan/26 bg-rgba-4-13-28-0p84 shadow-status-board-radar-core [&>svg]:text-status-cyan/90",
                     )}
                   >
                     <Bot size={44} strokeWidth={1.65} />
@@ -1381,7 +1380,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                     <span
                       key={segment.label}
                       className={cn(
-                        "absolute z-3 size-10px rounded-full bg-[rgb(var(--status-board-tone))] shadow-[0_0_var(--spacing-20px)_rgba(var(--status-board-tone),0.82),0_0_var(--spacing-46px)_rgba(var(--status-board-tone),0.38)] [--status-board-tone:var(--status-cyan)]",
+                        "absolute z-3 size-10px rounded-full bg-status-board-tone shadow-status-board-orbit-dot [--status-board-tone:var(--status-cyan)]",
                         dashboardToneClass[segment.tone],
                       )}
                       style={{
@@ -1411,9 +1410,9 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                       <span className="text-muted-foreground text-xs not-italic">
                         {segment.label}
                       </span>
-                      <div className="h-10px overflow-hidden rounded-full border border-[rgba(var(--status-board-tone),0.14)] bg-white/5">
+                      <div className="h-10px overflow-hidden rounded-full border border-status-board-tone/14 bg-status-board-frost/5">
                         <i
-                          className="block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-[0_0_var(--spacing-16px)_rgba(var(--status-board-tone),0.44)]"
+                          className="block h-full rounded-inherit bg-[linear-gradient(90deg,rgba(var(--status-board-tone),0.25),rgba(var(--status-board-tone),0.95))] shadow-status-board-meter"
                           style={{ width: `${segment.width}%` }}
                         />
                       </div>
@@ -1470,7 +1469,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                           <span
                             className={cn(
                               "text-rgba-190-219-248-0p58 text-tiny not-italic leading-1p25 inline-flex mt-4px rounded-full",
-                              "px-6px py-2px bg-white/6",
+                              "px-6px py-2px bg-status-board-frost/6",
                             )}
                           >
                             {event.workdir
@@ -1579,10 +1578,10 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
                           {truncateMiddle(item.path, 46)}
                         </span>
                       </div>
-                      <div className="h-8px overflow-hidden rounded-full border border-[rgba(var(--status-cyan),0.12)] bg-white/5">
+                      <div className="h-8px overflow-hidden rounded-full border border-status-cyan/12 bg-status-board-frost/5">
                         <span
                           className={cn(
-                            "block h-full rounded-[inherit] bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-muted-foreground shadow-[0_0_var(--spacing-16px)_rgba(var(--status-cyan),0.34)]",
+                            "block h-full rounded-inherit bg-[linear-gradient(90deg,rgb(var(--status-cyan)),rgb(var(--status-violet)))] text-tiny leading-1p25 text-muted-foreground shadow-status-board-stream-meter",
                             "not-italic",
                           )}
                           style={{
@@ -1606,7 +1605,7 @@ function StatusDashboardContent({ onLocaleChange }: { onLocaleChange: (locale: L
         <footer
           className={cn(
             "flex flex-nowrap items-center justify-between gap-10px overflow-hidden",
-            "rounded-xl border border-[rgba(var(--status-cyan),0.14)] bg-rgba-4-11-24-0p64 px-10px py-6px",
+            "rounded-xl border border-status-cyan/14 bg-rgba-4-11-24-0p64 px-10px py-6px",
             "text-tiny text-muted-foreground backdrop-blur-16px",
           )}
         >

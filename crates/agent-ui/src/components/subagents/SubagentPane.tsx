@@ -39,7 +39,7 @@ const ICON_BUTTON = cn(
 function statusDotClass(status: SubagentView["status"]) {
   switch (status) {
     case "running":
-      return "animate-pulse bg-[hsl(var(--chat-running))]";
+      return "animate-pulse bg-chat-running";
     case "error":
       return "bg-destructive";
     case "cancelled":

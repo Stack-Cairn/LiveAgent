@@ -116,8 +116,8 @@ function ImagePreviewToolButton(props: {
       variant="ghost"
       size="icon-sm"
       className={cn(
-        "pointer-events-auto shrink-0 rounded-full bg-white/95 text-zinc-800 shadow-sm hover:bg-white hover:text-zinc-950 focus-visible:ring-white",
-        pressed && "bg-white",
+        "pointer-events-auto shrink-0 rounded-full bg-on-media-chip text-on-media-chip-foreground shadow-sm hover:bg-on-media focus-visible:ring-on-media",
+        pressed && "bg-on-media",
       )}
       title={label}
       aria-label={label}
@@ -476,7 +476,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
         ref={dialogRef}
         initialFocus={dialogRef}
         layout="lightbox"
-        className="overflow-hidden p-0 [&:fullscreen]:bg-black/80 [&:fullscreen]:pointer-events-auto"
+        className="overflow-hidden p-0 [&:fullscreen]:bg-media-backdrop/80 [&:fullscreen]:pointer-events-auto"
         onClick={(event) => {
           // Native fullscreen puts the popup above the shared backdrop.
           if (isFullscreen && event.target === event.currentTarget) closeViewer();
@@ -519,7 +519,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="rounded-full bg-white/95 text-zinc-800 shadow-sm hover:bg-white hover:text-zinc-950"
+                  className="rounded-full bg-on-media-chip text-on-media-chip-foreground shadow-sm hover:bg-on-media"
                 />
               }
               aria-label={t("chat.imageViewer.actions")}
@@ -562,7 +562,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="rounded-full bg-white/95 text-zinc-800 shadow-sm hover:bg-white hover:text-zinc-950"
+                className="rounded-full bg-on-media-chip text-on-media-chip-foreground shadow-sm hover:bg-on-media"
               />
             }
             title={closeLabel}
@@ -593,7 +593,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
                 </ImagePreviewToolButton>
               ) : null}
             </div>
-            <span className="absolute left-6 top-6 text-xs tabular-nums text-white/70">
+            <span className="absolute left-6 top-6 text-xs tabular-nums text-on-media/70">
               {clampedIndex + 1} / {imageCount}
             </span>
           </>
@@ -777,7 +777,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
         >
           {viewMenuItems}
         </ImagePreviewContextMenu>
-        <div className="pointer-events-auto absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/95 p-1 text-zinc-800 shadow-lg sm:bottom-6">
+        <div className="pointer-events-auto absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-on-media-chip p-1 text-on-media-chip-foreground shadow-lg sm:bottom-6">
           <ImagePreviewToolButton
             label={t("chat.imageViewer.zoomOut")}
             disabled={viewerState.scale <= IMAGE_VIEWER_MIN_SCALE}
@@ -788,7 +788,7 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
           <Button
             variant="ghost"
             size="sm"
-            className="min-w-12 rounded-full px-1 text-xs tabular-nums hover:bg-black/5 hover:text-zinc-950"
+            className="min-w-12 rounded-full px-1 text-xs tabular-nums hover:bg-on-media-chip-foreground/5"
             title={t("chat.imageViewer.reset")}
             aria-label={t("chat.imageViewer.reset")}
             onClick={() => setViewerState(resetImageViewerState())}

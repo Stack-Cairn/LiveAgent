@@ -74,7 +74,7 @@ import { GitBranchFromCommitModal } from "./Toolbar";
 import type { GitReviewData } from "./useGitReviewData";
 
 const historyRowClass =
-  "git-review-history-row flex h-22px w-full min-w-0 select-none items-center bg-transparent px-1.5 text-left text-xs transition-colors [&:hover:not([data-selected=true]):not([data-context-open=true])]:bg-muted/38 data-[selected=true]:bg-accent/80 data-[selected=true]:text-accent-foreground data-[context-open=true]:bg-primary/10 data-[context-open=true]:text-foreground data-[context-open=true]:shadow-[inset_0_0_0_var(--spacing-1px)_hsl(var(--primary)/0.35)]";
+  "git-review-history-row flex h-22px w-full min-w-0 select-none items-center bg-transparent px-1.5 text-left text-xs transition-colors [&:hover:not([data-selected=true]):not([data-context-open=true])]:bg-muted/38 data-[selected=true]:bg-accent/80 data-[selected=true]:text-accent-foreground data-[context-open=true]:bg-primary/10 data-[context-open=true]:text-foreground data-[context-open=true]:inset-ring data-[context-open=true]:inset-ring-primary/35";
 
 const GRAPH_SWIMLANE_WIDTH = 11;
 const GRAPH_SVG_HEIGHT = 22;

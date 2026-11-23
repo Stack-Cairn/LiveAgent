@@ -27,14 +27,14 @@ export function CompactionBand(props: {
         aria-hidden="true"
         className={cn(
           "compaction-band-icon flex size-5 shrink-0 items-center justify-center",
-          "rounded-md bg-violet-500/[0.12] text-violet-600 dark:bg-violet-400/[0.14] dark:text-violet-300",
+          "rounded-md bg-compaction/12 text-compaction-icon dark:bg-compaction/14",
         )}
       >
         {icon ?? <FoldVertical className="size-3" />}
       </span>
       <span
         className={cn(
-          "min-w-0 truncate text-xs font-medium text-violet-800 dark:text-violet-200",
+          "min-w-0 truncate text-xs font-medium text-compaction-foreground",
           active && "shimmer",
         )}
       >
@@ -56,7 +56,7 @@ export function CompactionBand(props: {
     </>
   );
   const baseClass = cn(
-    "compaction-band relative flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-violet-500/[0.18] bg-violet-500/[0.06] py-1.5 pl-2.5 pr-2.5 text-left transition-colors duration-150 dark:border-violet-400/[0.16] dark:bg-violet-400/[0.07]",
+    "compaction-band relative flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-compaction/18 bg-compaction/6 py-1.5 pl-2.5 pr-2.5 text-left transition-colors duration-150 dark:border-compaction/16 dark:bg-compaction/7",
     active && "compaction-band-active",
     className,
   );
@@ -84,8 +84,8 @@ export function CompactionMetaChip({ children }: { children: ReactNode }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-md bg-violet-500/[0.08] px-1.5 py-1px text-tiny font-medium tabular-nums",
-        "text-violet-700/80 dark:bg-violet-400/[0.1] dark:text-violet-300/80",
+        "shrink-0 rounded-md bg-compaction/8 px-1.5 py-1px text-tiny font-medium tabular-nums",
+        "text-compaction-icon/80 dark:bg-compaction/10",
       )}
     >
       {children}

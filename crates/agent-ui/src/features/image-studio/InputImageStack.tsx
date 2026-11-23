@@ -116,7 +116,7 @@ export function InputImageStack({
         )}
         onClick={() => onRemove(0)}
         className={cn(
-          "absolute -left-1.5 -top-1.5 z-40 flex size-6 items-center justify-center rounded-full bg-destructive text-white shadow-md transition-opacity",
+          "absolute -left-1.5 -top-1.5 z-40 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md transition-opacity",
           "focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
           "lg:opacity-0 lg:group-hover:opacity-100",
         )}
@@ -124,7 +124,7 @@ export function InputImageStack({
         <X className="size-3.5" />
       </button>
       {inputs.length > 1 && (
-        <span className="absolute bottom-0 left-0 z-40 rounded-full bg-black/65 px-1.5 text-xs leading-5 text-white tabular-nums">
+        <span className="absolute bottom-0 left-0 z-40 rounded-full bg-on-media-scrim px-1.5 text-xs leading-5 text-on-media tabular-nums">
           +{inputs.length - 1}
         </span>
       )}

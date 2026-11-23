@@ -553,7 +553,7 @@ function ToolCallItem({
 
           if (readOnly) {
             return (
-              <ToolScrollablePre className="max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
+              <ToolScrollablePre className="max-h-56 bg-surface-subtle">
                 {previewText(resultText, 6000)}
               </ToolScrollablePre>
             );
@@ -580,7 +580,7 @@ function ToolCallItem({
                 <ChevronRight className="size-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                 {t("chat.tool.viewReturn")}
               </summary>
-              <ToolScrollablePre className="mt-1.5 max-h-56 bg-black/[0.02] dark:bg-white/[0.03]">
+              <ToolScrollablePre className="mt-1.5 max-h-56 bg-surface-subtle">
                 {previewText(resultText, 6000)}
               </ToolScrollablePre>
             </details>

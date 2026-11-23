@@ -249,8 +249,8 @@ export function ToolApprovalBar({
       }}
       className={cn(
         "@container relative flex min-h-32 w-full flex-col",
-        "rounded-3xl border border-black/[0.055] bg-white/72 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%]",
-        "dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-ui-toolapprovalbar-19",
+        "rounded-3xl border border-glass-border/80 bg-glass/95 shadow-ui-toolapprovalbar-18 outline-none backdrop-blur-2xl backdrop-saturate-[165%]",
+        "dark:shadow-ui-toolapprovalbar-19",
       )}
     >
       <div className="min-h-0 flex-auto overflow-hidden px-4 pt-3">

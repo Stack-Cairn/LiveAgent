@@ -918,7 +918,7 @@ function PreviewBody(props: {
 
   if (preview.kind === "document") {
     return (
-      <div className="h-full overflow-auto bg-neutral-200 p-4 dark:bg-neutral-950">
+      <div className="h-full overflow-auto bg-media-canvas p-4">
         <div ref={docxContainerRef} className="workspace-file-preview-docx min-h-full" />
       </div>
     );
@@ -1003,7 +1003,7 @@ function PreviewBody(props: {
     return (
       <div className="flex h-full items-center justify-center overflow-auto p-4 sm:p-6">
         {/* biome-ignore lint/a11y/useMediaCaption: Workspace media previews do not have a separate caption track available. */}
-        <video className="max-h-full max-w-full bg-black" controls src={preview.blobUrl}>
+        <video className="max-h-full max-w-full bg-media-backdrop" controls src={preview.blobUrl}>
           {basename(preview.path)}
         </video>
       </div>

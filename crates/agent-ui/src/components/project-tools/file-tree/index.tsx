@@ -681,14 +681,14 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
           )}
         >
           {search.loading ? (
-            <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 px-row-x py-row-y-dense text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
               {t("projectTools.fileTree.searching")}
             </div>
           ) : search.error ? (
-            <div className="px-2 py-1 text-xs text-destructive">{search.error}</div>
+            <div className="px-row-x py-row-y-dense text-xs text-destructive">{search.error}</div>
           ) : search.results.length === 0 ? (
-            <div className="px-2 py-1 text-xs text-muted-foreground">
+            <div className="px-row-x py-row-y-dense text-xs text-muted-foreground">
               {t("projectTools.fileTree.noMatches")}
             </div>
           ) : (
@@ -700,7 +700,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
                   type="button"
                   draggable
                   className={cn(
-                    "flex w-full select-none items-center gap-1.5 rounded-md px-2",
+                    "flex w-full select-none items-center gap-1.5 rounded-md px-row-x",
                     "text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground",
                     entry.hidden && "opacity-60 hover:opacity-80",
                   )}
@@ -719,7 +719,7 @@ export function FileTreeSurface(props: FileTreeSurfaceProps) {
             })
           )}
           {search.truncated ? (
-            <div className="px-2 pt-1 text-xs text-muted-foreground">
+            <div className="px-row-x pt-1 text-xs text-muted-foreground">
               {t("projectTools.fileTree.resultsTruncated")}
             </div>
           ) : null}

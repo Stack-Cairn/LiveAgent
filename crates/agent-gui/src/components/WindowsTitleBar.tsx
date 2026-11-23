@@ -36,9 +36,9 @@ const CAPTION_BUTTON_BASE_CLASS = cn(
 
 const CAPTION_BUTTON_CLASS = cn(
   CAPTION_BUTTON_BASE_CLASS,
-  "hover:bg-black/[0.06] hover:text-foreground active:bg-black/[0.1]",
-  "focus-visible:bg-black/[0.06] focus-visible:text-foreground",
-  "dark:hover:bg-white/[0.08] dark:active:bg-white/[0.05] dark:focus-visible:bg-white/[0.08]",
+  "hover:bg-glass-fill hover:text-foreground active:bg-foreground/10",
+  "focus-visible:bg-glass-fill focus-visible:text-foreground",
+  "dark:active:bg-foreground/5",
 );
 
 type CaptionGlyphKind = "minimize" | "close";
@@ -260,8 +260,8 @@ export function WindowsTitleBar({ controlsOnly = false }: { controlsOnly?: boole
     <header
       className={cn(
         "relative z-50 flex h-8 shrink-0 select-none items-center",
-        "border-b border-black/[0.06] bg-white/65 text-foreground/90 backdrop-blur-2xl backdrop-saturate-150",
-        "supports-[backdrop-filter]:bg-white/55 dark:border-white/[0.06] dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/55",
+        "border-b border-glass-border/65 bg-background/65 text-foreground/90 backdrop-blur-2xl backdrop-saturate-150",
+        "supports-[backdrop-filter]:bg-background/55 dark:bg-background/70",
         "shadow-ui-windowstitlebar-52 dark:shadow-ui-planmodecard-11",
         !isFocused && "text-foreground/55",
       )}

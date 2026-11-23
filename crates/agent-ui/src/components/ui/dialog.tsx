@@ -78,7 +78,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
     return (
       <DialogPortal>
         <DialogOverlay
-          className={layout === "lightbox" ? "bg-black/80 backdrop-blur-none" : undefined}
+          className={layout === "lightbox" ? "bg-media-backdrop/80 backdrop-blur-none" : undefined}
         />
         <DialogPrimitive.Viewport
           data-slot="dialog-viewport"

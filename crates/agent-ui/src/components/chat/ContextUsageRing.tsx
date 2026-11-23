@@ -148,7 +148,7 @@ export function ContextUsageRing(props: {
           r="9.5"
           fill="none"
           strokeWidth="2.25"
-          className="stroke-foreground/10 dark:stroke-white/10"
+          className="stroke-foreground/10"
         />
         <circle
           cx="12"

@@ -1852,7 +1852,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
               "pointer-events-auto flex max-w-full flex-wrap items-center gap-2",
               "rounded-full border border-border/50 bg-background/95",
               "py-2 pl-4 pr-2 text-xs shadow-ui-skillshubpage-51",
-              "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-white/[0.1] dark:bg-popover/95",
+              "max-sm:justify-center max-sm:rounded-3xl max-sm:whitespace-nowrap dark:border-glass-border dark:bg-popover/95",
             )}
           >
             {bulkSelection.size > 0 ? (
