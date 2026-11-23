@@ -7,7 +7,6 @@ import { useRender } from "@base-ui/react/use-render";
 import { PanelLeftClose } from "@liveagent/ui/components/IconSet";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useLocale } from "../../i18n";
 import { isMacLikePlatform } from "../../lib/shared/platform";
@@ -44,7 +43,9 @@ type SidebarContextProps = {
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
 // First child of the wrapper: the skip link is portaled here from `Sidebar`,
 // which (unlike the provider) renders inside each host's locale context.
-const SidebarSkipLinkSlotContext = React.createContext<HTMLElement | null>(null);
+// A mounted <Sidebar> registers here so the provider renders the skip link as the
+// wrapper's first child, ahead of the sidebar in tab order.
+const SidebarSkipLinkContext = React.createContext<((present: boolean) => void) | null>(null);
 
 function useSidebar() {
   const context = React.useContext(SidebarContext);
@@ -135,7 +136,7 @@ function SidebarProvider({
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed";
 
-  const [skipLinkSlot, setSkipLinkSlot] = React.useState<HTMLDivElement | null>(null);
+  const [hasSidebar, setHasSidebar] = React.useState(false);
 
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
@@ -152,7 +153,7 @@ function SidebarProvider({
 
   return (
     <SidebarContext.Provider value={contextValue}>
-      <SidebarSkipLinkSlotContext.Provider value={skipLinkSlot}>
+      <SidebarSkipLinkContext.Provider value={setHasSidebar}>
         <div
           data-slot="sidebar-wrapper"
           style={
@@ -168,22 +169,22 @@ function SidebarProvider({
           )}
           {...props}
         >
-          <div ref={setSkipLinkSlot} data-slot="sidebar-skip-link-slot" className="contents" />
+          {hasSidebar ? <SkipToComposerLink /> : null}
           {children}
         </div>
-      </SidebarSkipLinkSlotContext.Provider>
+      </SidebarSkipLinkContext.Provider>
     </SidebarContext.Provider>
   );
 }
 
 function Sidebar(props: React.ComponentProps<typeof SidebarFrame>) {
-  const skipLinkSlot = React.useContext(SidebarSkipLinkSlotContext);
-  return (
-    <>
-      {skipLinkSlot ? createPortal(<SkipToComposerLink />, skipLinkSlot) : null}
-      <SidebarFrame {...props} />
-    </>
-  );
+  const registerSkipLink = React.useContext(SidebarSkipLinkContext);
+  React.useEffect(() => {
+    if (!registerSkipLink) return;
+    registerSkipLink(true);
+    return () => registerSkipLink(false);
+  }, [registerSkipLink]);
+  return <SidebarFrame {...props} />;
 }
 
 function SidebarFrame({

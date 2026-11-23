@@ -243,12 +243,13 @@ test("live region is mounted before the first notice and holds the floating pill
   const pill = container.querySelector("[data-mode-cycle-notice]");
   assert.equal(pill?.parentElement, region, "the pill is inserted into the same region");
   // The pill is positioned against the picker wrapper; that wrapper sits inside
-  // the left control group, which clips (overflow-hidden). jsdom has no layout,
+  // the left control group, which clips horizontally (overflow-x-clip, so touch
+  // hit areas can extend vertically). jsdom has no layout,
   // so this only pins the structure the width estimate in the review relies on.
   const anchor = region.parentElement;
   assert.match(anchor.className, /\brelative\b/);
   assert.match(pill.className, /\babsolute\b/);
-  assert.match(anchor.parentElement.className, /\boverflow-hidden\b/);
+  assert.match(anchor.parentElement.className, /\boverflow-x-clip\b/);
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1600)));
   assert.equal(container.querySelector('[role="status"][aria-live="polite"]'), region);
   assert.equal(region.childElementCount, 0);
