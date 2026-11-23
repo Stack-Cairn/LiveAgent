@@ -1,6 +1,7 @@
 import { PLANNING_TRANSLATIONS } from "./planningTranslations";
 import { TASK_TRANSLATIONS } from "./taskTranslations";
 import { CHECKPOINT_REWIND_TRANSLATIONS } from "./translations/checkpointRewindTranslations";
+import { CHUNK_LOAD_TRANSLATIONS } from "./translations/chunkLoadTranslations";
 import { CONFIRM_DIALOG_TRANSLATIONS } from "./translations/confirmDialogTranslations";
 import { EN_US_COMMON_TRANSLATIONS } from "./translations/enUSCommon";
 import { EN_US_SETTINGS_TRANSLATIONS } from "./translations/enUSSettings";
@@ -37,6 +38,7 @@ export const SHARED_TRANSLATIONS = {
     ...TOOL_OUTPUT_TRANSLATIONS["zh-CN"],
     ...TOAST_TRANSLATIONS["zh-CN"],
     ...TOOL_PERMISSION_TRANSLATIONS["zh-CN"],
+    ...CHUNK_LOAD_TRANSLATIONS["zh-CN"],
   },
   "en-US": {
     ...TASK_TRANSLATIONS["en-US"],
@@ -56,5 +58,6 @@ export const SHARED_TRANSLATIONS = {
     ...TOOL_OUTPUT_TRANSLATIONS["en-US"],
     ...TOAST_TRANSLATIONS["en-US"],
     ...TOOL_PERMISSION_TRANSLATIONS["en-US"],
+    ...CHUNK_LOAD_TRANSLATIONS["en-US"],
   },
 } as const satisfies Record<"zh-CN" | "en-US", Record<string, string>>;
