@@ -3,6 +3,10 @@
 // conversation, and the clients the right dock's "Panels" tool needs.
 
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import {
+  type McpServerLabels,
+  McpServerLabelsProvider,
+} from "@liveagent/ui/components/chat/assistant-bubble/McpServerLabelsContext";
 import type { RightDockHtmlPreviews } from "@liveagent/ui/components/project-tools/SandboxedPanelsPanel";
 import {
   type SandboxedUiTranscriptHost,
@@ -17,6 +21,11 @@ import type { PluginsClient } from "@liveagent/ui/lib/plugins/types";
 import { type ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { isKBrainBackendEnabled } from "../../../lib/host";
 import { getKBrainSessionId } from "../../../lib/kbrain/mapping";
+import {
+  getKBrainMcpServerLabels,
+  requestKBrainMcpServerLabels,
+  subscribeKBrainMcpServerLabels,
+} from "../../../lib/kbrain/mcpServerLabels";
 import { subscribeKBrainRuntimeConnection } from "../../../lib/kbrain/runtimeConnection";
 import {
   callKBrainMcpTool,
@@ -102,9 +111,19 @@ const openExternal = (url: string) => {
   void openUrl(url);
 };
 
+/** MCP server labels for tool row headers, from the one shared desktop lookup. */
+function useKBrainMcpServerLabels(): McpServerLabels {
+  const labels = useSyncExternalStore(
+    subscribeKBrainMcpServerLabels,
+    getKBrainMcpServerLabels,
+    getKBrainMcpServerLabels,
+  );
+  return useMemo(() => ({ labels, request: requestKBrainMcpServerLabels }), [labels]);
+}
+
 /**
- * Gives one conversation's transcript its sandboxed UI host, and loads the previews the
- * session already has so cards survive a reload.
+ * Gives one conversation's transcript its sandboxed UI host and MCP server labels, and
+ * loads the previews the session already has so cards survive a reload.
  */
 export function KBrainSandboxedUiTranscriptHost(props: {
   conversationId: string;
@@ -118,6 +137,7 @@ export function KBrainSandboxedUiTranscriptHost(props: {
   const mcpApps = capabilities.mcpApps;
   const { mcpAppsStructuredContent, mcpToolCallApproval, mcpToolVisibility } = capabilities;
   const cwd = workdir?.trim() ?? "";
+  const mcpServerLabels = useKBrainMcpServerLabels();
 
   useEffect(() => {
     if (!htmlPreviews || !conversationId) return;
@@ -174,8 +194,15 @@ export function KBrainSandboxedUiTranscriptHost(props: {
     mcpToolVisibility,
   ]);
 
-  if (!host) return <>{children}</>;
   return (
-    <SandboxedUiTranscriptHostProvider value={host}>{children}</SandboxedUiTranscriptHostProvider>
+    <McpServerLabelsProvider value={mcpServerLabels}>
+      {host ? (
+        <SandboxedUiTranscriptHostProvider value={host}>
+          {children}
+        </SandboxedUiTranscriptHostProvider>
+      ) : (
+        children
+      )}
+    </McpServerLabelsProvider>
   );
 }
