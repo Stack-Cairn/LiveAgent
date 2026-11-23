@@ -198,8 +198,11 @@ test("a leading skill chip is not executed as a same-named command",async()=>{
  const ref=env.React.createRef();await mount({enabledSkills:[skill("deploy")],commandHost,ref});
  await env.act(async()=>new Promise((resolve)=>setTimeout(resolve,0)));
  await env.act(async()=>ref.current.setDraft({segments:[{type:"skillMention",skill:skill("deploy")},{type:"text",text:" now"}],text:"/deploy now",textWithoutLargePastes:"/deploy now",largePastes:[],skillMentions:[],appMentions:[],commitMentions:[],gitFileMentions:[],codeMentions:[],isEmpty:false}));
- assert.equal(ref.current.runCommandDraft(),false);
- await env.act(async()=>ref.current.setText("/deploy now"));assert.equal(ref.current.runCommandDraft(),true);
+ // runCommandDraft updates composer state; outside act React would flush it from a scheduler
+ // task that can run after test.after has torn down the DOM globals.
+ const runCommandDraft=async()=>{let ran;await env.act(async()=>{ran=ref.current.runCommandDraft();});return ran;};
+ assert.equal(await runCommandDraft(),false);
+ await env.act(async()=>ref.current.setText("/deploy now"));assert.equal(await runCommandDraft(),true);
 });
 
 test.after(async () => {
