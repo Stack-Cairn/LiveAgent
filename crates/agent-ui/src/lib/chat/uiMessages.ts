@@ -852,12 +852,6 @@ function redactMcpManagerArgsForDisplay(args: Record<string, unknown>) {
   return out;
 }
 
-export function previewText(input: string, maxChars = 1200) {
-  const text = input || "";
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n...（已截断预览，len=${text.length}）...`;
-}
-
 // Deterministic next id for a text-like block: one more than the highest
 // existing ordinal of the same kind. A pure function of the current array, so
 // replays of the same block sequence assign identical ids.

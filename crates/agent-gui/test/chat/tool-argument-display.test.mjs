@@ -29,7 +29,6 @@ const realAdapterFunctions = {
     return null;
   },
   isDynamicMcpToolName: uiMessages.isDynamicMcpToolName,
-  previewText: uiMessages.previewText,
   safeStringify: uiMessages.safeStringify,
   summarizeToolCall: uiMessages.summarizeToolCall,
   toolCallArgsForDisplay: uiMessages.toolCallArgsForDisplay,

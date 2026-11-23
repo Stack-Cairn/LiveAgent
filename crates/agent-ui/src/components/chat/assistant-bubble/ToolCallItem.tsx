@@ -25,7 +25,6 @@ import {
 import {
   deriveFileChangeStats,
   FILE_TOOL_TEXT_FIELDS,
-  previewText,
   type ToolResultMessage,
   type ToolTraceItem,
   toolResultMessageToText,
@@ -73,6 +72,7 @@ import { ToolElicitations } from "./ToolElicitations";
 import { ToolPermissionMarker } from "./ToolPermissionMarker";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 import { ToolSandboxedViews } from "./ToolSandboxedViews";
+import { TruncatedPreviewText } from "./TruncatedPreviewText";
 
 // 折叠摘要里行内命令的展示上限:远超任何实际窗口一行可容纳的字符数,视觉
 // 省略仍由 CSS truncate 决定;仅防御超长单行命令(如内联脚本)把常驻 DOM
@@ -554,7 +554,7 @@ function ToolCallItem({
           if (readOnly) {
             return (
               <ToolScrollablePre className="max-h-56 bg-surface-subtle">
-                {previewText(resultText, 6000)}
+                <TruncatedPreviewText text={resultText} maxChars={6000} />
               </ToolScrollablePre>
             );
           }
@@ -564,7 +564,7 @@ function ToolCallItem({
           if (result.isError) {
             return (
               <ToolScrollablePre className="max-h-56 bg-destructive/10 text-destructive">
-                {previewText(resultText, 6000)}
+                <TruncatedPreviewText text={resultText} maxChars={6000} />
               </ToolScrollablePre>
             );
           }
@@ -581,7 +581,7 @@ function ToolCallItem({
                 {t("chat.tool.viewReturn")}
               </summary>
               <ToolScrollablePre className="mt-1.5 max-h-56 bg-surface-subtle">
-                {previewText(resultText, 6000)}
+                <TruncatedPreviewText text={resultText} maxChars={6000} />
               </ToolScrollablePre>
             </details>
           );

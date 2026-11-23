@@ -21,7 +21,6 @@ import {
   isDynamicMcpToolName,
   type ListResultDetails,
   type McpManagerResultDetails,
-  previewText,
   type ReadDocumentResultDetails,
   type ReadImageResultDetails,
   type ReadNotebookResultDetails,
@@ -62,9 +61,11 @@ import {
 } from "./assistantBubbleUtils";
 import { getSshManagerResultView } from "./SshManagerResult";
 import { getToolResultImages, ToolResultImagePreview } from "./ToolImages";
+import { TruncatedPreviewText } from "./TruncatedPreviewText";
 
 // 距底部不超过这么多像素视为“跟随最新输出”；用户上翻查看时不抢滚动位置。
 const LIVE_OUTPUT_STICK_THRESHOLD_PX = 24;
+const SHELL_PREVIEW_CHARS = 6000;
 
 type ShellResultDetails = {
   exit_code: number;
@@ -484,7 +485,7 @@ export function ShellToolDisplay({
     if (!element || !liveOutput || !followRef.current) return;
     element.scrollTop = element.scrollHeight;
   }, [liveOutput]);
-  const body = output ? previewText(output, 6000) : liveOutput;
+  const body = output || liveOutput;
   const runInfo = formatToolRunInfo(readToolRunInfo(result?.details), {
     exitCode: t("chat.tool.run.exitCode"),
     timedOut: t("chat.tool.run.timedOut"),
@@ -529,9 +530,9 @@ export function ShellToolDisplay({
           <span className="text-foreground/62" data-shell-live-output="">
             {liveOutput}
           </span>
-        ) : (
-          body || null
-        )}
+        ) : output ? (
+          <TruncatedPreviewText text={output} maxChars={SHELL_PREVIEW_CHARS} />
+        ) : null}
       </ToolScrollablePre>
     </section>
   );
@@ -547,7 +548,7 @@ function CodePreview(props: { text: string; maxChars?: number }) {
   if (!/\S/.test(text)) return null;
   return (
     <ToolScrollablePre className="max-h-56 bg-surface-subtle">
-      {previewText(text, maxChars)}
+      <TruncatedPreviewText text={text} maxChars={maxChars} />
     </ToolScrollablePre>
   );
 }

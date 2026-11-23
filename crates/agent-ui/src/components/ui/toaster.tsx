@@ -52,8 +52,10 @@ export function Toaster() {
 
 function ToastList({ position }: { position: ToastPosition }) {
   const { toasts } = useToastManager<ToastData>();
+  const { t } = useLocale();
   return (
     <ToastViewport
+      aria-label={t("toast.regionLabel")}
       data-toast-position={position}
       className={cn(
         "layer-toast pointer-events-none fixed flex max-h-[calc(100dvh-2rem)] flex-col gap-2 overflow-y-auto",

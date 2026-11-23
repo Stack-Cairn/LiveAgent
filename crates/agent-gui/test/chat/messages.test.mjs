@@ -1929,7 +1929,6 @@ test("tool call summaries and argument display avoid dumping large payloads", ()
       base64: "base64Chars=900",
     },
   );
-  assert.match(uiMessages.previewText("x".repeat(1300)), /len=1300/);
 });
 
 test("seed tool call recovery converts XML-like markup into structured tool calls", () => {

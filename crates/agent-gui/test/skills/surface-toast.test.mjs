@@ -51,6 +51,8 @@ test("root toaster preserves each notification position across mounting and upda
     toast.success("Undo changes", { id: "undo", position: "bottom-center", duration: 0 });
     toast.error("Upload failed", { id: "upload", duration: 0 });
     await env.mount();
+    // The viewport region is named in the UI locale, not the library's English default.
+    assert.equal(viewport("bottom-right").getAttribute("aria-label"), "toast.regionLabel");
     assert.match(viewport("bottom-right").textContent, /Scan complete/);
     assert.match(viewport("bottom-center").textContent, /Undo changes/);
     assert.match(viewport("top-right").textContent, /Upload failed/);
