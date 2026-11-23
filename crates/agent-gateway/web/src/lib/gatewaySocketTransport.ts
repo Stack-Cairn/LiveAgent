@@ -17,6 +17,11 @@ import { ConversationStreamClient } from "@/lib/chat/stream/conversationStreamCl
 import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
 import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
 import {
+  isGatewayLocalWorkspaceAgentId,
+  pickActiveAgentId,
+  selectableAgents,
+} from "./gatewayAgentSelection";
+import {
   applyTerminalSnapshotEvent,
   asErrorMessage,
   buildWebSocketUrl,
@@ -27,6 +32,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   FOREGROUND_SOCKET_RECYCLE_IDLE_MS,
   FOREGROUND_WAKEUP_RECENCY_MS,
+  GATEWAY_RECONNECTING_NOTICE,
   type GatewayRequestOptions,
   getRuntimeHost,
   type HistoryListener,
@@ -84,6 +90,8 @@ import type {
   GatewayHistorySyncSnapshot,
   GatewayHistorySyncStatus,
 } from "./gatewayTypes";
+
+const ACTIVE_AGENT_SWITCHED = "active agent switched";
 
 export class GatewayWebSocketTransport {
   readonly terminalStream: BrowserGatewayTerminalStreamClient;
@@ -175,8 +183,10 @@ export class GatewayWebSocketTransport {
     }
     this.activeAgentId = agentId;
     persistActiveAgent(agentId);
+    // The cached status is the previous Agent's: drop it, the reconnect reads the new one.
+    if (this.lastStatus || this.lastStatusError) this.emitStatus(null, null);
     if (reconnect && this.socket && this.authenticated) {
-      this.handleDisconnect(new Error("active agent switched"));
+      this.handleDisconnect(new Error(ACTIVE_AGENT_SWITCHED));
     } else if (!reconnect && this.socket && this.authenticated) {
       this.flushPendingAgentEvents(agentId);
       this.conversationStreams.handleConnected();
@@ -221,24 +231,9 @@ export class GatewayWebSocketTransport {
   }
 
   protected reconcileActiveAgent(agents: AgentStatus[], reconnect = true): string {
-    const current = this.activeAgentId;
-    if (current && agents.some((agent) => (agent.agent_id ?? "").trim() === current)) {
-      return current;
-    }
-    const preferred = [...agents]
-      .filter((agent) => (agent.agent_id ?? "").trim() !== "")
-      .sort((left, right) => {
-        if (left.online !== right.online) {
-          return left.online ? -1 : 1;
-        }
-        return (left.agent_id ?? "").localeCompare(right.agent_id ?? "");
-      })[0];
-    const agentId = (preferred?.agent_id ?? "").trim();
-    if (agentId) {
-      this.switchActiveAgent(agentId, reconnect);
-    } else if (current) {
-      this.switchActiveAgent("", reconnect);
-    }
+    // switchActiveAgent is a no-op when the pick is the current Agent.
+    const agentId = pickActiveAgentId(agents, this.activeAgentId);
+    this.switchActiveAgent(agentId, reconnect);
     return agentId;
   }
 
@@ -291,7 +286,7 @@ export class GatewayWebSocketTransport {
   }
 
   protected snapshotAgents(): AgentStatus[] {
-    return [...this.agents.values()].sort((a, b) =>
+    return selectableAgents([...this.agents.values()]).sort((a, b) =>
       (a.agent_id ?? "").localeCompare(b.agent_id ?? ""),
     );
   }
@@ -693,15 +688,7 @@ export class GatewayWebSocketTransport {
         this.offlineReassessmentPending = true;
         return;
       }
-      this.emitStatus(
-        this.lastStatus
-          ? {
-              ...this.lastStatus,
-              online: false,
-            }
-          : null,
-        "Gateway 正在重新连接...",
-      );
+      this.emitStatus(this.offlineLastStatus(), GATEWAY_RECONNECTING_NOTICE);
     }, RECONNECT_NOTICE_DELAY_MS);
   }
 
@@ -755,6 +742,13 @@ export class GatewayWebSocketTransport {
     }, baseDelay + jitter);
   }
 
+  // An explicit user retry skips the remaining backoff wait.
+  retryConnectionNow() {
+    this.clearReconnectTimer();
+    this.reconnectAttempt = 0;
+    void this.reconnectNow();
+  }
+
   protected async reconnectNow() {
     if (!this.shouldMaintainConnection()) {
       return;
@@ -805,11 +799,16 @@ export class GatewayWebSocketTransport {
       return;
     }
     this.statusRefreshInFlight = true;
+    // A read for an Agent the user switched away from says nothing about the new one.
+    const agentId = this.activeAgentId;
+    const switchedAway = () => agentId !== "" && agentId !== this.activeAgentId;
     try {
       const status = await this.getStatus();
+      if (switchedAway()) return;
       this.clearReconnectNoticeTimer();
       this.emitStatus(status, null);
     } catch (error) {
+      if (switchedAway()) return;
       if (isRecoverableGatewayTransportError(error) && this.shouldMaintainConnection()) {
         this.scheduleReconnect();
         this.scheduleReconnectNotice();
@@ -826,19 +825,17 @@ export class GatewayWebSocketTransport {
         return;
       }
       const message = asErrorMessage(error, "status request failed");
-      const offlineStatus =
-        this.lastStatus !== null
-          ? {
-              ...this.lastStatus,
-              online: false,
-            }
-          : null;
+      const offlineStatus = this.offlineLastStatus();
       this.lastStatus = offlineStatus;
       this.lastStatusError = message;
       this.emitStatus(offlineStatus, message);
     } finally {
       this.statusRefreshInFlight = false;
     }
+  }
+
+  protected offlineLastStatus(): AgentStatus | null {
+    return this.lastStatus ? { ...this.lastStatus, online: false } : null;
   }
 
   protected emitStatus(status: AgentStatus | null, error: string | null) {
@@ -1266,10 +1263,7 @@ export class GatewayWebSocketTransport {
       if (
         decoded.agentId &&
         !this.matchesActiveAgent(decoded.agentId) &&
-        !(
-          decoded.type === "workspace.activity" &&
-          decoded.agentId.startsWith("gateway-local-workspace-")
-        )
+        !(decoded.type === "workspace.activity" && isGatewayLocalWorkspaceAgentId(decoded.agentId))
       ) {
         return;
       }
@@ -1460,21 +1454,17 @@ export class GatewayWebSocketTransport {
     // with their seq cursors when the socket re-authenticates.
     this.conversationStreams.handleDisconnected();
 
-    if (!this.disposed && this.statusListeners.size > 0) {
+    if (
+      !this.disposed &&
+      this.statusListeners.size > 0 &&
+      error.message !== ACTIVE_AGENT_SWITCHED
+    ) {
       if (isRecoverableGatewayTransportError(error) && this.shouldMaintainConnection()) {
         this.scheduleReconnectNotice();
       } else if (isDocumentHidden()) {
         this.offlineReassessmentPending = true;
       } else {
-        this.emitStatus(
-          this.lastStatus
-            ? {
-                ...this.lastStatus,
-                online: false,
-              }
-            : null,
-          error.message,
-        );
+        this.emitStatus(this.offlineLastStatus(), error.message);
       }
     }
     this.lastInboundAt = 0;

@@ -1937,6 +1937,26 @@ test("GatewayWebSocketClient applies pushed status frames and polls slowly as fa
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient does not replay the previous Agent's status after a switch", async () => {
+  // Switching away from an offline Agent must not paint the new target offline
+  // with the old Agent's cached status until the new one reports.
+  const timers = createManualTimers();
+  installBrowser({ ...timers });
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  client.subscribeStatus(() => {});
+  const socket = await connectAndAuth(codec);
+  socket.receiveBinary(codec.encodeServerFrame({ status: { online: false } }));
+
+  client.setActiveAgent("agent-other");
+  const replayed = [];
+  client.subscribeStatus((status, error) => replayed.push({ status, error }));
+  assert.deepEqual(replayed, [], "no cached status of the previous Agent is replayed");
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient defers offline verdicts while hidden and reconciles on wake", async () => {
   const timers = createManualTimers();
   installBrowser({ ...timers });
@@ -2009,7 +2029,7 @@ test("GatewayWebSocketClient paints offline when the post-wake reconnect notice 
   timers.fire((timer) => timer.ms === 15_000);
   const last = statuses.at(-1);
   assert.equal(last?.status?.online, false, "failed wake reconcile paints offline");
-  assert.equal(last?.error, "Gateway 正在重新连接...");
+  assert.equal(last?.error, "Gateway is reconnecting");
   resetGatewayWebSocketClient();
 });
 

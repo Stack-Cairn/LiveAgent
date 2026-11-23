@@ -115,6 +115,7 @@ import type { TrustedGatewayImageIdentity } from "@/agent-ui-adapters/imageStudi
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
+import { isGatewayTransportFailure } from "@/lib/gatewayTransportErrors";
 import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
@@ -152,6 +153,7 @@ import { ConversationStatsBarHost } from "./ConversationStatsBarHost";
 import { asErrorMessage } from "./chatEventUtils";
 import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
+import { GatewayChatStatusBanners, useGatewayTargetOffline } from "./GatewayChatStatusBanners";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
 import { useGatewayImageStudio } from "./hooks/useGatewayImageStudio";
@@ -166,7 +168,8 @@ import {
 } from "./lazySurfaces";
 import { sendComposerCommandTurn } from "./sendComposerCommandTurn";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
-import { UserMenu } from "./UserMenu";
+import { UserMenu, userMenuAgentStatus } from "./UserMenu";
+import { restoreUnsentComposerDraft } from "./unsentComposerDraft";
 import { WebGoalBarHost } from "./WebGoalBarHost";
 import { createWebComposerCommandHost } from "./webComposerCommandHost";
 import {
@@ -466,6 +469,12 @@ export function GatewayAppView({
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
+  // Connection down: banner instead of raw close text, grey dot, sends wait.
+  const gatewayDisconnected = gatewayConnectionLost || isGatewayTransportFailure(statusError);
+  const sendBlockedReason = gatewayDisconnected
+    ? translate("gatewayWeb.connection.sendBlocked", settings.locale)
+    : null;
+  const targetOffline = useGatewayTargetOffline(api, status, gatewayDisconnected);
   // SSHManager rows name hosts by their configured name rather than the opaque id.
   rememberSshHostNames(settings.ssh.hosts);
   const overlayModalRef = useSettingsOverlayModal(translate("settings.title", settings.locale));
@@ -655,7 +664,9 @@ export function GatewayAppView({
       isUploadingFiles &&
       (!uploadingConversationId || uploadingConversationId === sendConversationId);
     if (uploadBlocksSend || isImportingPastedTextRef.current) return;
-    if (composerInputDisabled) return;
+    // While the Gateway connection is down nothing can be delivered: keep the
+    // draft in the composer (the send button says "Reconnecting…").
+    if (composerInputDisabled || gatewayDisconnected) return;
     if (queuedChatEditSessionRef.current?.conversationId === getDisplayedConversationId()) {
       primarySendInFlightConversationRef.current = sendConversationId;
       void (async () => {
@@ -716,16 +727,21 @@ export function GatewayAppView({
           composerRef.current?.clear();
         }
         setPendingUploadsForConversation(sendConversationId, []);
+        const restoreDraft = () => {
+          updatePendingUploadsForConversation(sendConversationId, (current) =>
+            mergePendingUploadedFiles(current, files),
+          );
+          if (getDisplayedConversationId() !== sendConversationId) return;
+          restoreUnsentComposerDraft(composerRef.current, draft);
+        };
         void sendChat(text, {
           conversationId: sendConversationId,
           uploadedFiles: files,
           referencedConversations,
           runtimeControls: chatRuntimeControlsForCurrentProvider,
-        }).catch(() => {
-          updatePendingUploadsForConversation(sendConversationId, (current) =>
-            mergePendingUploadedFiles(current, files),
-          );
-        });
+        }).then((outcome) => {
+          if (!outcome || outcome.kind === "failed") restoreDraft();
+        }, restoreDraft);
       } finally {
         if (primarySendInFlightConversationRef.current === sendConversationId) {
           primarySendInFlightConversationRef.current = null;
@@ -740,6 +756,7 @@ export function GatewayAppView({
     composerRef,
     displayedConversationBusyRef,
     displayedConversationWorkdir,
+    gatewayDisconnected,
     getDisplayedConversationId,
     isImportingPastedTextRef,
     isUploadingFiles,
@@ -781,6 +798,7 @@ export function GatewayAppView({
     showUsage: isAgentDevExecutionMode,
     isInputDisabled: composerInputDisabled,
     transportInputDisabled: !status?.online || Boolean(chatProtocolIncompatibleMessage),
+    sendBlockedReason,
     uploadingConversationId,
     inputPlaceholder: composerPlaceholder,
     modelOptions,
@@ -1650,7 +1668,7 @@ export function GatewayAppView({
                     onOpenChange={setUserMenuOpen}
                     userMenuLabel={userMenuLabel}
                     userAvatarLabel={userAvatarLabel}
-                    agentStatus={status === null ? "unknown" : status.online ? "online" : "offline"}
+                    agentStatus={userMenuAgentStatus(status, gatewayDisconnected)}
                     agentSelector={
                       <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
                     }
@@ -1864,49 +1882,17 @@ export function GatewayAppView({
                         },
                         content: (
                           <>
-                            {statusError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {statusError}
-                              </div>
-                            ) : null}
-                            {chatProtocolIncompatibleMessage && !statusError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {chatProtocolIncompatibleMessage}
-                              </div>
-                            ) : null}
-                            {settingsSyncError ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {settingsSyncError}
-                              </div>
-                            ) : null}
-                            {chatError && displayedTranscriptRowCount === 0 ? (
-                              <div
-                                className={cn(
-                                  "gateway-banner-error mx-20px mt-12px mb-0",
-                                  "rounded-xl border border-destructive/16 bg-destructive/8 px-12px py-10px text-sm text-destructive",
-                                  "max-640:mx-10px max-640:mt-8px max-640:mb-0",
-                                )}
-                              >
-                                {chatError}
-                              </div>
+                            {api ? (
+                              <GatewayChatStatusBanners
+                                api={api}
+                                gatewayDisconnected={gatewayDisconnected}
+                                targetOffline={targetOffline}
+                                onSwitchAgent={handleActiveAgentChange}
+                                statusError={statusError}
+                                chatProtocolIncompatibleMessage={chatProtocolIncompatibleMessage}
+                                settingsSyncError={settingsSyncError}
+                                chatError={displayedTranscriptRowCount === 0 ? chatError : null}
+                              />
                             ) : null}
 
                             {sessionWorkbench.enabled ? (
@@ -2075,6 +2061,7 @@ export function GatewayAppView({
                                   isSending={composerIsSending}
                                   isUploadingFiles={isUploadingFiles}
                                   isInputDisabled={composerInputDisabled}
+                                  sendBlockedReason={sendBlockedReason}
                                   // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
                                   sttSessionKey={displayedConversationId}
                                   sttProvider={

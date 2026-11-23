@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { normalizeGatewayAccessToken, verifyGatewayAccessToken } from "@/lib/gatewayAuth";
+import {
+  GATEWAY_AUTH_ERROR_KEYS,
+  normalizeGatewayAccessToken,
+  verifyGatewayAccessToken,
+} from "@/lib/gatewayAuth";
 import { resetGatewayWebSocketClient } from "@/lib/gatewaySocket";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
 
@@ -43,7 +47,7 @@ export function useGatewaySession(historyShareToken: string | null) {
         clearToken();
         resetGatewayWebSocketClient();
         setToken("");
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, GATEWAY_AUTH_ERROR_KEYS.failed));
         setLoginToken(storedToken);
       })
       .finally(() => {
@@ -61,7 +65,7 @@ export function useGatewaySession(historyShareToken: string | null) {
     const draftToken = loginToken;
     const normalizedToken = normalizeGatewayAccessToken(draftToken);
     if (!normalizedToken) {
-      setAuthError("请输入 Access Token。");
+      setAuthError(GATEWAY_AUTH_ERROR_KEYS.required);
       return;
     }
 
@@ -80,7 +84,7 @@ export function useGatewaySession(historyShareToken: string | null) {
       clearToken();
       resetGatewayWebSocketClient();
       setToken("");
-      setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+      setAuthError(asErrorMessage(error, GATEWAY_AUTH_ERROR_KEYS.failed));
     } finally {
       setAuthSubmitting(false);
     }

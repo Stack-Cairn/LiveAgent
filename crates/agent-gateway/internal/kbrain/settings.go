@@ -8,12 +8,16 @@ import (
 	"strings"
 )
 
-// relayBrowserLocalSettings are the WebUI display preferences a desktop app would
-// persist and sync, but which have no home behind the relay: K-brain stores backend
-// settings only, and settingsUpdateForKBrain rejects these fields. The projection
-// names them so the WebUI keeps them in the browser instead of sending a save that
+// relayBrowserLocalSettings are the WebUI settings a desktop app would persist and
+// sync, but which have no home behind the relay: K-brain stores backend settings
+// only, and settingsUpdateForKBrain rejects these fields. The projection names them
+// so the WebUI keeps them in the browser (and says so) instead of sending a save that
 // cannot succeed; any other unsupported field still fails the save.
-var relayBrowserLocalSettings = []string{"locale", "theme"}
+//   - locale, theme, customSettings: display preferences of the browser.
+//   - system: execution mode, working directory and command safety travel with each
+//     chat request; the rest (project list, ordering, proxy, time zone) only shapes
+//     this browser. Project prompts inside it are sent as projectPrompts.
+var relayBrowserLocalSettings = []string{"locale", "theme", "system", "customSettings"}
 
 // Project backend-owned settings only; MCP is fetched from its resource route.
 type gatewaySettingsProjection struct {

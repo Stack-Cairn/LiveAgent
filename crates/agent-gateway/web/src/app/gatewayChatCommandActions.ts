@@ -184,7 +184,6 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     }
     const startedAsDraftConversation = isLocalDraftConversationId(activeConversationId);
     if (chatCommandPipeline.hasPending(activeConversationId)) return null;
-    clearCachedComposerDraft(activeConversationId);
 
     const clientRequestId = sendOptions?.clientRequestId?.trim() || createUuid();
     const startedAt = Date.now();
@@ -254,6 +253,9 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
         });
       },
     });
+    // The cached draft is only dropped once the Gateway took the command; a
+    // send that never arrived keeps it (and the sender restores the composer).
+    if (outcome.kind !== "failed") clearCachedComposerDraft(activeConversationId);
     if (outcome.kind === "accepted") {
       const acceptedId = outcome.accepted.conversationId.trim();
       if (

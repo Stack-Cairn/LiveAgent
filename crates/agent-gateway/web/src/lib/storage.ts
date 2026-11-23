@@ -5,7 +5,8 @@ export function loadToken(): string {
 }
 
 export function saveToken(token: string): void {
-  window.localStorage.setItem(TOKEN_KEY, token);
+  // Never persist pasted surrounding whitespace (a trailing newline breaks auth).
+  window.localStorage.setItem(TOKEN_KEY, token.trim());
 }
 
 export function clearToken(): void {

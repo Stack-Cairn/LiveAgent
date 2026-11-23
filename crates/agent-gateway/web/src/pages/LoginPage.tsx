@@ -1,5 +1,7 @@
 import {
   ArrowRight,
+  Eye,
+  EyeOff,
   History,
   Key,
   Lock,
@@ -8,10 +10,10 @@ import {
   Timer,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
-import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
+import { isGatewayAuthErrorKey } from "@/lib/gatewayAuth";
 
 type LoginPageProps = {
   token: string;
@@ -24,21 +26,21 @@ type LoginPageProps = {
 const features = [
   {
     icon: MessageSquareText,
-    title: "Remote Chat",
+    titleKey: "login.featureRemoteChatTitle",
     descKey: "login.featureRemoteChat",
     accent:
       "[&>div:first-child]:bg-hsl-215-80-52-0p1 [&>div:first-child]:text-hsl-215-80-52 dark:[&>div:first-child]:bg-hsl-215-80-60-0p14 dark:[&>div:first-child]:text-hsl-215-80-70",
   },
   {
     icon: History,
-    title: "History Resume",
+    titleKey: "login.featureHistoryResumeTitle",
     descKey: "login.featureHistoryResume",
     accent:
       "[&>div:first-child]:bg-hsl-255-60-56-0p1 [&>div:first-child]:text-hsl-255-60-56 dark:[&>div:first-child]:bg-hsl-255-60-60-0p14 dark:[&>div:first-child]:text-hsl-255-60-72",
   },
   {
     icon: Timer,
-    title: "Cron Control",
+    titleKey: "login.featureCronControlTitle",
     descKey: "login.featureCronControl",
     accent:
       "[&>div:first-child]:bg-hsl-32-90-48-0p1 [&>div:first-child]:text-hsl-32-90-48 dark:[&>div:first-child]:bg-hsl-32-80-50-0p14 dark:[&>div:first-child]:text-hsl-32-80-64",
@@ -48,6 +50,13 @@ const features = [
 export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit }: LoginPageProps) {
   const { t } = useLocale();
   const [isFocused, setIsFocused] = useState(false);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const errorText = error && isGatewayAuthErrorKey(error) ? t(error) : error;
+  const canSubmit = token.trim() !== "" && !isSubmitting;
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (canSubmit) onSubmit();
+  };
 
   return (
     <main
@@ -126,7 +135,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
           <div className="mt-32px flex flex-col gap-10px max-640:mt-20px max-640:gap-8px max-380:mt-16px max-380:gap-6px">
             {features.map((f) => (
               <div
-                key={f.title}
+                key={f.titleKey}
                 className={cn(
                   "flex items-start gap-12px",
                   "rounded-xl border border-glass-border/55 bg-hsl-0-0-100-0p5 px-14px py-12px",
@@ -148,7 +157,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 </div>
                 <div className="min-w-0">
                   <strong className="block text-sm font-semibold mb-2px text-foreground max-640:text-xs max-640:mb-0">
-                    {f.title}
+                    {t(f.titleKey)}
                   </strong>
                   <span className="block text-xs leading-1p55 text-muted-foreground max-820:text-xs max-640:hidden">
                     {t(f.descKey)}
@@ -167,7 +176,11 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             "max-640:pb-24px max-380:px-16px max-380:pt-14px max-380:pb-20px",
           )}
         >
-          <div className="w-full max-w-360px max-1080:max-w-full">
+          <form
+            className="w-full max-w-360px max-1080:max-w-full"
+            onSubmit={handleSubmit}
+            noValidate
+          >
             <div className="mb-28px max-640:mb-20px max-380:mb-16px">
               <div className="flex items-center gap-10px">
                 <div
@@ -207,44 +220,63 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 )}
               >
                 <Key size={12} strokeWidth={2.5} />
-                Access Token
+                {t("login.tokenLabel")}
               </label>
-              <Textarea
-                id="access-token"
-                name="access_token"
-                rows={3}
-                value={token}
-                placeholder=""
-                disabled={isSubmitting}
-                aria-invalid={error ? "true" : "false"}
-                onChange={(e) => onTokenChange(e.target.value)}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                className={cn(
-                  "min-h-72px resize-none border-0 bg-transparent p-0",
-                  "font-mono text-sm leading-1p6 text-foreground shadow-none",
-                  "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none touch-primary:text-base",
-                )}
-              />
+              <div className="flex items-center gap-8px">
+                <input
+                  id="access-token"
+                  name="access_token"
+                  type={tokenVisible ? "text" : "password"}
+                  value={token}
+                  autoComplete="current-password"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  disabled={isSubmitting}
+                  aria-invalid={error ? "true" : "false"}
+                  aria-describedby={errorText ? "access-token-error" : undefined}
+                  onChange={(e) => onTokenChange(e.target.value)}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  className={cn(
+                    "h-32px min-w-0 flex-1 border-0 bg-transparent p-0",
+                    "font-mono text-sm text-foreground outline-none touch-primary:text-base",
+                  )}
+                />
+                <button
+                  type="button"
+                  className={cn(
+                    "flex size-32px shrink-0 items-center justify-center rounded-lg text-muted-foreground",
+                    "hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                  )}
+                  aria-label={tokenVisible ? t("login.hideToken") : t("login.showToken")}
+                  aria-pressed={tokenVisible}
+                  title={tokenVisible ? t("login.hideToken") : t("login.showToken")}
+                  onClick={() => setTokenVisible((visible) => !visible)}
+                >
+                  {tokenVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
-            {error && (
+            {errorText && (
               <p
+                id="access-token-error"
+                role="alert"
                 className={cn(
                   "mx-0 mt-0 mb-14px px-14px py-10px",
                   "rounded-lg text-sm leading-1p5 text-hsl-0-72-50 bg-hsl-0-80-50-0p06 border border-solid border-hsl-0-80-50-0p1",
                   "dark:text-hsl-0-80-68 dark:bg-hsl-0-80-50-0p1 dark:border-hsl-0-80-50-0p15",
                 )}
               >
-                {error}
+                {errorText}
               </p>
             )}
 
             <Button
-              type="button"
+              type="submit"
               size="lg"
-              disabled={token.trim() === "" || isSubmitting}
-              onClick={onSubmit}
+              disabled={!canSubmit}
               className={cn(
                 "h-46px w-full cursor-pointer gap-8px",
                 "rounded-13px text-sm font-semibold",
@@ -265,7 +297,7 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             <p className="mt-16px text-center text-xs text-muted-foreground/60 max-640:text-xs max-380:mt-12px">
               {t("login.rememberHint")}
             </p>
-          </div>
+          </form>
         </div>
       </div>
     </main>

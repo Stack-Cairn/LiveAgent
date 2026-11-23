@@ -6,10 +6,13 @@ const loader = createWebModuleLoader();
 const { ChatCommandPipeline } = loader.loadModule("src/lib/chat/stream/chatCommandPipeline.ts");
 const { createTranscriptStore } = loader.loadModule("src/lib/chat/transcript/transcriptStore.ts");
 
+const { isGatewayTransportFailure } = loader.loadModule("src/lib/gatewayTransportErrors.ts");
+
 function createHarness() {
   const stores = new Map();
   const outcomes = { bound: [], queued: [], failed: [] };
   const pipeline = new ChatCommandPipeline({
+    isTransportFailure: isGatewayTransportFailure,
     getTranscriptStore(conversationId) {
       let store = stores.get(conversationId);
       if (!store) {
@@ -24,8 +27,8 @@ function createHarness() {
     onQueuedInGui(update, pending) {
       outcomes.queued.push({ update, pending });
     },
-    onFailed(pending, errorCode, message) {
-      outcomes.failed.push({ pending, errorCode, message });
+    onFailed(pending, errorCode, message, transport) {
+      outcomes.failed.push({ pending, errorCode, message, transport });
     },
   });
   return { pipeline, stores, outcomes };
@@ -274,6 +277,32 @@ test("submit failure removes the bubble and surfaces an error entry", async () =
   assert.equal(texts.some((text) => text === "hello"), false, "optimistic bubble removed");
   assert.equal(texts.some((text) => /agent offline/.test(text)), true);
   assert.equal(outcomes.failed.length, 1);
+});
+
+test("a send lost to a dropped connection leaves no transcript error row", async () => {
+  // The socket closed under the submit: nothing reached the gateway, so the
+  // raw close text must not become an assistant row; the caller restores the
+  // draft and the connection banner explains what happened.
+  for (const reason of [
+    "Gateway WebSocket disconnected (code=1006 clean=false)",
+    "Gateway WebSocket is not connected",
+    "Gateway WebSocket connection timed out",
+  ]) {
+    const { pipeline, stores, outcomes } = createHarness();
+    const outcome = await pipeline.submit({
+      conversationId: "conv-1",
+      clientRequestId: "client-1",
+      message: "sent while offline",
+      submit: async () => {
+        throw new Error(reason);
+      },
+    });
+    assert.equal(outcome.kind, "failed");
+    assert.equal(outcome.transport, true, reason);
+    assert.deepEqual(transcriptTexts(stores.get("conv-1")), [], reason);
+    assert.equal(outcomes.failed[0].transport, true);
+    assert.equal(pipeline.hasPending("conv-1"), false);
+  }
 });
 
 test("bound update re-keys a draft conversation", async () => {

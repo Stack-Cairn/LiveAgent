@@ -332,3 +332,37 @@ func TestV2WorkspaceSubscribeOfflineAgentStreamsLocalActivity(t *testing.T) {
 	}
 	t.Fatal("timed out waiting for workspace activity from the local owner")
 }
+
+func TestV2AgentListOmitsLocalWorkspaceWatchers(t *testing.T) {
+	t.Parallel()
+
+	sm, _, _, conn, cleanup := newV2MultiAgentTest(t)
+	defer cleanup()
+
+	// A workspace subscription for an offline Agent registers a watcher; it
+	// cannot chat, so a fresh browser must never be offered (or pick) it.
+	watcherID, _, release, err := sm.EnsureLocalWorkspaceActivityOwner("offline-kbrain", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if !session.IsLocalWorkspaceActivityOwnerID(watcherID) {
+		t.Fatalf("watcher id %q is not recognised as a local workspace owner", watcherID)
+	}
+
+	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
+		RequestId: "list-without-watchers",
+		Payload:   &gatewayv2.WebClientFrame_AgentList{AgentList: &gatewayv2.AgentListRequest{}},
+	})
+	list := receiveWebFrameWithID(t, conn, "list-without-watchers").GetAgentList()
+	if list == nil {
+		t.Fatal("agent_list response missing")
+	}
+	ids := make([]string, 0, len(list.GetAgents()))
+	for _, entry := range list.GetAgents() {
+		ids = append(ids, entry.GetAgentId())
+	}
+	if strings.Join(ids, ",") != "agent-a,agent-b" {
+		t.Fatalf("agent_list ids = %v, want only the real Agents", ids)
+	}
+}

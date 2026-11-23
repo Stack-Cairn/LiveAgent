@@ -11,12 +11,24 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 
+type UserMenuAgentStatus = "online" | "offline" | "reconnecting" | "unknown";
+
+/** "reconnecting" while the Gateway connection is down: the last agent state is stale. */
+export function userMenuAgentStatus(
+  status: { online?: boolean } | null,
+  gatewayDisconnected: boolean,
+): UserMenuAgentStatus {
+  if (gatewayDisconnected) return "reconnecting";
+  if (status === null) return "unknown";
+  return status.online ? "online" : "offline";
+}
+
 type UserMenuProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userMenuLabel: string;
   userAvatarLabel: string;
-  agentStatus: "online" | "offline" | "unknown";
+  agentStatus: UserMenuAgentStatus;
   agentSelector?: ReactNode;
   onLogout: () => void;
 };
@@ -37,7 +49,9 @@ export function UserMenu(props: UserMenuProps) {
       ? t("settings.devicesOnlineStatus")
       : agentStatus === "offline"
         ? t("settings.devicesOfflineStatus")
-        : t("settings.devicesUnknownStatus");
+        : agentStatus === "reconnecting"
+          ? t("gatewayWeb.connection.reconnecting")
+          : t("settings.devicesUnknownStatus");
   const statusDotClass =
     agentStatus === "online"
       ? "bg-success"

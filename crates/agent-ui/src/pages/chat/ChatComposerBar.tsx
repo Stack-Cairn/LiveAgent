@@ -116,6 +116,7 @@ import {
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
 import { useComposerShortcuts } from "../../lib/shortcuts/useComposerShortcuts";
+import { draftHasClarifiableText, prefersReducedMotion } from "./chatComposerBarUtils";
 import { useComposerStt } from "./useComposerStt";
 
 function useComposerUploadedImagePreview(
@@ -237,18 +238,6 @@ const MODE_CYCLE_NOTICE_MS = 1500;
 const unavailableClarifyTurn: RunClarifyTurn = () =>
   Promise.reject(new Error("runClarifyTurn is not provided"));
 
-/** 可澄清文本 = 草稿中存在非空白纯文本段。提及/附件 token 与大段粘贴不算：
- * 澄清的输入是用户写的提示词文本，只有 chip/附件时按钮应禁用而非点击空转。
- * 只在事件处理器里调用（读 DOM），渲染路径零调用。 */
-function draftHasClarifiableText(composer: MentionComposerHandle | null): boolean {
-  return (
-    composer
-      ?.getDraft()
-      .segments.some((segment) => segment.type === "text" && segment.text.trim().length > 0) ??
-    false
-  );
-}
-
 /** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
 export type ContextUsageTokensSource = {
   subscribe: (listener: () => void) => () => void;
@@ -285,13 +274,6 @@ function ComposerContextUsageRing(props: {
   );
 }
 
-function prefersReducedMotion() {
-  return (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
-
 export type ChatComposerBarProps = {
   surface: "desktop" | "web";
   /** Web surface that owns the measured composer-height CSS variable. */
@@ -301,6 +283,11 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
+  /**
+   * Set while sending is impossible but typing is fine (e.g. the host is
+   * reconnecting): the send button is disabled and announces this reason.
+   */
+  sendBlockedReason?: string | null;
   sttProvider?: SttProviderId | null;
   sttProviderConfigured?: boolean;
   sttTransport?: SttTransport;
@@ -437,6 +424,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
+    sendBlockedReason = null,
     sttProvider = null,
     sttProviderConfigured,
     sttTransport,
@@ -660,7 +648,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
   const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
-  const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
+  const sendBlocked = Boolean(sendBlockedReason);
+  const sendDisabled =
+    isInputDisabled || sendBlocked || stt.active || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   // Mirrors the editor's send key preference; while a run streams the same
   // button stops it, and Esc does too (useEscapeToStopRun below).
@@ -669,7 +659,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     ? t("chat.queue.addToQueue")
     : isSending
       ? t("chat.stopGeneration")
-      : t("chat.sendMessage");
+      : sendBlockedReason || t("chat.sendMessage");
   // Esc stops the run; open popups, the expanded composer and a pending
   // approval keep the key first (see escapeStopRun.ts for the precedence).
   useEscapeToStopRun({
@@ -1181,11 +1171,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const handleComposerSend = useCallback(() => {
     // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
     if (clarifyOpen) return;
+    // Enter must not clear a draft the host cannot deliver right now.
+    if (sendBlockedReason) return;
     // 以已注册指令开头的草稿改走指令执行（发送按钮路径；Enter 在输入框内已拦截）。
     if (composerRef.current?.runCommandDraft()) return;
     setComposerExpanded(false);
     onSend();
-  }, [clarifyOpen, composerRef, onSend, setComposerExpanded]);
+  }, [clarifyOpen, composerRef, onSend, sendBlockedReason, setComposerExpanded]);
 
   useEffect(() => {
     const editor = glassCardRef.current?.querySelector<HTMLElement>(".mention-composer");

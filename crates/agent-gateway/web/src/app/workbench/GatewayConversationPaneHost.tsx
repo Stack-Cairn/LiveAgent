@@ -102,6 +102,7 @@ import {
 } from "../constants";
 import { isLocalDraftConversationId } from "../gatewayLocalDraft";
 import type { SendChatFn } from "../types";
+import { restoreUnsentComposerDraft } from "../unsentComposerDraft";
 import { WebGoalBarHost } from "../WebGoalBarHost";
 import { resolveWorkbenchComposerInputDisabled } from "./composerInputState";
 
@@ -125,6 +126,8 @@ export type GatewayConversationPaneHostContext = {
   isInputDisabled: boolean;
   /** 传输层禁用(离线/协议不兼容)——背景 Pane 也要挡住发送。 */
   transportInputDisabled: boolean;
+  /** Set while the Gateway connection is down: typing stays, sending waits. */
+  sendBlockedReason: string | null;
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
   enabledSkills: ChatComposerBarProps["enabledSkills"];
@@ -604,7 +607,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   isRunningRef.current = isRunning;
 
   const handleSend = useCallback(() => {
-    if (sendInFlightRef.current || context.transportInputDisabled) return;
+    if (sendInFlightRef.current || context.transportInputDisabled || context.sendBlockedReason) {
+      return;
+    }
     // 本会话的附件导入尚未落账时不得发送:此刻 getPendingUploads 读到的
     // 是空列表,消息会丢附件(与主 Pane 的上传中禁用同一边界)。
     if (context.uploadingConversationId === conversationId) return;
@@ -645,10 +650,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           context.updatePendingUploads(conversationId, (current) =>
             mergePendingUploadedFiles(current, uploadedFiles),
           );
-          const currentComposer = composerRef.current;
-          if (draft && currentComposer && !currentComposer.hasContent()) {
-            currentComposer.setDraft(draft);
-          }
+          restoreUnsentComposerDraft(composerRef.current, draft);
         };
         try {
           const outcome = await context.sendChat(text, {
@@ -1005,6 +1007,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               transportInputDisabled: context.transportInputDisabled,
               conversationIsCompacting: transcript.toolStatusIsCompaction === true,
             })}
+            sendBlockedReason={context.sendBlockedReason}
             sttSessionKey={conversationId}
             sttProvider={context.sttProvider}
             sttProviderConfigured={context.sttProviderConfigured}

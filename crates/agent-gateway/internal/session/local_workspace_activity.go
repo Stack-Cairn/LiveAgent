@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	localWorkspaceAgentVersion = "gateway-local-workspace"
-	localWorkspacePollPeriod   = 250 * time.Millisecond
-	localWorkspaceMaxPaths     = 64
+	localWorkspaceAgentVersion  = "gateway-local-workspace"
+	localWorkspaceAgentIDPrefix = localWorkspaceAgentVersion + "-"
+	localWorkspacePollPeriod    = 250 * time.Millisecond
+	localWorkspaceMaxPaths      = 64
 )
 
 type localWorkspaceActivityOwner struct {
@@ -81,7 +82,14 @@ func (m *Manager) EnsureLocalWorkspaceActivityOwner(agentID, workdir string) (st
 }
 
 func localWorkspaceAgentID(requestedAgentID, workdir string) string {
-	return "gateway-local-workspace-" + stableWorkspaceID(requestedAgentID+"\x00"+workdir)
+	return localWorkspaceAgentIDPrefix + stableWorkspaceID(requestedAgentID+"\x00"+workdir)
+}
+
+// IsLocalWorkspaceActivityOwnerID reports whether agentID names a workspace
+// activity watcher rather than an Agent: it forwards file activity only and
+// cannot chat, so the browser Agent directory leaves it out.
+func IsLocalWorkspaceActivityOwnerID(agentID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(agentID), localWorkspaceAgentIDPrefix)
 }
 
 func stableWorkspaceID(value string) string {

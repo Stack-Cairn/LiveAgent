@@ -229,6 +229,8 @@ export const SETTINGS_ZH_CN = {
   "settings.saveError": "保存失败",
   "settings.saved": "已保存",
   "settings.savedDesc": "设置已写入本地存储",
+  "settings.savedOnDevice": "已保存在此设备",
+  "settings.savedOnDeviceDesc": "此 Agent 不保存该设置，仅在当前浏览器生效。",
   "settings.systemProxyEnable": "启用应用代理",
   "settings.systemProxyInvalid":
     "代理已启用，请填写有效的代理地址和端口；配置有效前相关请求将直接报错。",

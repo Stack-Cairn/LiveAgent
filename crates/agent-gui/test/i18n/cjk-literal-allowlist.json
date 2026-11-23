@@ -427,14 +427,6 @@
       ]
     },
     {
-      "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySession.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Access Token 验证失败。",
-        "请输入 Access Token。"
-      ]
-    },
-    {
       "file": "crates/agent-gateway/web/src/app/hooks/useGatewaySettingsSync.ts",
       "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
       "literals": [
@@ -501,26 +493,10 @@
       ]
     },
     {
-      "file": "crates/agent-gateway/web/src/lib/gatewayAuth.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Access Token 错误，请检查后重试。",
-        "请输入 Access Token。",
-        "Access Token 验证失败。"
-      ]
-    },
-    {
       "file": "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts",
       "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
       "literals": [
         "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。"
-      ]
-    },
-    {
-      "file": "crates/agent-gateway/web/src/lib/gatewaySocketTransport.ts",
-      "reason": "Untranslated error or status text in a .ts module that reaches the interface; predates .ts scanning. Move to i18n.",
-      "literals": [
-        "Gateway 正在重新连接..."
       ]
     },
     {

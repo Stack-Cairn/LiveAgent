@@ -40,15 +40,17 @@ function desktopSnapshot(settings) {
   return structuredClone(syncModule.buildGatewaySettingsSyncPayload(settings));
 }
 
-function relaySnapshot(settings, browserLocalSettings = ["locale", "theme"]) {
+/** Mirrors relayBrowserLocalSettings in internal/kbrain/settings.go. */
+const RELAY_BROWSER_LOCAL = ["locale", "theme", "system", "customSettings"];
+
+function relaySnapshot(settings, browserLocalSettings = RELAY_BROWSER_LOCAL) {
   const payload = desktopSnapshot(settings);
-  delete payload.locale;
-  delete payload.theme;
+  for (const field of RELAY_BROWSER_LOCAL) delete payload[field];
   payload.browserLocalSettings = browserLocalSettings;
   return payload;
 }
 
-async function harness(t, { getSettings, rejectUnsupported = true }) {
+async function harness(t, { getSettings, rejectUnsupported = true, syncScreenMaxMs }) {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
   const cleanups = [];
   t.after(async () => {
@@ -78,7 +80,7 @@ async function harness(t, { getSettings, rejectUnsupported = true }) {
     subscribeSettings: () => () => {},
     subscribeConnection: () => () => {},
     async getSettings() {
-      return structuredClone(getSettings);
+      return typeof getSettings === "function" ? getSettings() : structuredClone(getSettings);
     },
     async updateSettings(payload) {
       updates.push(structuredClone(payload));
@@ -125,7 +127,12 @@ async function harness(t, { getSettings, rejectUnsupported = true }) {
   const { useGatewaySettingsSync } = loader.loadModule("src/app/hooks/useGatewaySettingsSync.ts");
   const state = { current: null };
   function Probe() {
-    state.current = useGatewaySettingsSync({ token: "token", api, activeAgentId: "agent" });
+    state.current = useGatewaySettingsSync({
+      token: "token",
+      api,
+      activeAgentId: "agent",
+      syncScreenMaxMs,
+    });
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -155,19 +162,19 @@ async function harness(t, { getSettings, rejectUnsupported = true }) {
   };
 }
 
-test("relay: switching the language stays in the browser and reports saved", async (t) => {
+test("relay: switching the language stays in the browser and says so", async (t) => {
   const h = await harness(t, { getSettings: relaySnapshot(initial) });
   assert.equal(h.current.settingsSyncReady, true);
 
   await h.update((prev) => ({ ...prev, locale: "zh-CN" }));
   assert.deepEqual(h.updates, [], "no save is sent that the relay must refuse");
-  assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
+  assert.deepEqual(h.current.settingsSaveState, { status: "savedOnDevice" });
   assert.equal(h.current.settings.locale, "zh-CN");
   assert.equal(h.persisted.at(-1).locale, "zh-CN", "the choice is kept in browser storage");
 
   await h.update((prev) => ({ ...prev, locale: "en-US", theme: "dark" }));
   assert.deepEqual(h.updates, []);
-  assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
+  assert.deepEqual(h.current.settingsSaveState, { status: "savedOnDevice" });
   assert.equal(h.persisted.at(-1).locale, "en-US");
   assert.equal(h.persisted.at(-1).theme, "dark");
 });
@@ -182,7 +189,11 @@ test("relay: backend fields changed together with the language are still sent", 
   assert.equal(h.updates.length, 1);
   assert.ok(h.updates[0].skills, "the backend field reaches the relay");
   assert.equal(Object.hasOwn(h.updates[0], "locale"), false);
-  assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
+  assert.deepEqual(
+    h.current.settingsSaveState,
+    { status: "savedOnDevice" },
+    "the language part of the save lives only in this browser",
+  );
 });
 
 test("relay: a field the relay genuinely refuses still shows the save failure", async (t) => {
@@ -197,6 +208,42 @@ test("relay: a field the relay genuinely refuses still shows the save failure", 
   assert.equal(h.updates.length, 1);
   assert.equal(h.current.settingsSaveState.status, "error");
   assert.match(h.current.settingsSaveState.message, /chatRuntimeControls/);
+});
+
+test("relay: execution and project settings stay in the browser instead of failing", async (t) => {
+  // These used to be sent as `system` and refused ("unsupported Gateway settings
+  // field"), so the change only lived until the next snapshot.
+  const h = await harness(t, { getSettings: relaySnapshot(initial) });
+  await h.update((prev) => ({
+    ...prev,
+    system: { ...prev.system, commandSafetyMode: "autoEdit", workdir: "/srv/project" },
+  }));
+  assert.deepEqual(h.updates, [], "no save is sent that the relay must refuse");
+  assert.deepEqual(h.current.settingsSaveState, { status: "savedOnDevice" });
+  assert.equal(h.current.settings.system.workdir, "/srv/project");
+  assert.equal(h.persisted.at(-1).system.commandSafetyMode, "autoEdit");
+});
+
+test("relay: appearance preferences stay in the browser instead of failing", async (t) => {
+  const h = await harness(t, { getSettings: relaySnapshot(initial) });
+  await h.update((prev) => ({
+    ...prev,
+    customSettings: { ...prev.customSettings, promptClarifyEnabled: !prev.customSettings.promptClarifyEnabled },
+  }));
+  assert.deepEqual(h.updates, []);
+  assert.deepEqual(h.current.settingsSaveState, { status: "savedOnDevice" });
+  assert.equal(
+    h.persisted.at(-1).customSettings.promptClarifyEnabled,
+    !initial.customSettings.promptClarifyEnabled,
+  );
+});
+
+test("desktop: execution settings keep syncing when the target persists them", async (t) => {
+  const h = await harness(t, { getSettings: desktopSnapshot(initial), rejectUnsupported: false });
+  await h.update((prev) => ({ ...prev, system: { ...prev.system, workdir: "/srv/project" } }));
+  assert.equal(h.updates.length, 1);
+  assert.equal(h.updates[0].system.workdir, "/srv/project");
+  assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
 });
 
 test("a target can only declare display preferences browser-local", async (t) => {
@@ -220,4 +267,15 @@ test("desktop: the language keeps syncing when the target persists it", async (t
   assert.equal(h.updates.length, 1);
   assert.equal(h.updates[0].locale, "zh-CN");
   assert.deepEqual(h.current.settingsSaveState, { status: "saved" });
+});
+
+test("a target that never answers the settings request does not hold the sync screen", async (t) => {
+  // An offline or stalled target used to keep "Syncing desktop settings" up
+  // until settings.get timed out (about 14 s on a fresh browser).
+  const h = await harness(t, { getSettings: () => new Promise(() => {}), syncScreenMaxMs: 40 });
+  assert.equal(h.current.settingsSyncReady, false);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  await h.update((prev) => prev);
+  assert.equal(h.current.settingsSyncReady, true);
+  assert.equal(h.current.settingsSyncError, null, "a slow target is not reported as a failure");
 });

@@ -74,6 +74,7 @@ import { registerPlanDecisionHandler } from "@/lib/chat/planModeBridge";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
   ChatCommandPipeline,
+  type ChatCommandPipelineHooks,
   type PendingChatCommand,
 } from "@/lib/chat/stream/chatCommandPipeline";
 import type { ChatCommandUpdate } from "@/lib/chat/stream/streamTypes";
@@ -422,9 +423,9 @@ function useGatewayAppController() {
   const pipelineOnQueuedInGuiRef = useRef<
     (update: ChatCommandUpdate, pending: PendingChatCommand) => void
   >(() => undefined);
-  const pipelineOnFailedRef = useRef<
-    (pending: PendingChatCommand, errorCode: string | null, message: string) => void
-  >(() => undefined);
+  const pipelineOnFailedRef = useRef<NonNullable<ChatCommandPipelineHooks["onFailed"]>>(
+    () => undefined,
+  );
   const chatCommandPipeline = useMemo(
     () =>
       new ChatCommandPipeline({
@@ -432,8 +433,7 @@ function useGatewayAppController() {
           transcriptStoreRegistry.get(targetConversationId),
         onBound: (update, pending) => pipelineOnBoundRef.current(update, pending),
         onQueuedInGui: (update, pending) => pipelineOnQueuedInGuiRef.current(update, pending),
-        onFailed: (pending, errorCode, message) =>
-          pipelineOnFailedRef.current(pending, errorCode, message),
+        onFailed: (...args) => pipelineOnFailedRef.current(...args),
         onPendingChanged: () => setPendingCommandRevision((current) => current + 1),
         describeFailure,
       }),
@@ -1159,7 +1159,7 @@ function useGatewayAppController() {
       );
     }
   };
-  pipelineOnFailedRef.current = (pending, _errorCode, message) => {
+  pipelineOnFailedRef.current = (pending, _errorCode, message, transport) => {
     draftClientRequestsRef.current.delete(pending.clientRequestId);
     const conversationIdValue = pending.conversationId.trim();
     if (pending.isEditResend) {
@@ -1170,7 +1170,7 @@ function useGatewayAppController() {
       // transcript keeps the pipeline's error entry.
       sidebarStore.removeLocal(conversationIdValue);
     }
-    if (!pending.waitForStart && isDisplayedConversation(conversationIdValue)) {
+    if (!transport && !pending.waitForStart && isDisplayedConversation(conversationIdValue)) {
       setChatError(message);
     }
   };
