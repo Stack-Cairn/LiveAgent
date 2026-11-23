@@ -98,6 +98,40 @@ export function buildFallbackConversationTitle(content: string) {
   return `${singleLine.slice(0, FALLBACK_TITLE_MAX_CHARS).trimEnd()}...`;
 }
 
+const TRAILING_ELLIPSIS_PATTERN = /(?:\.{3}|…)$/u;
+
+function normalizeTitleForComparison(title: string) {
+  const singleLine = title.replace(/\s+/g, " ").trim();
+  const truncated = TRAILING_ELLIPSIS_PATTERN.test(singleLine);
+  return { text: singleLine.replace(TRAILING_ELLIPSIS_PATTERN, "").trimEnd(), truncated };
+}
+
+/**
+ * Whether `title` is still an automatic title: one of the `defaults` the
+ * frontend stored (pending, first-message fallback), or the same first
+ * message truncated differently. K-brain derives its own session title from
+ * the first message ("…" at its own length) and sidebar sync can replace the
+ * frontend fallback ("..." at 48 chars) with it before the generated title
+ * lands, so an exact comparison wrongly treats it as a manual rename. Any
+ * other title is a user rename and must never be overwritten.
+ */
+export function isAutoConversationTitle(
+  title: string,
+  defaults: readonly (string | null | undefined)[],
+) {
+  const current = normalizeTitleForComparison(title);
+  if (!current.text) return true;
+  for (const candidate of defaults) {
+    if (!candidate) continue;
+    const auto = normalizeTitleForComparison(candidate);
+    if (!auto.text) continue;
+    if (auto.text === current.text && auto.truncated === current.truncated) return true;
+    if (current.truncated && auto.text.startsWith(current.text)) return true;
+    if (auto.truncated && current.text.startsWith(auto.text)) return true;
+  }
+  return false;
+}
+
 export function getFirstUserMessageText(context: Context) {
   for (const message of context.messages) {
     if (message.role !== "user") continue;
