@@ -12,12 +12,12 @@
       "totalDistRaw": 37862497
     },
     "webui": {
-      "startupJsGzip": 1226920,
-      "startupJsRaw": 4242913,
-      "startupJsFiles": 51,
-      "startupCssGzip": 82819,
-      "totalJsRaw": 34328180,
-      "totalDistRaw": 37495227
+      "startupJsGzip": 184034,
+      "startupJsRaw": 662551,
+      "startupJsFiles": 11,
+      "startupCssGzip": 83516,
+      "totalJsRaw": 34441980,
+      "totalDistRaw": 37585296
     }
   }
 }

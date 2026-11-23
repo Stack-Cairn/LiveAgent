@@ -10,7 +10,13 @@ import {
   type UploadedImagePreviewLoader,
 } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { type MutableRefObject, type ReactNode, useCallback, useRef, useState } from "react";
-import { ImageAnnotationDialog, type ImageAnnotationResult } from "./ImageAnnotationDialog";
+import { onDemand } from "../../OnDemand";
+import type { ImageAnnotationDialogProps, ImageAnnotationResult } from "./ImageAnnotationDialog";
+
+// The editor (canvas tools, shapes, export) loads when an image is first opened.
+const ImageAnnotationDialog = onDemand<ImageAnnotationDialogProps>(
+  async () => (await import("./ImageAnnotationDialog")).ImageAnnotationDialog,
+);
 
 /** What the composer remembers about an attachment it replaced with an annotated copy. */
 export type ComposerImageAnnotationEntry = {

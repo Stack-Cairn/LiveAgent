@@ -104,7 +104,6 @@ import {
   GATEWAY_MAIN_SHELL_CLASS,
   GATEWAY_SHELL_CLASS,
 } from "@/lib/webStyleClasses";
-import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import {
   asErrorMessage,
@@ -147,7 +146,7 @@ import { useGatewayConversationState } from "./hooks/useGatewayConversationState
 import { useGatewayHistoryReconciliation } from "./hooks/useGatewayHistoryReconciliation";
 import { useGatewayProjectTools } from "./hooks/useGatewayProjectTools";
 import { useGatewayRuntimePreparation } from "./hooks/useGatewayRuntimePreparation";
-import { useGatewaySession } from "./hooks/useGatewaySession";
+import type { GatewaySession } from "./hooks/useGatewaySession";
 import { useGatewaySettingsOverlay } from "./hooks/useGatewaySettingsOverlay";
 import { useGatewaySettingsSync } from "./hooks/useGatewaySettingsSync";
 import { useGatewaySharedHistory } from "./hooks/useGatewaySharedHistory";
@@ -155,7 +154,6 @@ import { useGatewayTransportStatus } from "./hooks/useGatewayTransportStatus";
 import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects";
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useStableCallback } from "./hooks/useStableCallback";
-import { SharedHistoryPage } from "./lazySurfaces";
 import type { SendChatFn } from "./types";
 import { shouldRestorePageComposerDraft } from "./workbench/pageComposerDraftRestore";
 import { sessionWorkbench } from "./workbench/sessionWorkbench";
@@ -163,18 +161,10 @@ import { useGatewayWorkbench } from "./workbench/useGatewayWorkbench";
 
 const SEARCH_JUMP_MAX_PAGES = 20;
 
-function useGatewayAppController() {
+function useGatewayAppController({ token, clearSession }: GatewaySession) {
+  // The entry (App.tsx) renders share links and the login screen itself, so this
+  // shell only ever mounts signed in and outside a share link.
   const historyShareToken = useMemo(() => parseHistoryShareToken(), []);
-  const {
-    token,
-    loginToken,
-    authSubmitting,
-    authError,
-    setLoginToken,
-    setAuthError,
-    login: handleLoginSubmit,
-    clearSession,
-  } = useGatewaySession(historyShareToken);
   const terminalIdentityRef = useRef<{ conversationId?: string; runId?: string } | null>(null);
   const getTerminalIdentity = useCallback(() => terminalIdentityRef.current, []);
   const { api, terminalClient, sftpClient, gitClient } = useGatewayClients(
@@ -2239,34 +2229,7 @@ function useGatewayAppController() {
     transcriptFollow,
   ]);
 
-  if (historyShareToken) {
-    return (
-      <LocaleContext.Provider value={localeContextValue}>
-        <SharedHistoryPage token={historyShareToken} />
-      </LocaleContext.Provider>
-    );
-  }
-
-  if (!token) {
-    return (
-      <LocaleContext.Provider value={localeContextValue}>
-        <LoginPage
-          token={loginToken}
-          error={authError}
-          isSubmitting={authSubmitting}
-          onTokenChange={(nextToken) => {
-            setLoginToken(nextToken);
-            if (authError) {
-              setAuthError(null);
-            }
-          }}
-          onSubmit={handleLoginSubmit}
-        />
-      </LocaleContext.Provider>
-    );
-  }
-
-  if (!api) {
+  if (historyShareToken || !token || !api) {
     return null;
   }
 
@@ -2596,7 +2559,10 @@ export type GatewayAppViewModel = Extract<
   { activeFloorStore: ActiveFloorStore }
 >;
 
-type GatewayAppProps = { imageStudioIdentity?: TrustedGatewayImageIdentity };
+type GatewayAppProps = {
+  imageStudioIdentity?: TrustedGatewayImageIdentity;
+  session: GatewaySession;
+};
 
 export default function GatewayApp(props: GatewayAppProps) {
   return (
@@ -2605,8 +2571,8 @@ export default function GatewayApp(props: GatewayAppProps) {
     </SidebarProvider>
   );
 }
-function GatewayAppContent({ imageStudioIdentity }: GatewayAppProps) {
-  const result = useGatewayAppController();
+function GatewayAppContent({ imageStudioIdentity, session }: GatewayAppProps) {
+  const result = useGatewayAppController(session);
   if (!result || !("activeFloorStore" in result)) {
     return result;
   }

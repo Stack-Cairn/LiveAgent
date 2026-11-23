@@ -1,7 +1,8 @@
-import { type DiffLine, DiffLineType, generateDiffFile } from "@git-diff-view/file";
+import type { DiffLine } from "@git-diff-view/file";
 import { ComposerCommentEditor } from "@liveagent/ui/components/chat/ComposerCommentEditor";
 import { useTranscriptComment } from "@liveagent/ui/components/chat/TranscriptCommentContext";
 import { ChevronDown, ChevronUp, Plus } from "@liveagent/ui/components/IconSet";
+import { ChunkLoadRetry } from "@liveagent/ui/components/OnDemand";
 import { Popover, PopoverContent } from "@liveagent/ui/components/ui/popover";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -20,7 +21,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { type DiffEngine, diffEngine } from "../../lib/chat/diffEngine";
 import { parseDiffRowsText } from "../../lib/chat/diffRows";
+import { useLazyModule } from "../../lib/shared/lazyModule";
 import { isElementInUse, useNearViewport } from "../../lib/shared/useNearViewport";
 import { cn } from "../../lib/shared/utils";
 
@@ -212,7 +215,12 @@ function CodeFileIcon() {
   );
 }
 
-function buildDiffRows(beforeText: string, afterText: string, filePath?: string) {
+function buildDiffRows(
+  { DiffLineType, generateDiffFile }: DiffEngine,
+  beforeText: string,
+  afterText: string,
+  filePath?: string,
+) {
   const lang = guessLangFromPath(filePath);
   const diffFile = generateDiffFile(
     filePath ?? "old",
@@ -290,10 +298,16 @@ type DiffInput = {
   diffText?: string;
 };
 
-function computeDiff(input: DiffInput): DiffModel | null {
+/** Only diffing two texts needs the lazily loaded engine; a backend diff does not. */
+function needsDiffEngine({ beforeText, afterText, diffText }: DiffInput) {
+  return diffText === undefined && Boolean(beforeText || afterText);
+}
+
+function computeDiff(input: DiffInput, engine: DiffEngine | null): DiffModel | null {
   const { beforeText, afterText, filePath, diffText } = input;
   if (diffText !== undefined) return buildTextDiffRows(diffText);
-  return beforeText || afterText ? buildDiffRows(beforeText, afterText, filePath) : null;
+  if (!engine) return null;
+  return beforeText || afterText ? buildDiffRows(engine, beforeText, afterText, filePath) : null;
 }
 
 function sameDiffInput(a: DiffInput, b: DiffInput) {
@@ -313,7 +327,13 @@ function diffThrottleMs(costMs: number) {
   return Math.min(1000, Math.max(100, costMs * 10));
 }
 
-type ComputedDiff = { input: DiffInput; diff: DiffModel | null; at: number; cost: number };
+type ComputedDiff = {
+  input: DiffInput;
+  engine: DiffEngine | null;
+  diff: DiffModel | null;
+  at: number;
+  cost: number;
+};
 
 /**
  * The diff for the latest input, recomputed at most every few frames when it
@@ -324,13 +344,15 @@ type ComputedDiff = { input: DiffInput; diff: DiffModel | null; at: number; cost
 function useThrottledDiff(input: DiffInput) {
   const cache = useRef<ComputedDiff | null>(null);
   const [, wake] = useReducer((count: number) => count + 1, 0);
+  const engine = useLazyModule(diffEngine, needsDiffEngine(input));
   let shown = cache.current;
+  if (!shown || shown.engine !== engine.value) shown = null;
   if (!shown || !sameDiffInput(shown.input, input)) {
     const started = performance.now();
     if (!shown || shown.cost < CHEAP_DIFF_MS || started - shown.at >= diffThrottleMs(shown.cost)) {
-      const diff = computeDiff(input);
+      const diff = computeDiff(input, engine.value);
       const at = performance.now();
-      shown = { input, diff, at, cost: at - started };
+      shown = { input, engine: engine.value, diff, at, cost: at - started };
       // A cache keyed by its input: a render React discards leaves it valid.
       cache.current = shown;
     }
@@ -344,7 +366,7 @@ function useThrottledDiff(input: DiffInput) {
     const timer = setTimeout(wake, wait);
     return () => clearTimeout(timer);
   }, [shown, stale]);
-  return shown.diff;
+  return { diff: shown.diff, loadFailed: engine.failed, retryLoad: engine.retry };
 }
 
 /** Longer diffs show their first COLLAPSED_ROWS lines until expanded. */
@@ -567,7 +589,12 @@ export function EditDiffView(props: {
   const { beforeText, afterText, filePath, diffText, fullWidth = false } = props;
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const diff = useThrottledDiff({ beforeText, afterText, filePath, diffText });
+  const { diff, loadFailed, retryLoad } = useThrottledDiff({
+    beforeText,
+    afterText,
+    filePath,
+    diffText,
+  });
   const onTranscriptComment = useTranscriptComment();
   const commentPath = filePath?.trim() ?? "";
   const [commentTarget, setCommentTarget] = useState<{
@@ -601,7 +628,7 @@ export function EditDiffView(props: {
     [commentable, openComment, activeKey, focusKey],
   );
 
-  if (!diff) return null;
+  if (!diff) return loadFailed ? <ChunkLoadRetry onRetry={retryLoad} /> : null;
 
   const displayPath = filePath?.trim() || "changed file";
   const collapsible = diff.rows.length > COLLAPSE_AFTER_ROWS;

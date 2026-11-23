@@ -22,7 +22,6 @@ import type {
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
 import { ChevronDown, Loader2 } from "@liveagent/ui/components/IconSet";
-import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -101,6 +100,7 @@ import {
   HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES,
 } from "../constants";
 import { isLocalDraftConversationId } from "../gatewayLocalDraft";
+import { TrajectoryView } from "../lazySurfaces";
 import type { SendChatFn } from "../types";
 import { restoreUnsentComposerDraft } from "../unsentComposerDraft";
 import { WebGoalBarHost } from "../WebGoalBarHost";

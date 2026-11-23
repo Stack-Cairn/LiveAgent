@@ -26,11 +26,15 @@
 // grows with the number of visible code blocks. The queue hands upstream one
 // block per macrotask and starts the next only after the previous delivered,
 // so frames and input run in between.
-import {
-  code as baseCodePlugin,
-  type CodeHighlighterPlugin,
-  type HighlightOptions,
-  type HighlightResult,
+//
+// Shiki itself (~330 kB plus a grammar per language) loads on the first code
+// block, not with the app: `createLazyCodePlugin` answers like upstream does while a
+// grammar is still loading (null now, tokens through the callback later).
+import type {
+  CodeHighlighterPlugin,
+  HighlightOptions,
+  HighlightResult,
+  ThemeInput,
 } from "@streamdown/code";
 
 const EXACT_CACHE_LIMIT = 256;
@@ -144,8 +148,58 @@ function lruSet<Value>(cache: Map<string, Value>, key: string, value: Value, lim
   }
 }
 
+// Upstream's default themes; Markdown passes the same pair as `shikiTheme`.
+const DEFAULT_CODE_THEMES: [ThemeInput, ThemeInput] = ["github-light", "github-dark"];
+
+/**
+ * A code plugin whose implementation loads on the first highlight request.
+ * Streamdown only calls `highlight` and `getThemes`; until the load finishes the
+ * language queries answer from what is known so far. A load that fails or has
+ * no plugin leaves the blocks unhighlighted, and the next request tries again.
+ */
+function createLazyCodePlugin(
+  load: () => Promise<CodeHighlighterPlugin | undefined>,
+): CodeHighlighterPlugin {
+  let loaded: CodeHighlighterPlugin | null = null;
+  let pending: Promise<CodeHighlighterPlugin | undefined> | null = null;
+  const ensure = () => {
+    pending ??= load().then(
+      (plugin) => {
+        loaded = plugin ?? null;
+        return plugin;
+      },
+      (error: unknown) => {
+        pending = null;
+        console.error("[Markdown] Failed to load code highlighting:", error);
+        return undefined;
+      },
+    );
+    return pending;
+  };
+  return {
+    name: "shiki",
+    type: "code-highlighter",
+    supportsLanguage: (language) => loaded?.supportsLanguage(language) ?? true,
+    getSupportedLanguages: () => loaded?.getSupportedLanguages() ?? [],
+    getThemes: () => loaded?.getThemes() ?? DEFAULT_CODE_THEMES,
+    highlight(options, callback) {
+      if (loaded) return loaded.highlight(options, callback);
+      void ensure().then((plugin) => {
+        if (!plugin) return;
+        const immediate = plugin.highlight(options, callback);
+        if (immediate) callback?.(immediate);
+      });
+      return null;
+    },
+  };
+}
+
+const lazyBaseCodePlugin = createLazyCodePlugin(
+  async () => (await import("@streamdown/code")).code,
+);
+
 export function createThrottledCodePlugin(
-  base: CodeHighlighterPlugin = baseCodePlugin,
+  base: CodeHighlighterPlugin = lazyBaseCodePlugin,
   config: { schedule?: HighlightScheduler; jobTimeoutMs?: number } = {},
 ): CodeHighlighterPlugin {
   const exactCache = new Map<string, HighlightResult>();
@@ -239,8 +293,6 @@ export function createThrottledCodePlugin(
   };
 }
 
-// 测试环境会把 @streamdown/code mock 成 { code: undefined }（禁用高亮）；
-// 此时透传 undefined 给 Streamdown（= 无高亮），与 mock 意图一致。
-export const throttledCodePlugin: CodeHighlighterPlugin | undefined = baseCodePlugin
-  ? createThrottledCodePlugin(baseCodePlugin)
-  : undefined;
+// A test that mocks @streamdown/code as { code: undefined } gets no highlighting:
+// the lazy load resolves to no plugin and the blocks stay plain.
+export const throttledCodePlugin: CodeHighlighterPlugin = createThrottledCodePlugin();

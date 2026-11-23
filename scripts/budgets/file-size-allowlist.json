@@ -2,7 +2,7 @@
   "_comment": "Source files in crates/ over `limit` lines when the limit was introduced, with their line counts. Checked by scripts/check-file-size.mjs: listed files must not grow; `pnpm check:file-size --update` only lowers counts and drops entries. Do not add new entries; split the file instead (docs/testing/ci-checks.md).",
   "limit": 1500,
   "files": {
-    "crates/agent-gateway/web/src/app/GatewayApp.tsx": 2614,
+    "crates/agent-gateway/web/src/app/GatewayApp.tsx": 2580,
     "crates/agent-gateway/web/src/app/GatewayAppView.tsx": 2527,
     "crates/agent-gateway/web/src/lib/chat/transcript/transcriptStore.ts": 1535,
     "crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts": 1609,

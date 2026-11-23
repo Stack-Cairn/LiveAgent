@@ -41,6 +41,8 @@ const env = await createDomTestEnv({
 const { React, act, createRoot } = env;
 globalThis.IntersectionObserver = FakeIntersectionObserver;
 const { EditDiffView } = env.loadModule("@liveagent/ui/components/chat/EditDiffView.tsx");
+// The diff engine is a lazy chunk; load it up front so every mount renders at once.
+await env.loadModule("@liveagent/ui/lib/chat/diffEngine.ts").diffEngine.load();
 
 function lines(count, prefix) {
   return Array.from({ length: count }, (_, index) => `${prefix} line ${index + 1}`).join("\n");
