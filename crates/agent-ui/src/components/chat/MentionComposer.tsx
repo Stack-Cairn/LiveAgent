@@ -339,6 +339,9 @@ export const MentionComposer = memo(
     const [mentionSessionError, setMentionSessionError] = useState<string | null>(null);
     const mentionSessionRequestSeqRef = useRef(0);
     const mentionActiveRef = useRef(false);
+    // Bumped by every mention refresh and close so a next-frame re-check only
+    // applies while nothing newer has happened (e.g. Escape in the same frame).
+    const mentionRecheckSeqRef = useRef(0);
     const mentionSessionQueryRef = useRef("");
     const mentionFetchRef = useRef<MentionFetchSnapshot | null>(null);
     const mentionRefetchTimerRef = useRef<number | null>(null);
@@ -416,6 +419,7 @@ export const MentionComposer = memo(
     }, [cancelMentionRefetch]);
 
     const closeMentionSession = useCallback(() => {
+      mentionRecheckSeqRef.current += 1;
       mentionActiveRef.current = false;
       setMentionMenuMode("root");
       setMentionCtx(null);
@@ -956,7 +960,12 @@ export const MentionComposer = memo(
       };
 
       applyContext(detectMention(el, enabledSkills.length > 0, commandsEnabled));
+      // The re-check catches DOM and selection updates that land after this
+      // event. A close since then (Escape, a pick) is deliberate and must not be
+      // undone by a stale frame; a newer refresh schedules its own re-check.
+      const recheck = ++mentionRecheckSeqRef.current;
       window.requestAnimationFrame(() => {
+        if (recheck !== mentionRecheckSeqRef.current) return;
         const nextEl = editorRef.current;
         if (!nextEl || document.activeElement !== nextEl) return;
         applyContext(detectMention(nextEl, enabledSkills.length > 0, commandsEnabled));

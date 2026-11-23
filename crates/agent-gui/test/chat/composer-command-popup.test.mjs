@@ -139,6 +139,18 @@ test("plan selection drafts first and second Enter enables plan",async()=>{
  await type("/pla");await key("Tab");assert.equal(editor.textContent,"/plan ");assert.deepEqual(calls,[]);await key("Enter");assert.deepEqual(calls,["plan"]);
 });
 test("Escape closes search and preserves draft",async()=>{await type("/mod");await key("Escape");assert.equal(options().length,0);assert.equal(editor.textContent,"/mod");});
+test("Escape is not undone by the input's next-frame mention re-check",async()=>{
+ // Hold animation frames so the frame the input handler requested arrives after Escape, as it
+ // does when typing and Escape land within one frame on a busy main thread.
+ const frames=[];
+ const requestFrame=window.requestAnimationFrame;
+ window.requestAnimationFrame=(callback)=>frames.push(callback);
+ try{await type("/mod");await key("Escape");}finally{window.requestAnimationFrame=requestFrame;}
+ assert.equal(options().length,0);
+ assert.ok(frames.length>0,"the input handler should defer a mention re-check to the next frame");
+ await env.act(async()=>{for(const callback of frames.splice(0))callback(performance.now());});
+ assert.equal(options().length,0);assert.equal(editor.textContent,"/mod");
+});
 test("IME does not select a model",async()=>{await type("/mod");await key("Enter",{isComposing:true});assert.deepEqual(calls,[]);});
 test("unknown slash text sends normally",async()=>{await type("/usr/path");await key("Enter");assert.equal(sends,1);});
 test("without skills catalog commands remain usable",async()=>{await mount({enabledSkills:[],commandHost});await type("/");assert.ok(optionNames().includes("model"));});
