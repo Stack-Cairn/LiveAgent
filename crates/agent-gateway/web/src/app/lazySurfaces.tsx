@@ -10,6 +10,7 @@ import type {
 import type { WorkspaceCloneModal as WorkspaceCloneModalComponent } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import type { WorkspaceProjectSettingsModal as WorkspaceProjectSettingsModalComponent } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { onDemand } from "@liveagent/ui/components/OnDemand";
+import type { TrajectoryView as TrajectoryViewComponent } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { t } from "@liveagent/ui/i18n/index";
 import type { SettingsPage as SettingsPageComponent } from "@liveagent/ui/pages/settings/SettingsPage";
 import { type ComponentProps, lazy, Suspense } from "react";
@@ -74,4 +75,9 @@ export const WorkdirPickerModal = onDemand<ComponentProps<typeof WorkdirPickerMo
 /** The read-only page behind a history share link; it shows its own loading state. */
 export const SharedHistoryPage = onDemand<ComponentProps<typeof SharedHistoryPageComponent>>(
   async () => (await import("@/pages/SharedHistoryPage")).SharedHistoryPage,
+);
+
+/** The run trajectory view: opened from a reply, never on the first screen. */
+export const TrajectoryView = onDemand<ComponentProps<typeof TrajectoryViewComponent>>(
+  async () => (await import("@liveagent/ui/components/trajectory/TrajectoryView")).TrajectoryView,
 );

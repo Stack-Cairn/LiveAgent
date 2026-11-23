@@ -19,7 +19,6 @@ import {
   WorkspacePanelGroup,
   WorkspaceToolsPanel,
 } from "@liveagent/ui/components/project-tools/WorkspacePanels";
-import { TrajectoryView } from "@liveagent/ui/components/trajectory/TrajectoryView";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { Toaster } from "@liveagent/ui/components/ui/toaster";
@@ -162,6 +161,7 @@ import {
   HistoryShareModal,
   SettingsPage,
   SharedHistoryManagerModal,
+  TrajectoryView,
   WorkdirPickerModal,
   WorkspaceCloneModal,
   WorkspaceProjectSettingsModal,
