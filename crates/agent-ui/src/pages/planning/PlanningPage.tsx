@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/planning";
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HubHeader } from "../../components/hub/HubChrome";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";

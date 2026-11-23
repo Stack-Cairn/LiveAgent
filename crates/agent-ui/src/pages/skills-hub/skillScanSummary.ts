@@ -52,3 +52,17 @@ export function summarizeSkillScan(
 
   return { total: next.length, added, updated, removed };
 }
+
+export type SkillScanFeedback =
+  | ({ status: "success" } & SkillScanSummary)
+  | { status: "error"; message: string };
+
+const MIN_SCAN_LOADING_DURATION_MS = 600;
+
+/** Keeps a scan's loading state visible long enough to register. */
+export async function waitForMinimumScanDuration(startedAt: number) {
+  const remaining = MIN_SCAN_LOADING_DURATION_MS - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
+  }
+}

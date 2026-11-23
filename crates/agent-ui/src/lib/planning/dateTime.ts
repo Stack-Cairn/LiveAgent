@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { translate } from "./i18n";
 import { addDays, HOUR, localEpoch } from "./time";
 import type { EventTime } from "./types";

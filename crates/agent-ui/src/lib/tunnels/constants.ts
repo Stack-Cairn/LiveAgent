@@ -2,6 +2,7 @@
 // byte-copied between the webui and the desktop GUI codebases — keep it free
 // of any codebase-specific imports.
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 export type TunnelTtlSeconds = 0 | 900 | 3600 | 14400;
 
 export const TUNNEL_TTL_OPTIONS: TunnelTtlSeconds[] = [900, 3600, 14400, 0];

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { AgentPromptTemplate } from "@liveagent/app/lib/settings";
 import { FormField } from "@liveagent/ui/components/settings/FormField";
 import { useLocale } from "@liveagent/ui/i18n/index";

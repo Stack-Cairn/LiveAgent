@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/planning";
+import "@liveagent/ui/i18n/namespaces/scheduledTasks";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import { isAgentExecutionMode, workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";

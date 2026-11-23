@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { translate } from "./i18n";
 import type { EventTime, PlanningEvent } from "./types";
 export const MINUTE = 60_000;

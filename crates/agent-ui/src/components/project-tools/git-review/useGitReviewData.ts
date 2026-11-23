@@ -12,6 +12,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific Git operations
 // and optional platform capabilities enter through the shared contracts.
 
+import "@liveagent/ui/i18n/namespaces/gitReview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type {
   GitCommitDetails,

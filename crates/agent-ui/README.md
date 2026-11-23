@@ -9,6 +9,9 @@
 - `src/components/`：聊天侧栏、输入框、项目工具、编辑器等公共 UI。
 - `src/contracts/`：定义共享 UI 的扩展注册表等公共契约。
 - `src/i18n/`：定义两端共同使用的翻译片段与本地化上下文。
+  核心与外壳文案在 `translations/` 中随启动加载；功能文案放在 `namespaces/<功能>.ts`，
+  由渲染这些 key 的模块直接 `import "@liveagent/ui/i18n/namespaces/<功能>"`，随功能 chunk
+  按需加载（`crates/agent-gui/test/i18n/translation-namespaces.test.mjs` 会检查）。
 
 GUI 与 WebUI 应用只负责：
 

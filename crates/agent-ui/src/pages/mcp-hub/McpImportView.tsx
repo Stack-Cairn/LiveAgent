@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import {

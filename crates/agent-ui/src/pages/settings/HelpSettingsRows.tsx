@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/diagnostics";
 import { Archive, Sparkles } from "@liveagent/ui/components/IconSet";
 import { SettingsRow } from "@liveagent/ui/components/settings/SettingsLayout";
 import { Button } from "@liveagent/ui/components/ui/button";

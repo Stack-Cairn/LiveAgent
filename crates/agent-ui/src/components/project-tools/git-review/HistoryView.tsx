@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/gitReview";
 import "./HistoryView.css";
 import {
   ContextMenuItem,

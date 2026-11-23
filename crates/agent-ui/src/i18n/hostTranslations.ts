@@ -33,8 +33,52 @@ export function normalizeLocale(input: unknown): Locale {
   return input === "en-US" ? "en-US" : DEFAULT_LOCALE;
 }
 
-export function createHostTranslations(overrides: Record<Locale, Record<string, string>>) {
-  const translations: Record<Locale, Record<string, string>> = {
+type TranslationTable = Record<Locale, Record<string, string>>;
+
+type HostTable = { translations: TranslationTable; overrides: TranslationTable };
+
+// Feature namespaces registered so far, and the host tables they merge into.
+const registeredNamespaces: TranslationTable[] = [];
+const hostTables: HostTable[] = [];
+
+function mergeNamespace(host: HostTable, namespace: TranslationTable) {
+  for (const locale of SUPPORTED_LOCALES) {
+    const target = host.translations[locale];
+    const overrides = host.overrides[locale];
+    for (const [key, value] of Object.entries(namespace[locale])) {
+      // Host overrides win over shared messages, as they do for the core table.
+      if (!Object.hasOwn(overrides, key)) target[key] = value;
+    }
+  }
+}
+
+/**
+ * Adds a feature's messages (both locales) to the host translations. Feature
+ * namespaces live in `i18n/namespaces/` and call this when their module is
+ * evaluated; every module that renders one of their keys imports the namespace
+ * module, so the messages are in place before that module's first render, and a
+ * language switch finds both locales already loaded.
+ */
+export function registerTranslations(namespace: TranslationTable) {
+  registeredNamespaces.push(namespace);
+  for (const host of hostTables) mergeNamespace(host, namespace);
+}
+
+/**
+ * A shared message without host overrides: the core table, then the namespaces
+ * registered so far. For code that formats shared messages outside a host's `t`.
+ */
+export function sharedMessage(key: string, locale: Locale): string | undefined {
+  const core: Record<string, string> = SHARED_TRANSLATIONS[locale];
+  if (Object.hasOwn(core, key)) return core[key];
+  for (const namespace of registeredNamespaces) {
+    if (Object.hasOwn(namespace[locale], key)) return namespace[locale][key];
+  }
+  return undefined;
+}
+
+export function createHostTranslations(overrides: TranslationTable) {
+  const translations: TranslationTable = {
     "zh-CN": {
       ...SHARED_TRANSLATIONS["zh-CN"],
       ...overrides["zh-CN"],
@@ -44,6 +88,9 @@ export function createHostTranslations(overrides: Record<Locale, Record<string, 
       ...overrides["en-US"],
     },
   };
+  const host = { translations, overrides };
+  hostTables.push(host);
+  for (const namespace of registeredNamespaces) mergeNamespace(host, namespace);
 
   return {
     translations,

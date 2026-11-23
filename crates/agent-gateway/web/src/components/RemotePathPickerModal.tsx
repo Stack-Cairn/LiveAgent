@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   AlertTriangle,
@@ -25,7 +26,7 @@ import {
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   IndividualTreeViewState,
   TreeItem,
@@ -805,55 +806,4 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       </DialogContent>
     </Dialog>
   );
-}
-
-type PickPathOptions = {
-  mode: RemotePathPickerMode;
-  initialPath?: string;
-  title?: string;
-  description?: string;
-};
-
-type PendingPick = PickPathOptions & {
-  resolve: (path: string | null) => void;
-};
-
-/**
- * Promise-based entry point: `pickPath()` resolves with the chosen remote
- * path, or null when the picker is dismissed. Render `pathPickerElement`
- * once near the caller's root.
- */
-export function useRemotePathPicker() {
-  const [pending, setPending] = useState<PendingPick | null>(null);
-  const selectedPathRef = useRef<string | null>(null);
-
-  const pickPath = useCallback(
-    (options: PickPathOptions) =>
-      new Promise<string | null>((resolve) => {
-        selectedPathRef.current = null;
-        setPending({ ...options, resolve });
-      }),
-    [],
-  );
-
-  const pathPickerElement = pending ? (
-    <RemotePathPickerModal
-      mode={pending.mode}
-      initialPath={pending.initialPath}
-      title={pending.title}
-      description={pending.description}
-      onSelect={(path) => {
-        selectedPathRef.current = path;
-      }}
-      onClose={() => {
-        // Resolve only after the picker finishes its exit transition so a
-        // suspended parent modal cannot reopen underneath the closing picker.
-        pending.resolve(selectedPathRef.current);
-        selectedPathRef.current = null;
-        setPending(null);
-      }}
-    />
-  ) : null;
-
-  return { pickPath, pathPickerElement };
 }

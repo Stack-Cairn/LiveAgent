@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
 import { AlertTriangle, BookOpen, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { RefreshButton } from "@liveagent/ui/components/ui/button";

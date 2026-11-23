@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { AlertTriangle, Plus } from "@liveagent/ui/components/IconSet";
 import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
 import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";

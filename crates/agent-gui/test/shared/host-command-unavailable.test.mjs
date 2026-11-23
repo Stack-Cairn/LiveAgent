@@ -126,12 +126,13 @@ test("settings desktop-only hints exist in both locales", () => {
     /"settings\.aboutDesktopHostRequired":\s*\n?\s*"Updates and update announcements are provided by the desktop app/,
   );
 
+  // These hints belong to the lazily loaded settings namespace.
   const zhSettings = readFileSync(
-    new URL("../../../agent-ui/src/i18n/translations/zhCNSettings.ts", import.meta.url),
+    new URL("../../../agent-ui/src/i18n/namespaces/settingsZhCN.ts", import.meta.url),
     "utf8",
   );
   const enSettings = readFileSync(
-    new URL("../../../agent-ui/src/i18n/translations/enUSSettings.ts", import.meta.url),
+    new URL("../../../agent-ui/src/i18n/namespaces/settingsEnUS.ts", import.meta.url),
     "utf8",
   );
   assert.match(zhSettings, /"settings\.sshImportDesktopHostRequired":\s*\n?\s*"[^"]*桌面应用/);

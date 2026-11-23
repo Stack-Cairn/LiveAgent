@@ -2,6 +2,7 @@
 // services/gateway/connection.rs)
 // reports fixed English errors. Show them in the interface language; any
 // other message is displayed as received.
+import "@liveagent/ui/i18n/namespaces/settings";
 const LOCAL_GATEWAY_ERRORS: ReadonlyArray<readonly [RegExp, string]> = [
   [/Local Gateway port (\d+) is already in use/, "settings.localGatewayError.portInUse"],
   [

@@ -4,6 +4,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import type {
   RightDockFileTreeState,
   RightDockFileTreeStatePatch,

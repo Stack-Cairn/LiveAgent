@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { AlertTriangle, RotateCcw, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { KbdShortcut } from "@liveagent/ui/components/ui/kbd";

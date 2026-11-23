@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { createSettingsExtension } from "@liveagent/adapters/settingsExtension";
 import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";

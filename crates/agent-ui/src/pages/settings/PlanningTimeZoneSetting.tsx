@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { backend } from "@liveagent/app/lib/planning/backend";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TimeZonePicker } from "../../components/settings/TimeZonePicker";

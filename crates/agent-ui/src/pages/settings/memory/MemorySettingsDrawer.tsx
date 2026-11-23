@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { AlertTriangle, Trash2 } from "@liveagent/ui/components/IconSet";
 import {
   AlertDialog,

@@ -1,14 +1,15 @@
-import { DEFAULT_LOCALE } from "../../i18n/hostTranslations";
-import { SHARED_TRANSLATIONS } from "../../i18n/sharedTranslations";
+import { DEFAULT_LOCALE, sharedMessage } from "../../i18n/hostTranslations";
 import { IMAGE_ERROR_FALLBACK_MESSAGE } from "../../lib/imaging/errors";
 import type { ImageError, ParameterSpec } from "../../lib/imaging/types";
 
 export type Translate = (key: string) => string;
 
-const english: Record<string, string> = SHARED_TRANSLATIONS["en-US"];
-const fallback: Record<string, string> = SHARED_TRANSLATIONS[DEFAULT_LOCALE];
-/** For code outside a LocaleContext (controller before mount, tests): the default locale. */
-export const defaultTranslate: Translate = (key) => fallback[key] ?? key;
+/**
+ * For code outside a LocaleContext (controller before mount, tests): the default
+ * locale. Studio messages are in the image studio namespace, which the modules
+ * that create them import.
+ */
+export const defaultTranslate: Translate = (key) => sharedMessage(key, DEFAULT_LOCALE) ?? key;
 
 /** A parameter is a fixed value, a nested message, or text that depends on the language. */
 export type MessageParam = string | number | Message | ((t: Translate) => string);
@@ -52,7 +53,7 @@ const wireAliases = new Map([["imageSize", ["Size"]]]);
 function isWireLabel(spec: LabelledSpec): boolean {
   const names = [
     spec.key,
-    english[`imageStudio.parameter.${spec.key}`],
+    sharedMessage(`imageStudio.parameter.${spec.key}`, "en-US"),
     ...(wireAliases.get(spec.key) ?? []),
   ];
   const label = spec.label.trim().toLowerCase();

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/diagnostics";
 import {
   collectHostDiagnostics,
   DIAGNOSTICS_SAVE_LABEL_KEY,

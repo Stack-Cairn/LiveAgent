@@ -8,12 +8,8 @@ import type {
   RunClarifyTurn,
 } from "@liveagent/ui/components/chat/clarify/clarifyTypes";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
-import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
-import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
-import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceCloneTaskOverlay } from "@liveagent/ui/components/chat/WorkspaceCloneTaskOverlay";
-import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { DiagnosticsExportHost } from "@liveagent/ui/components/diagnostics/DiagnosticsExportHost";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
@@ -103,7 +99,6 @@ import {
   CHAT_TRANSCRIPT_WIDTH_CSS_VAR,
   TranscriptWidthControls,
 } from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
-import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import {
   type CSSProperties,
   type DragEvent,
@@ -115,14 +110,10 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import {
-  type TrustedGatewayImageIdentity,
-  useWebImageStudioHost,
-} from "@/agent-ui-adapters/imageStudio";
+import type { TrustedGatewayImageIdentity } from "@/agent-ui-adapters/imageStudio";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
-import { useSingleUserImageIdentity } from "@/lib/imageIdentity";
 import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
@@ -152,7 +143,6 @@ import {
   GATEWAY_SHELL_CLASS,
   GATEWAY_TRANSCRIPT_SCROLL_CLASS,
 } from "@/lib/webStyleClasses";
-import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
 import { openUrl } from "@/shims/tauriOpener";
 import { settingsHostAdapter } from "../agent-ui-adapters/settingsExtension";
 import { webSettingsSearch } from "../agent-ui-adapters/settingsSearch";
@@ -163,7 +153,16 @@ import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
+import { useGatewayImageStudio } from "./hooks/useGatewayImageStudio";
 import { useWindowFileDropGuard } from "./hooks/useWindowFileDropGuard";
+import {
+  HistoryShareModal,
+  SettingsPage,
+  SharedHistoryManagerModal,
+  WorkdirPickerModal,
+  WorkspaceCloneModal,
+  WorkspaceProjectSettingsModal,
+} from "./lazySurfaces";
 import { sendComposerCommandTurn } from "./sendComposerCommandTurn";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
 import { UserMenu } from "./UserMenu";
@@ -184,16 +183,7 @@ export function GatewayAppView({
   viewModel: GatewayAppViewModel;
   imageStudioIdentity?: TrustedGatewayImageIdentity;
 }) {
-  const verifiedImageIdentity = useSingleUserImageIdentity(
-    viewModel.imageStudioToken,
-    imageStudioIdentity,
-  );
-  const imageStudio = useWebImageStudioHost(
-    viewModel.imageStudioToken,
-    verifiedImageIdentity,
-    viewModel.activeWorkspaceProjectPath,
-    (key) => translate(key, viewModel.settings.locale),
-  );
+  const imageStudio = useGatewayImageStudio(viewModel, imageStudioIdentity);
   const chatFrameRef = useRef<HTMLDivElement | null>(null);
   useWindowFileDropGuard();
   const {

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { ProviderId } from "@liveagent/app/lib/settings/index";
 import { Check, ChevronDown, Search } from "@liveagent/ui/components/IconSet";
 import { ProviderBrandIcon } from "@liveagent/ui/components/ProviderBrandIcon";

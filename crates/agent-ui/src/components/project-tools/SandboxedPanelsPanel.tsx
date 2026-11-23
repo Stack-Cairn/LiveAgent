@@ -2,6 +2,7 @@
 // `plugin_ui`) and the current conversation's HTML previews (`html_previews`), one at a
 // time, each in the shared sandboxed frame.
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { AppWindow, Plug, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { HtmlPreviewFrame } from "@liveagent/ui/components/sandboxed-ui/HtmlPreviewCard";
 import { PluginPanelFrame } from "@liveagent/ui/components/sandboxed-ui/PluginPanelFrame";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { CRON_LAYER_COLOR, CRON_LAYER_ID } from "./cronLayer";
 import { calendarName, translate } from "./i18n";
 import { listColor, taskListLayer, taskLists } from "./taskLists";

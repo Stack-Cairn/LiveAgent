@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
 import { AlertTriangle, Check, Download, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";

@@ -3,6 +3,7 @@
 //
 // Shared implementation owned by @liveagent/ui.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useEffect, useState } from "react";
 import {
   formatMemoryError,

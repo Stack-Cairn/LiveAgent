@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {

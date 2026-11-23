@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import { ArrowLeft, FolderOpen, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import { Loader2, ShieldCheck, ShieldOff } from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";

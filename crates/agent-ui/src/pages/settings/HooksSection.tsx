@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { Plus, SquarePen, Trash2 } from "@liveagent/ui/components/IconSet";
 import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";

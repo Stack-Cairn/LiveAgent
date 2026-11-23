@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/settings";
+import "@liveagent/ui/i18n/namespaces/sharing";
 import {
   AlertCircle,
   Check,

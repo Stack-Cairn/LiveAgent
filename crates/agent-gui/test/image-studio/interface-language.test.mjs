@@ -10,6 +10,7 @@ import {
 } from "../../../../scripts/typescript-source-tools.mjs";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 // The whole image studio follows the interface language: an English UI shows no Chinese,
 // the Chinese UI keeps its exact wording, and the framing line appended to the prompt is
@@ -21,7 +22,9 @@ const loader = createTsModuleLoader();
 const { t } = loader.loadModule("@liveagent/app/i18n/config");
 const zh = (key) => t(key, "zh-CN");
 const en = (key) => t(key, "en-US");
-const { SHARED_TRANSLATIONS } = loader.loadModule("@liveagent/ui/i18n/sharedTranslations.ts");
+// Studio messages live in their namespace; load every namespace as the app has once open.
+loadTranslationNamespaces(loader);
+const { translations: SHARED_TRANSLATIONS } = loader.loadModule("@liveagent/app/i18n/config");
 const studioKeys = (locale) =>
   Object.entries(SHARED_TRANSLATIONS[locale]).filter(([key]) => key.startsWith("imageStudio."));
 

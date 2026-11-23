@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { SystemProxyType } from "@liveagent/app/lib/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { RefreshCw } from "@liveagent/ui/components/IconSet";

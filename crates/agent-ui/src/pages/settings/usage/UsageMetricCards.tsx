@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/usageStats";
 import {
   CalendarDays,
   Cpu,

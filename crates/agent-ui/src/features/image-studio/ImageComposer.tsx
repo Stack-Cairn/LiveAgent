@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useId, useRef } from "react";
 import { Loader2, Sparkles } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";

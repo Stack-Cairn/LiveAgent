@@ -15,6 +15,7 @@
 // The runtime layers both onto streamRetry's and providerFailover's retryable
 // classification. Local UI preference only (localStorage), not gateway-synced.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { Check, Plus, RefreshCw, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import {
   type Activity,
   BookOpen,

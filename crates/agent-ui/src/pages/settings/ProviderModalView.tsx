@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { getUsagePlanDisplay } from "@liveagent/app/lib/providers/usageQuery";
 import {
   CODEX_REQUEST_FORMAT_LABELS,
@@ -7,15 +8,12 @@ import {
   type UsageQueryMode,
 } from "@liveagent/app/lib/settings";
 import {
-  AudioLines,
   ChevronDown,
   ClipboardPaste,
   ExternalLink,
   Eye,
   EyeOff,
-  FileText,
   Fingerprint,
-  ImageIcon,
   Key,
   Link2,
   List,
@@ -24,7 +22,6 @@ import {
   Search,
   Settings,
   Trash2,
-  Video,
   X,
 } from "@liveagent/ui/components/IconSet";
 import {
@@ -93,21 +90,13 @@ import {
   DialogSwitch,
   getCustomHeaderIssue,
   getProviderLabel,
+  MODEL_MODALITY_ICONS,
   PROMPT_CACHE_HINT_LABEL_KEYS,
   PROVIDER_TABS,
   ProviderBrandIcon,
   USAGE_QUERY_SCRIPT_HELP_EXAMPLE,
   UsagePlanLine,
 } from "./ProviderPresentation";
-
-// 模型行右侧的输入模态图标：text 是所有模型的公共能力不单独标注，只展示
-// 额外的模态（图片/音频/视频/PDF），按目录的规范顺序排列。
-const MODEL_MODALITY_ICONS = [
-  { modality: "image", Icon: ImageIcon, labelKey: "settings.modelModalityImage" },
-  { modality: "audio", Icon: AudioLines, labelKey: "settings.modelModalityAudio" },
-  { modality: "video", Icon: Video, labelKey: "settings.modelModalityVideo" },
-  { modality: "pdf", Icon: FileText, labelKey: "settings.modelModalityPdf" },
-] as const;
 
 export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewModel }) {
   const {

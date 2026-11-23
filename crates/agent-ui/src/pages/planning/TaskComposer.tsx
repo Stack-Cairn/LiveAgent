@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Circle, List, ListFilter } from "../../components/IconSet";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";

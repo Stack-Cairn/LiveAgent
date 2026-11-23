@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import type { Locale } from "@liveagent/app/i18n/config";
 import { planningDateLocale } from "../../lib/planning/i18n";
 import { addDays, localEpoch, zonedParts } from "../../lib/planning/time";

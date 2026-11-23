@@ -23,14 +23,13 @@ const gatewayAdapterSource = readFileSync(
   new URL("../../../agent-gateway/web/src/agent-ui-adapters/providerSettings.tsx", import.meta.url),
   "utf8",
 );
-const zhSettingsSource = readFileSync(
-  new URL("../../../agent-ui/src/i18n/translations/zhCNSettings.ts", import.meta.url),
-  "utf8",
-);
-const enSettingsSource = readFileSync(
-  new URL("../../../agent-ui/src/i18n/translations/enUSSettings.ts", import.meta.url),
-  "utf8",
-);
+// Settings copy of one locale: the core table plus the lazily loaded settings namespace.
+const settingsSource = (core, namespace) =>
+  [`../../../agent-ui/src/i18n/translations/${core}`, `../../../agent-ui/src/i18n/namespaces/${namespace}`]
+    .map((file) => readFileSync(new URL(file, import.meta.url), "utf8"))
+    .join("\n");
+const zhSettingsSource = settingsSource("zhCNSettings.ts", "settingsZhCN.ts");
+const enSettingsSource = settingsSource("enUSSettings.ts", "settingsEnUS.ts");
 
 test("desktop copy payload puts Base URL and API Key on separate lines", () => {
   assert.equal(

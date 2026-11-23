@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
 import { Cloud, Download, Plus, RefreshCw, Search, Server } from "@liveagent/ui/components/IconSet";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 const pageSource = readFileSync(
   new URL("../../../agent-ui/src/pages/mcp-hub/McpHubPage.tsx", import.meta.url),
@@ -44,11 +45,16 @@ const resourceTabsSource = readFileSync(
   new URL("../../../agent-ui/src/components/resources/ResourceTabsList.tsx", import.meta.url),
   "utf8",
 );
-const guiTranslations = createTsModuleLoader().loadModule("src/i18n/config.ts").translations;
+const guiTranslations = hostTables(createTsModuleLoader());
 const webRoot = fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url));
-const webTranslations = createTsModuleLoader({ rootDir: webRoot }).loadModule(
-  "src/i18n/config.ts",
-).translations;
+const webTranslations = hostTables(createTsModuleLoader({ rootDir: webRoot }));
+
+/** A host table with every feature namespace loaded. */
+function hostTables(hostLoader) {
+  const { translations } = hostLoader.loadModule("src/i18n/config.ts");
+  loadTranslationNamespaces(hostLoader);
+  return translations;
+}
 
 test("MCP navigation uses the same standard segmented and quiet Tabs as Skills Hub", () => {
   for (const source of [toolbarSource, importPickerSource]) {

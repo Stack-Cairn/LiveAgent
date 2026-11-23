@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import type { WorkspaceProject } from "@liveagent/app/lib/settings";
 import { Skeleton } from "@liveagent/ui/components/ui/skeleton";
 import type {

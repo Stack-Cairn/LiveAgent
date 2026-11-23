@@ -5,6 +5,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openPathInEditor } from "../../../lib/editors/editors";

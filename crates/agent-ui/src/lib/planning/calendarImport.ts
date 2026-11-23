@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import ICAL from "ical.js";
 import JSZip from "jszip";
 import PostalMime from "postal-mime";

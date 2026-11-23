@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import type { ImageJob, ImageStudioClient } from "../../lib/imaging/types";
 import {
   applyImageEvent,

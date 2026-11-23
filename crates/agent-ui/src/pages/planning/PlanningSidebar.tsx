@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { type CSSProperties, createContext, type ReactNode, useContext, useState } from "react";
 import {
   CalendarDays,

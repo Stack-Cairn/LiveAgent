@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   type DiagnosticsBundle,

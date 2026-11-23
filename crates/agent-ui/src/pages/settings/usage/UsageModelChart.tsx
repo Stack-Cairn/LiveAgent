@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/usageStats";
 import { useLocale } from "@liveagent/ui/i18n";
 import { useMemo, useState } from "react";
 import { cn } from "../../../lib/shared/utils";

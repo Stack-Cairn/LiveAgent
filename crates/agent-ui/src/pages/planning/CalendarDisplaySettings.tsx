@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { type ReactNode, useState } from "react";
 import { CalendarDays, Keyboard, MoreHorizontal, Trash2, Upload } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";

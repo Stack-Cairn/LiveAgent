@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import {
   readWorkspaceClipboardText,
   WorkspaceOverlayTitleBar,
@@ -71,6 +72,13 @@ import {
   isEditorFileTooLarge,
   localEditorFileIo,
 } from "./workspaceEditorFileIo";
+import {
+  editorPerformanceOptions,
+  LARGE_EDITOR_BYTES,
+  LARGE_EDITOR_LINES,
+  LONG_EDITOR_LINE,
+  needsLightweightEditor,
+} from "./workspaceEditorPerformance";
 
 type MonacoEnvironmentGlobal = typeof globalThis & {
   MonacoEnvironment?: {
@@ -119,40 +127,6 @@ type EditorTabBuffer = {
   savePromise: Promise<boolean> | null;
   reloadToken: symbol | null;
 };
-
-const LARGE_EDITOR_BYTES = 1024 * 1024;
-const LARGE_EDITOR_LINES = 20_000;
-const LONG_EDITOR_LINE = 10_000;
-
-function needsLightweightEditor(content: string, sizeBytes: number, totalLines: number) {
-  if (sizeBytes >= LARGE_EDITOR_BYTES || totalLines >= LARGE_EDITOR_LINES) return true;
-  let lineLength = 0;
-  for (let index = 0; index < content.length; index += 1) {
-    const code = content.charCodeAt(index);
-    lineLength = code === 10 || code === 13 ? 0 : lineLength + 1;
-    if (lineLength >= LONG_EDITOR_LINE) return true;
-  }
-  return false;
-}
-
-function editorPerformanceOptions(lightweight: boolean): monaco.editor.IEditorOptions {
-  return {
-    minimap: { enabled: !lightweight },
-    folding: !lightweight,
-    glyphMargin: !lightweight,
-    fontLigatures: !lightweight,
-    renderWhitespace: "none",
-    renderLineHighlight: lightweight ? "none" : "line",
-    matchBrackets: lightweight ? "never" : "always",
-    occurrencesHighlight: lightweight ? "off" : "singleFile",
-    selectionHighlight: !lightweight,
-    colorDecorators: !lightweight,
-    stickyScroll: { enabled: !lightweight },
-    stopRenderingLineAfter: LONG_EDITOR_LINE,
-    // Keep find/replace available without automatically searching for a huge selection.
-    find: { seedSearchStringFromSelection: lightweight ? "never" : "always" },
-  };
-}
 
 type EditorTab = {
   key: string;

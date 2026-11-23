@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/planning";
+import "@liveagent/ui/i18n/namespaces/settings";
 import { updateCustomSettings } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { useState } from "react";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
 import { Check, Cloud, ExternalLink, Loader2, Tag, X } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";

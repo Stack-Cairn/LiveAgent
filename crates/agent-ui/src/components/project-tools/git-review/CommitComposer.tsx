@@ -6,6 +6,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific Git operations
 // and optional platform capabilities enter through the shared contracts.
 
+import "@liveagent/ui/i18n/namespaces/gitReview";
 import { Loader2, Undo2, WandSparkles } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitStatusEntry } from "@liveagent/ui/lib/git/types";

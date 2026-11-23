@@ -1,3 +1,5 @@
+import "@liveagent/ui/i18n/namespaces/skillsHub";
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import type { AppSettings, WorkspaceResourceSettingsMode } from "@liveagent/app/lib/settings";
 import { getMcpTransportMeta } from "@liveagent/ui/components/resources/McpTransportMeta";
 import { ResourceSelectionCard } from "@liveagent/ui/components/resources/ResourceSelectionCard";

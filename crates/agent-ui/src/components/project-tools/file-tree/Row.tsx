@@ -3,6 +3,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import { ChevronRight, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";

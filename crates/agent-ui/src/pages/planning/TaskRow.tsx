@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { type PointerEvent, type ReactNode, useState } from "react";
 import {
   AlertCircle,

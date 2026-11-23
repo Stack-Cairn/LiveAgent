@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { ChartColumn, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { SettingsSection } from "@liveagent/ui/components/settings/SettingsLayout";
 import { SettingsNotice } from "@liveagent/ui/components/settings/SettingsNotice";

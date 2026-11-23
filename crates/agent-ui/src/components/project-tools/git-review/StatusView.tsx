@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/gitReview";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 // GitReview status view: staged/unstaged change lists, the commit composer
 // pinned under the change list, the working-tree/branch diff pane and the

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useState } from "react";
 import {
   ImageOff,

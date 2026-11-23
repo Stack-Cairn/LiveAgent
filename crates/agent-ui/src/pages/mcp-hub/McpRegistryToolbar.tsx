@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import { RefreshCw } from "@liveagent/ui/components/IconSet";
 import { RefreshButton } from "@liveagent/ui/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@liveagent/ui/components/ui/tabs";

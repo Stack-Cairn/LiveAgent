@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { useId } from "react";
 import { Input } from "../../components/ui/input";
 import { useLocale } from "../../i18n";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import type { AppSettings, SttProviderId, SttProviderSettings } from "@liveagent/app/lib/settings";
 import alibabaCloudIcon from "@liveagent/ui/assets/stt/alibaba-cloud.ico";
 import baiduCloudIcon from "@liveagent/ui/assets/stt/baidu-cloud.ico";

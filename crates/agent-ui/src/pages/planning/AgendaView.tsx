@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import type { CSSProperties } from "react";
 import { Check, Circle } from "../../components/IconSet";
 import { isCronEvent } from "../../lib/planning/cronLayer";

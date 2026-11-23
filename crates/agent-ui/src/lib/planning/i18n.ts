@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { DEFAULT_LOCALE, t as hostTranslate, type Locale } from "@liveagent/app/i18n/config";
 
 export type PlanningVars = Record<string, string | number>;

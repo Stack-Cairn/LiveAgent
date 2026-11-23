@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useRef, useState } from "react";
 import { CalendarDays, ChevronRight } from "../../components/IconSet";
 import { Button } from "../../components/ui/button";

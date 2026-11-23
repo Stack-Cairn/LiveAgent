@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/planning";
 import { useState } from "react";
 import { SettingsNotice } from "../../components/settings/SettingsNotice";
 import { Button } from "../../components/ui/button";

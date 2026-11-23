@@ -3,6 +3,7 @@
 // (`settings_kbrain_ssh_state` syncs first); hosts without a K-brain that supports
 // SSHManager, and the WebUI, which has no such command, show nothing extra.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useCallback, useEffect, useRef, useState } from "react";

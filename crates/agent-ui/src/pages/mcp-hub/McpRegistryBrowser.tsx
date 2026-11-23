@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/mcpHub";
 import {
   type AppSettings,
   type McpServerConfig,

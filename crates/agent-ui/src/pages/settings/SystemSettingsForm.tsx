@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import {
   buildFontFamilySelectOptions,
   FONT_FAMILY_CUSTOM_SELECT_VALUE,

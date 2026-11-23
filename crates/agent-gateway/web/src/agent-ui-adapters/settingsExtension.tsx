@@ -1,4 +1,5 @@
 import { CircleHelp, Keyboard, MonitorSmartphone } from "@liveagent/ui/components/IconSet";
+import { onDemand } from "@liveagent/ui/components/OnDemand";
 import { SettingsCard, SettingsSection } from "@liveagent/ui/components/settings/SettingsLayout";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@liveagent/ui/lib/resourceHost";
 import type { SettingsSearchExtension } from "@liveagent/ui/lib/settings/settingsSearchIndex";
 import type { GatewaySettingsSyncUpdatePayload } from "@liveagent/ui/lib/settings/sync";
-import { DiagnosticsExportRow } from "@liveagent/ui/pages/settings/HelpSettingsRows";
 import type {
   KBrainMemoryConfig,
   KBrainMemoryOrganizerConfig,
@@ -21,13 +21,24 @@ import type {
   KBrainSettingsDocument,
   PermissionRule,
 } from "@liveagent/ui/pages/settings/kbrainSettingsAdapter";
-import { ShortcutCommandsSection } from "@liveagent/ui/pages/settings/ShortcutCommandsSection";
 import { getGatewayWebSocketClient } from "../lib/gatewaySocket";
 import { loadToken } from "../lib/storage";
-import { DevicesSection } from "../pages/settings/DevicesSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 import { gatewaySkillsAdapter } from "./kbrainSkills";
 import { WEB_UNSUPPORTED_SHORTCUT_COMMANDS, webSettingsSearch } from "./settingsSearch";
+
+// This module is loaded with the app (for `settingsHostAdapter`); the section
+// bodies load with the settings page that renders them.
+const ShortcutCommandsSection = onDemand(
+  async () =>
+    (await import("@liveagent/ui/pages/settings/ShortcutCommandsSection")).ShortcutCommandsSection,
+);
+const DevicesSection = onDemand(
+  async () => (await import("../pages/settings/DevicesSection")).DevicesSection,
+);
+const DiagnosticsExportRow = onDemand(
+  async () => (await import("@liveagent/ui/pages/settings/HelpSettingsRows")).DiagnosticsExportRow,
+);
 
 export function createSettingsExtension(props: SettingsPageProps): {
   surface: "web";

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/projectTools";
 import {
   AlertTriangle,
   CheckCircle2,

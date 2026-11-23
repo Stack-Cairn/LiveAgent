@@ -3,6 +3,7 @@
 // each plugin's settings panels (capability `plugin_ui`). The list follows the backend
 // live through the plugin long-poll.
 
+import "@liveagent/ui/i18n/namespaces/settings";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import { WorkspaceFolderTrustSection } from "@liveagent/ui/components/chat/workspace-project-settings/WorkspaceFolderTrustSection";
 import {

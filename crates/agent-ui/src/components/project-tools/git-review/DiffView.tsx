@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/gitReview";
 import { ContextMenuItem, ContextMenuPopup } from "@liveagent/ui/components/ui/context-menu";
 // GitReview diff rendering: DiffContent (patch chunks, diff stat, selection
 // context menu, selection autoscroll, horizontal scrollbar) and the

@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/settings";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import {

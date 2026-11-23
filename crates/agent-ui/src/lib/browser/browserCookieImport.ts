@@ -5,6 +5,7 @@
  * host only returns counts.
  */
 
+import "@liveagent/ui/i18n/namespaces/projectTools";
 export type BrowserImportSource = {
   /** Stable browser id: "chrome" | "edge" | "chromium" | "brave". */
   browser: string;

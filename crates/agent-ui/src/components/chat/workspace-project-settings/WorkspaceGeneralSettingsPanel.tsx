@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/workspaceProject";
 import type { WorkspaceProject } from "@liveagent/app/lib/settings";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { CopyButton } from "@liveagent/ui/components/ui/copy-button";

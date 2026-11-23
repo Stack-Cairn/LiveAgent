@@ -1,3 +1,4 @@
+import "@liveagent/ui/i18n/namespaces/imageStudio";
 import { type ReactNode, useEffect, useState } from "react";
 import { AppErrorBoundary } from "../../components/AppErrorBoundary";
 import {

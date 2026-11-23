@@ -9,20 +9,25 @@ import {
   walkSyntaxTree,
 } from "../../../../scripts/typescript-source-tools.mjs";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { loadTranslationNamespaces } from "../helpers/translation-namespaces.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const sharedSourceRoot = fileURLToPath(new URL("../../../agent-ui/src/", import.meta.url));
 const guiSourceRoot = fileURLToPath(new URL("../../src/", import.meta.url));
 const webRoot = fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url));
 const webSourceRoot = path.join(webRoot, "src");
+// The host tables plus every feature namespace: what a host serves once all of
+// its features have loaded.
 const guiLoader = createTsModuleLoader();
 const guiTranslations = guiLoader.loadModule("src/i18n/config.ts").translations;
-const webTranslations = createTsModuleLoader({ rootDir: webRoot }).loadModule(
-  "src/i18n/config.ts",
-).translations;
-const sharedTranslations = guiLoader.loadModule(
-  "@liveagent/ui/i18n/sharedTranslations.ts",
-).SHARED_TRANSLATIONS;
+loadTranslationNamespaces(guiLoader);
+const webLoader = createTsModuleLoader({ rootDir: webRoot });
+const webTranslations = webLoader.loadModule("src/i18n/config.ts").translations;
+loadTranslationNamespaces(webLoader);
+// Shared messages: the core table plus every namespace, with no host overrides.
+const sharedTranslations = guiLoader
+  .loadModule("@liveagent/ui/i18n/hostTranslations.ts")
+  .createHostTranslations({ "zh-CN": {}, "en-US": {} }).translations;
 const hostTranslations = [
   ["GUI", guiTranslations],
   ["WebUI", webTranslations],

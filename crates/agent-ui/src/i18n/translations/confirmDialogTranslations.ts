@@ -5,9 +5,7 @@
  */
 export const CONFIRM_DIALOG_TRANSLATIONS = {
   "zh-CN": {
-    "confirmDialog.cancel": "取消",
     "confirmDialog.keepEditing": "继续编辑",
-    "confirmDialog.discardAndReload": "放弃并重新加载",
     "imageSettings.confirm.leaveTitle": "离开图像设置？",
     "imageSettings.confirm.leaveDescription":
       "图像设置有未保存的修改或正在等待的操作。离开将丢弃本页草稿；已发出的请求可能仍会完成。",
@@ -36,9 +34,7 @@ export const CONFIRM_DIALOG_TRANSLATIONS = {
     "imageSettings.confirm.delete": "删除",
   },
   "en-US": {
-    "confirmDialog.cancel": "Cancel",
     "confirmDialog.keepEditing": "Keep editing",
-    "confirmDialog.discardAndReload": "Discard and reload",
     "imageSettings.confirm.leaveTitle": "Leave image settings?",
     "imageSettings.confirm.leaveDescription":
       "Image settings have unsaved changes or a pending operation. Leaving discards the draft on this page; requests already sent may still complete.",
