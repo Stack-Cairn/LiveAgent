@@ -6,6 +6,7 @@ import {
   kBrainOwnedDesktopCommand,
 } from "../lib/host";
 import { createKBrainClient } from "../lib/kbrain/client";
+import { type KBrainFsListResponse, listFileMentionsViaFsList } from "../lib/kbrain/fileMentions";
 import { ensureKBrainConversationId, setKBrainSessionId } from "../lib/kbrain/mapping";
 import { isKBrainMemoryCommand } from "../lib/kbrain/memory";
 import { getConfiguredKBrainConnection } from "../lib/kbrain/runtimeConnection";
@@ -45,6 +46,14 @@ export function invoke<T>(command: string, args?: Record<string, unknown>): Prom
         `Desktop runtime command ${command} is unavailable in K-brain mode; use the K-brain backend capability.`,
       ),
     );
+  }
+  if (isKBrainBrowserHost() && command === "fs_mention_list") {
+    // No native command in the browser: build the @ file index from K-brain's
+    // workspace listing instead of failing every mention lookup.
+    return listFileMentionsViaFsList(
+      (request) => createKBrainClient().filesystem<KBrainFsListResponse>(request),
+      args,
+    ) as Promise<T>;
   }
   if (isKBrainBrowserHost()) {
     return Promise.reject(

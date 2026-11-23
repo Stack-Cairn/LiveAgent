@@ -14,6 +14,9 @@ import (
 func (r *Relay) Filesystem(ctx context.Context, request *gatewayv2.GatewayEnvelope) (*gatewayv2.AgentEnvelope, bool, error) {
 	var input any
 	var output any
+	if mentions := request.GetFileMentionList(); mentions != nil {
+		return r.fileMentions(ctx, mentions)
+	}
 	envelope := &gatewayv2.AgentEnvelope{}
 	switch {
 	case request.GetFsRoots() != nil:

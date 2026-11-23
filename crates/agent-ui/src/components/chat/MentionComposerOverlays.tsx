@@ -193,7 +193,9 @@ export function Popup({
             </div>
           )}
           {error && !isLoading && (
-            <div className="flex h-8 items-center px-2 text-xs text-destructive">{error}</div>
+            <div className="flex min-h-8 items-center break-words px-2 py-1.5 text-xs text-destructive">
+              {error}
+            </div>
           )}
           {suggestions.map((suggestion, i) => {
             if (suggestion.type === "command") {
