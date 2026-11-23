@@ -263,6 +263,21 @@
   .font-chat {
     font-family: var(--chat-font-family);
   }
+  .font-chat
+    :where(
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      strong,
+      b,
+      [data-streamdown^="heading-"],
+      [data-streamdown="strong"]
+    ) {
+    font-family: var(--chat-emphasis-font-family);
+  }
 }
 
 /* Streamdown owns these document-level portals, so no React component can carry the utilities. */

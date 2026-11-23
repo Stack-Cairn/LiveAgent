@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -145,6 +146,7 @@ test("applying font families updates CSS variables and only emits code changes",
     );
     assert.equal(values.get("--app-font-family"), "Inter");
     assert.equal(values.get("--chat-font-family"), "Charter");
+    assert.equal(values.get("--chat-emphasis-font-family"), "Charter");
     assert.equal(values.get("--code-font-family"), "Monaco");
     assert.deepEqual(codeFonts, ["Menlo", "Monaco"]);
   } finally {
@@ -209,4 +211,31 @@ test("listLocalFontFamilies uses queryLocalFonts when permission is already gran
       globalThis.queryLocalFonts = previous;
     }
   }
+});
+
+test("semibold chat face registers only at weight 600 and body text uses the sans stack", () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+  const hostCss = read("../../src/index.css");
+  const tokens = read("../../../agent-ui/src/styles/tokens.css");
+  const base = read("../../../agent-ui/src/styles/base.css");
+  const faces = [...hostCss.matchAll(/@font-face\s*{([^}]*)}/g)].map((match) => match[1]);
+  const chatFace = faces.find((face) => face.includes("Semibold.woff2"));
+  assert.ok(chatFace, "bundled semibold face is registered");
+  assert.match(chatFace, /font-family:\s*"LiveAgent Chat Semibold"/);
+  assert.match(chatFace, /font-weight:\s*600;/);
+  // Body text must not lead with a semibold-only family: font matching would
+  // pick that family first and render every paragraph at 600.
+  assert.equal(fontFamily.DEFAULT_CHAT_FONT_FAMILY, fontFamily.DEFAULT_APP_FONT_FAMILY);
+  assert.doesNotMatch(fontFamily.DEFAULT_CHAT_FONT_FAMILY, /Semibold/);
+  assert.match(tokens, /--chat-font-family:\s*ui-sans-serif, system-ui,/);
+  assert.match(
+    tokens,
+    /--chat-emphasis-font-family:\s*"LiveAgent Chat Semibold", var\(--chat-font-family\);/,
+  );
+  assert.match(base, /strong[^{]*\[data-streamdown\^="heading-"\][^{]*{\s*font-family: var\(--chat-emphasis-font-family\);/);
+  assert.equal(
+    fontFamily.resolveChatEmphasisFontFamily(""),
+    `"LiveAgent Chat Semibold", ${fontFamily.DEFAULT_CHAT_FONT_FAMILY}`,
+  );
+  assert.equal(fontFamily.resolveChatEmphasisFontFamily("Charter"), "Charter");
 });

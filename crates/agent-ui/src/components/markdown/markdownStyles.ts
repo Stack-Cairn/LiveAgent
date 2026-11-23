@@ -1,7 +1,7 @@
 export const CHAT_MARKDOWN_CLASS = [
   "text-sm leading-scaled-22px tracking-0 text-foreground font-book",
   "[&_p]:my-0 [&_p]:min-w-0 [&_p]:max-w-full [&_p]:text-sm [&_p]:leading-scaled-22px [&_p]:tracking-0 [&_p]:text-foreground [&_p]:font-book [&_p]:break-words [&_p]:[overflow-wrap:anywhere] [&_p+p]:mt-2.5",
-  "[&_strong]:font-medium [&_strong]:text-foreground [&_[data-streamdown=strong]]:font-medium [&_[data-streamdown=strong]]:text-foreground [&_em]:text-foreground/90",
+  "[&_strong]:font-semibold [&_strong]:text-foreground [&_[data-streamdown=strong]]:font-semibold [&_[data-streamdown=strong]]:text-foreground [&_em]:text-foreground/90",
   "[&.chat-markdown--caret-off>*:last-child::after]:opacity-0",
   "[&_[data-streamdown=heading-1]]:mt-7 [&_[data-streamdown=heading-1]]:mb-2.5 [&_[data-streamdown=heading-1]]:text-2xl [&_[data-streamdown=heading-1]]:leading-scaled-30px [&_[data-streamdown=heading-1]]:font-semibold [&_[data-streamdown=heading-1]]:tracking-minus-0p018em [&_[data-streamdown=heading-1]]:text-foreground",
   "[&_[data-streamdown=heading-2]]:mt-6 [&_[data-streamdown=heading-2]]:mb-2 [&_[data-streamdown=heading-2]]:text-lg [&_[data-streamdown=heading-2]]:leading-scaled-26px [&_[data-streamdown=heading-2]]:font-semibold [&_[data-streamdown=heading-2]]:tracking-minus-0p012em [&_[data-streamdown=heading-2]]:text-foreground",
