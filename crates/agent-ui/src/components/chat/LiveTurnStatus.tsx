@@ -146,7 +146,7 @@ function phaseLabel(
 }
 
 /** How long reply text may sit still before the status row returns. */
-export const REPLY_STREAM_QUIET_MS = 2_000;
+const REPLY_STREAM_QUIET_MS = 2_000;
 
 /** Phases that always stay on screen: they say the turn is blocked, not busy. */
 const BLOCKED_PHASES = new Set<RunPhase>([

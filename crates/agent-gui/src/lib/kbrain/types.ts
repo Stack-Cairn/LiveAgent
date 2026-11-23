@@ -69,7 +69,7 @@ export type KBrainContentBlock = {
 };
 
 /** `error_detail` of `run.failed` and of a saved failure message. */
-export type KBrainErrorDetail = {
+type KBrainErrorDetail = {
   kind: string;
   upstream_status?: number;
   provider_message?: string;

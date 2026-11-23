@@ -103,7 +103,7 @@ export function useRunningToolActivity(entries: readonly AssistantTurnLayoutEntr
 }
 
 /** Reasoning shorter than this stays out of the trace (it would only add noise). */
-export const MIN_VISIBLE_REASONING_MS = 1_000;
+const MIN_VISIBLE_REASONING_MS = 1_000;
 
 /**
  * Whether the turn's merged reasoning row is worth a row. A settled turn shows
