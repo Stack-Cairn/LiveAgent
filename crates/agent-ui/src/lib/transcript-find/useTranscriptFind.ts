@@ -55,6 +55,8 @@ export type TranscriptFindState = {
   openFind: () => void;
   close: () => void;
   inputRef: RefObject<HTMLInputElement | null>;
+  /** The floating bar: matches behind it are scrolled below it. */
+  barRef: RefObject<HTMLElement | null>;
 };
 
 const NO_MATCHES: readonly TranscriptFindMatch[] = [];
@@ -70,6 +72,12 @@ function rangeRect(range: Range) {
   return typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
 }
 
+/** Height the floating find bar covers at the top of the viewport. */
+function topInsetPx(bar: HTMLElement | null, viewportTop: number) {
+  if (!bar?.isConnected) return 0;
+  return Math.max(0, bar.getBoundingClientRect().bottom - viewportTop);
+}
+
 export function useTranscriptFind(options: UseTranscriptFindOptions): TranscriptFindState {
   const { root, scrollViewport, source, resetKey, isMac } = options;
   const [open, setOpen] = useState(false);
@@ -77,6 +85,7 @@ export function useTranscriptFind(options: UseTranscriptFindOptions): Transcript
   const [activeId, setActiveId] = useState<string | null>(null);
   const [revealToken, setRevealToken] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const barRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [owner] = useState(() => ({}));
   const deferredQuery = useDeferredValue(query);
@@ -106,9 +115,10 @@ export function useTranscriptFind(options: UseTranscriptFindOptions): Transcript
     if (!viewport || !rect) return false;
     const bounds = viewport.getBoundingClientRect();
     const inset = latest.current.options.bottomInsetPx ?? 0;
+    const top = bounds.top + topInsetPx(barRef.current, bounds.top);
     return (
       rect.height > 0 &&
-      rect.top >= bounds.top + VIEWPORT_MARGIN_PX &&
+      rect.top >= top + VIEWPORT_MARGIN_PX &&
       rect.bottom <= bounds.bottom - inset - VIEWPORT_MARGIN_PX
     );
   }, []);
@@ -118,9 +128,10 @@ export function useTranscriptFind(options: UseTranscriptFindOptions): Transcript
     const rect = rangeRect(range);
     if (!viewport || !rect) return;
     const bounds = viewport.getBoundingClientRect();
-    const visibleHeight = Math.max(0, bounds.height - bottomInsetPx);
+    const topInset = topInsetPx(barRef.current, bounds.top);
+    const visibleHeight = Math.max(0, bounds.height - topInset - bottomInsetPx);
     breakFollow?.();
-    viewport.scrollTop += rect.top - (bounds.top + visibleHeight / 3);
+    viewport.scrollTop += rect.top - (bounds.top + topInset + visibleHeight / 3);
   }, []);
 
   /** Ranges of every match in the mounted rows, plus the active one. */
@@ -368,5 +379,6 @@ export function useTranscriptFind(options: UseTranscriptFindOptions): Transcript
     openFind,
     close,
     inputRef,
+    barRef,
   };
 }
