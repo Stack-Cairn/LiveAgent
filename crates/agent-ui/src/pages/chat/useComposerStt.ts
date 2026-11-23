@@ -1,22 +1,18 @@
 import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
-import {
-  appendTailSilence,
-  type PcmChunk,
-  pcm16ToLittleEndianBytes,
-  STT_CONNECT_TIMEOUT_MS,
-  STT_SAMPLES_PER_CHUNK,
-  STT_SEND_QUEUE_TIMEOUT_MS,
-  SttAudioCapture,
-  SttPcmFifo,
-} from "@liveagent/ui/lib/stt/audio";
+import type { PcmChunk, SttAudioCapture, SttPcmFifo } from "@liveagent/ui/lib/stt/audio";
 import { SttError, type SttErrorCode, sttErrorMessage } from "@liveagent/ui/lib/stt/errors";
 import type { SttRuntimeEvent, SttTransport, SttUiState } from "@liveagent/ui/lib/stt/types";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+// Microphone capture loads when voice input starts, not with the composer.
+type SttAudio = typeof import("@liveagent/ui/lib/stt/audio");
+const loadSttAudio = (): Promise<SttAudio> => import("@liveagent/ui/lib/stt/audio");
+
 type ActiveSttSession = {
   id: string;
+  audio: SttAudio;
   capture: SttAudioCapture;
   fifo: SttPcmFifo;
   ready: boolean;
@@ -99,7 +95,9 @@ export function useComposerStt(options: {
       if (!active || !transport) return;
       const sessionId = active.id;
       active.queue = active.queue
-        .then(() => transport.sendAudio(sessionId, sequence, pcm16ToLittleEndianBytes(pcm)))
+        .then(() =>
+          transport.sendAudio(sessionId, sequence, active.audio.pcm16ToLittleEndianBytes(pcm)),
+        )
         .catch((cause) => {
           fail(cause, "sendAudioFailed", sessionId);
         });
@@ -141,7 +139,7 @@ export function useComposerStt(options: {
           new Promise<never>((_, reject) => {
             queueTimer = window.setTimeout(
               () => reject(new SttError("sendAudioTimeout")),
-              STT_SEND_QUEUE_TIMEOUT_MS,
+              active.audio.STT_SEND_QUEUE_TIMEOUT_MS,
             );
           }),
         ]);
@@ -187,6 +185,7 @@ export function useComposerStt(options: {
       fail(cause, "stopMicrophoneFailed");
       return;
     }
+    const { appendTailSilence, STT_SAMPLES_PER_CHUNK } = active.audio;
     const tail = appendTailSilence();
     for (let offset = 0; offset < tail.length; offset += STT_SAMPLES_PER_CHUNK) {
       const pcm = tail.slice(offset, offset + STT_SAMPLES_PER_CHUNK);
@@ -260,9 +259,9 @@ export function useComposerStt(options: {
     }
 
     try {
-      await transport.requestPermission?.();
-      const fifo = new SttPcmFifo();
-      const capture = new SttAudioCapture({
+      const [audio] = await Promise.all([loadSttAudio(), transport.requestPermission?.()]);
+      const fifo = new audio.SttPcmFifo();
+      const capture = new audio.SttAudioCapture({
         onChunk: (chunk) => queueChunk(chunk),
         onSilenceTimeout: () => {
           const current = activeRef.current;
@@ -273,6 +272,7 @@ export function useComposerStt(options: {
       });
       const active: ActiveSttSession = {
         id: crypto.randomUUID(),
+        audio,
         capture,
         fifo,
         ready: false,
@@ -296,7 +296,7 @@ export function useComposerStt(options: {
       setState("buffering");
       active.connectTimer = window.setTimeout(
         () => fail(null, "connectTimeout"),
-        STT_CONNECT_TIMEOUT_MS,
+        audio.STT_CONNECT_TIMEOUT_MS,
       );
       await transport.open({ sessionId: active.id, provider, onEvent });
     } catch (cause) {

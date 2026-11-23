@@ -6,7 +6,6 @@ import {
   showChatUrlContextMenu,
   withChatFileLinkMenuIntent,
 } from "@liveagent/ui/lib/chat/chatFileLinkContextMenuStore";
-import { math } from "@streamdown/math";
 import {
   type ComponentProps,
   cloneElement,
@@ -49,12 +48,14 @@ import {
   resolveCodeBlockRenderPolicy,
 } from "../lib/markdownCodeBlockPolicy";
 import { throttledCodePlugin } from "../lib/markdownCodeHighlight";
+import { hasMarkdownMath, markdownMathPlugin } from "../lib/markdownMath";
 import {
   cjkDoubleTildeStrikethrough,
   withDoubleTildeStrikethrough,
 } from "../lib/markdownStrikethrough";
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { copyTextToClipboard } from "../lib/shared/clipboard";
+import { useLazyModule } from "../lib/shared/lazyModule";
 import { cn } from "../lib/shared/utils";
 import { createStreamingBlockParser } from "../lib/streamingMarkdownBlocks";
 import { MarkdownMermaidBlock } from "./markdown/MarkdownMermaidBlock";
@@ -240,7 +241,16 @@ export type MarkdownProps = {
 
 // code 走包装插件：有界 LRU + 流式增长块 300ms 节流（见 markdownCodeHighlight.ts）。
 // 删除线只认 `~~text~~`，单个 `~` 按普通字符显示（见 markdownStrikethrough.ts）。
-const streamdownPlugins = { code: throttledCodePlugin, math, cjk: cjkDoubleTildeStrikethrough };
+// Math joins once its lazy chunk has loaded (lib/markdownMath.ts); each set is
+// one constant so Streamdown's context keeps its identity across renders.
+const streamdownPlugins = { code: throttledCodePlugin, cjk: cjkDoubleTildeStrikethrough };
+type MathPlugin = NonNullable<ReturnType<typeof markdownMathPlugin.get>>;
+let streamdownPluginsWithMath: (typeof streamdownPlugins & { math: MathPlugin }) | null = null;
+function streamdownPluginsFor(math: MathPlugin | null) {
+  if (!math) return streamdownPlugins;
+  streamdownPluginsWithMath ??= { ...streamdownPlugins, math };
+  return streamdownPluginsWithMath;
+}
 // Streamdown folds these props into the value of the context every block,
 // code block and table reads. Fresh literals per render would hand that
 // context a new value on each streaming update, re-rendering the consumers in
@@ -944,6 +954,12 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
       ),
     [citationAtDocumentEnd, content, showCaret, streaming],
   );
+  const hasMath = hasMarkdownMath(normalizedContent);
+  const math = useLazyModule(markdownMathPlugin, hasMath).value;
+  // Streamdown keeps its parsed output when only `plugins` changes, so a formula
+  // shown before the math chunk arrived would stay as source: remount it once.
+  const [mountedWithMath] = useState(() => markdownMathPlugin.get() !== null);
+  const streamdownKey = !mountedWithMath && math && hasMath ? "math" : "text";
   const components = useMemo(() => {
     const baseComponents = readOnly ? markdownReadOnlyComponents : markdownComponents;
     const fileLinkComponents: Components =
@@ -973,6 +989,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
 
   const markdown = (
     <Streamdown
+      key={streamdownKey}
       className={cn(
         "chat-markdown max-w-none break-words",
         CHAT_MARKDOWN_CLASS,
@@ -985,7 +1002,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
         showCaret ? "chat-markdown--caret-on" : "chat-markdown--caret-off",
         className,
       )}
-      plugins={streamdownPlugins}
+      plugins={streamdownPluginsFor(math)}
       remarkPlugins={onOpenFileLink ? chatRemarkPlugins : remarkPlugins}
       {...(rehypePlugins ? { rehypePlugins } : {})}
       components={components}

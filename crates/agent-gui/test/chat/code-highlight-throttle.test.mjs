@@ -231,3 +231,35 @@ test("an upstream call that never delivers does not stall the queue", async () =
   assert.deepEqual(calls, ["broken();", "const fine = true;"]);
   assert.equal(delivered?.tokens[0][0].content, "const fine = true;");
 });
+
+test("the default plugin loads the highlighter on the first code block", async () => {
+  const base = createFakeBase();
+  let loads = 0;
+  const lazyLoader = createTsModuleLoader({
+    mocks: {
+      "@streamdown/code": {
+        __esModule: true,
+        get code() {
+          loads += 1;
+          return base.plugin;
+        },
+      },
+    },
+  });
+  const { throttledCodePlugin } = lazyLoader.loadModule(
+    "@liveagent/ui/lib/markdownCodeHighlight.ts",
+  );
+  // Streamdown asks for the themes up front; that must not load shiki.
+  assert.deepEqual(throttledCodePlugin.getThemes(), ["github-light", "github-dark"]);
+  assert.equal(loads, 0);
+
+  let delivered = null;
+  const immediate = throttledCodePlugin.highlight(OPTS("let b = 2;"), (result) => {
+    delivered = result;
+  });
+  assert.equal(immediate, null, "nothing to show until the highlighter has loaded");
+  for (let attempt = 0; attempt < 20 && !delivered; attempt += 1) await sleep(5);
+  assert.equal(loads, 1);
+  assert.deepEqual(base.calls, ["let b = 2;"]);
+  assert.equal(delivered?.tokens[0][0].content, "let b = 2;");
+});
