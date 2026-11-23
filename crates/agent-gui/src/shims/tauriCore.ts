@@ -1,3 +1,4 @@
+import { capabilityAtLeast } from "@liveagent/ui/lib/kbrain/health";
 import { invoke as tauriInvoke, isTauri as tauriIsTauri } from "@tauri-apps/api/core";
 import {
   isKBrainBackendEnabled,
@@ -6,7 +7,11 @@ import {
   kBrainOwnedDesktopCommand,
 } from "../lib/host";
 import { createKBrainClient } from "../lib/kbrain/client";
-import { type KBrainFsListResponse, listFileMentionsViaFsList } from "../lib/kbrain/fileMentions";
+import {
+  type KBrainFsListResponse,
+  type KBrainFsMentionListResponse,
+  listFileMentions,
+} from "../lib/kbrain/fileMentions";
 import { ensureKBrainConversationId, setKBrainSessionId } from "../lib/kbrain/mapping";
 import { isKBrainMemoryCommand } from "../lib/kbrain/memory";
 import { getConfiguredKBrainConnection } from "../lib/kbrain/runtimeConnection";
@@ -29,6 +34,31 @@ async function searchKBrainHistory(args: Record<string, unknown>) {
   return response;
 }
 
+const MENTION_CAPABILITY_TTL_MS = 60_000;
+let mentionCapability: { baseUrl: string; at: number; value: Promise<boolean> } | undefined;
+
+/** True when the connected K-brain answers `/v1/fs` mention_list (`filesystem_mention_list`). */
+function supportsKBrainMentionList(): Promise<boolean> {
+  const baseUrl = getConfiguredKBrainConnection()?.baseUrl ?? "";
+  const now = Date.now();
+  if (
+    mentionCapability?.baseUrl === baseUrl &&
+    now - mentionCapability.at < MENTION_CAPABILITY_TTL_MS
+  ) {
+    return mentionCapability.value;
+  }
+  const value = createKBrainClient()
+    .getCapabilities()
+    .then((capabilities) => capabilityAtLeast({ capabilities }, "filesystem_mention_list", 1));
+  const entry = { baseUrl, at: now, value };
+  mentionCapability = entry;
+  // An unreachable backend is asked again next time.
+  return value.catch(() => {
+    if (mentionCapability === entry) mentionCapability = undefined;
+    return false;
+  });
+}
+
 export function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isKBrainBackendEnabled() && isKBrainMemoryCommand(command)) {
     return createKBrainClient().requestMemory<T>(
@@ -48,10 +78,15 @@ export function invoke<T>(command: string, args?: Record<string, unknown>): Prom
     );
   }
   if (isKBrainBrowserHost() && command === "fs_mention_list") {
-    // No native command in the browser: build the @ file index from K-brain's
-    // workspace listing instead of failing every mention lookup.
-    return listFileMentionsViaFsList(
-      (request) => createKBrainClient().filesystem<KBrainFsListResponse>(request),
+    // No native command in the browser: K-brain's mention index, or one built
+    // from its workspace listing, instead of failing every mention lookup.
+    return listFileMentions(
+      {
+        supported: supportsKBrainMentionList,
+        mentionList: (request) =>
+          createKBrainClient().filesystem<KBrainFsMentionListResponse>(request),
+        list: (request) => createKBrainClient().filesystem<KBrainFsListResponse>(request),
+      },
       args,
     ) as Promise<T>;
   }

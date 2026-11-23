@@ -23,8 +23,18 @@ const mentionTree = `{"entries":[
 
 func mentionRelay(t *testing.T, handle func(input map[string]any, w http.ResponseWriter)) (*Relay, *[]map[string]any) {
 	t.Helper()
+	return mentionRelayWith(t, `{}`, handle)
+}
+
+// mentionRelayWith serves /v1/health with the given capabilities object.
+func mentionRelayWith(t *testing.T, capabilities string, handle func(input map[string]any, w http.ResponseWriter)) (*Relay, *[]map[string]any) {
+	t.Helper()
 	var calls []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/health" {
+			_, _ = w.Write([]byte(`{"status":"ok","version":"kbrain.agent.v1","capabilities":` + capabilities + `}`))
+			return
+		}
 		if r.URL.Path != "/v1/fs" || r.Method != "POST" {
 			t.Errorf("unexpected route: %s %s", r.Method, r.URL)
 		}
@@ -110,5 +120,91 @@ func TestFileMentionListFallsBackOnLargeTreesAndKeepsReasons(t *testing.T) {
 	_, handled, err := denied.Filesystem(context.Background(), mentionRequest("", 5000))
 	if !handled || err == nil || !strings.Contains(err.Error(), "outside configured roots") {
 		t.Fatalf("handled=%v err=%v", handled, err)
+	}
+}
+
+func mentionRequestHidden(query string, maxResults uint32, showHidden bool) *gatewayv2.GatewayEnvelope {
+	request := mentionRequest(query, maxResults)
+	request.GetFileMentionList().ShowHidden = &showHidden
+	return request
+}
+
+func TestFileMentionListUsesKBrainMentionIndex(t *testing.T) {
+	relay, calls := mentionRelayWith(t, `{"filesystem_mention_list":1}`, func(input map[string]any, w http.ResponseWriter) {
+		if input["action"] != "mention_list" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"path":"","query":"serv","entries":[{"path":"server","kind":"dir"},{"path":"internal/server.go","kind":"file"},{"path":".github/server.yml","kind":"file"}],"truncated":true}`))
+	})
+	out, handled, err := relay.Filesystem(context.Background(), mentionRequest("@Serv", 5000))
+	if err != nil || !handled {
+		t.Fatalf("handled=%v err=%v", handled, err)
+	}
+	want := map[string]any{"action": "mention_list", "workdir": "/ws", "path": "", "query": "serv", "max_results": float64(500)}
+	if len(*calls) != 1 || !reflect.DeepEqual((*calls)[0], want) {
+		t.Fatalf("calls=%v want one %v", *calls, want)
+	}
+	if got := mentionPaths(out); !reflect.DeepEqual(got, []string{"server", "internal/server.go"}) || !out.GetFileMentionListResp().GetTruncated() {
+		t.Fatalf("paths=%v truncated=%v", got, out.GetFileMentionListResp().GetTruncated())
+	}
+	out, _, _ = relay.Filesystem(context.Background(), mentionRequestHidden("serv", 80, true))
+	entries := out.GetFileMentionListResp().GetEntries()
+	if (*calls)[1]["max_results"] != float64(80) || len(entries) != 3 || !entries[2].GetHidden() || entries[0].GetKind() != "dir" {
+		t.Fatalf("show_hidden entries=%v call=%v", entries, (*calls)[1])
+	}
+
+	// A whole-workspace index (quick open) is more than mention_list answers.
+	*calls = nil
+	_, _, _ = relay.Filesystem(context.Background(), mentionRequest("", 20000))
+	if len(*calls) != 1 || (*calls)[0]["action"] != "list" {
+		t.Fatalf("full index calls=%v", *calls)
+	}
+}
+
+func TestFileMentionListFallsBackWhenBackendLacksMentionIndex(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		capabilities string
+		status       int
+		body         string
+		actions      []string
+	}{
+		{"no capability", `{}`, 0, "", []string{"list"}},
+		{"unknown action", `{"filesystem_mention_list":1}`, 422, `{"error":"unsupported filesystem action"}`, []string{"mention_list", "list"}},
+		{"unknown query field", `{"filesystem_mention_list":1}`, 400, `{"error":"invalid JSON: json: unknown field \"query\""}`, []string{"mention_list", "list"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			relay, calls := mentionRelayWith(t, tc.capabilities, func(input map[string]any, w http.ResponseWriter) {
+				if input["action"] == "mention_list" {
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte(tc.body))
+					return
+				}
+				_, _ = w.Write([]byte(mentionTree))
+			})
+			out, _, err := relay.Filesystem(context.Background(), mentionRequest("readme", 5000))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var actions []string
+			for _, call := range *calls {
+				actions = append(actions, call["action"].(string))
+			}
+			if !reflect.DeepEqual(actions, tc.actions) {
+				t.Fatalf("actions=%v want %v", actions, tc.actions)
+			}
+			if got := mentionPaths(out); !reflect.DeepEqual(got, []string{"README.md", "docs/guide/readme-extra.md"}) {
+				t.Fatalf("paths=%v", got)
+			}
+		})
+	}
+
+	relay, _ := mentionRelayWith(t, `{"filesystem_mention_list":1}`, func(_ map[string]any, w http.ResponseWriter) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"error":"filesystem path is outside configured roots"}`))
+	})
+	if _, _, err := relay.Filesystem(context.Background(), mentionRequest("a", 50)); err == nil || !strings.Contains(err.Error(), "outside configured roots") {
+		t.Fatalf("err=%v", err)
 	}
 }
