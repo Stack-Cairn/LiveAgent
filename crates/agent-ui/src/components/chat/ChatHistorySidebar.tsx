@@ -1629,9 +1629,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     draggable={false}
                     className="size-8 shrink-0 select-none rounded-xl object-contain"
                   />
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold tracking-tight">Live Agent</div>
-                  </div>
+                  <div className="min-w-0 truncate font-semibold tracking-tight">LiveAgent</div>
                 </div>
               )}
 
