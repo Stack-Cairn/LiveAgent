@@ -21,13 +21,13 @@ import (
 func TestProviderDiscoveryFailureForwardsReasonOverWebSocket(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/v1/health":
+		switch r.URL.Path {
+		case "/v1/health":
 			_, _ = w.Write([]byte(`{"status":"ok","version":"kbrain.agent.v1","capabilities":{}}`))
-		case r.URL.Path == "/v1/settings/providers/new/models":
+		case "/v1/settings/providers/new/models":
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"error":"model discovery failed","errorCode":"invalid_api_key","upstreamStatus":401,"upstreamMessage":"Incorrect API key provided: sk-bad***.","version":"kbrain.agent.v1"}`))
-		case r.URL.Path == "/v1/settings/providers/old/models":
+		case "/v1/settings/providers/old/models":
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"error":"model discovery failed","version":"kbrain.agent.v1"}`))
 		default:

@@ -956,7 +956,11 @@ pub(crate) fn build_error_response_envelope(
         request_id,
         timestamp: now_unix_seconds(),
         payload: Some(proto::agent_envelope::Payload::Error(
-            proto::ErrorResponse { code, message },
+            proto::ErrorResponse {
+                code,
+                message,
+                ..Default::default()
+            },
         )),
     }
 }
