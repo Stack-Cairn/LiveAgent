@@ -77,6 +77,7 @@ import { ProviderModal } from "./ProviderModal";
 import {
   DrawerGroupLabel,
   DrawerSectionHeader,
+  defaultProviderTab,
   getProviderLabel,
   itemsByIdOrder,
   PROVIDER_TABS,
@@ -945,7 +946,11 @@ function ProviderList(props: {
             <div className="mb-3 flex items-center justify-center text-3xl text-foreground">
               <Plus className="size-5" />
             </div>
-            <p className="text-sm font-medium">{t("settings.noProvidersHint")}</p>
+            <p className="text-sm font-medium">
+              {type === "all"
+                ? t("settings.noProvidersHint")
+                : t("settings.noProvidersForService").replace("{service}", getProviderLabel(type))}
+            </p>
             <Button
               variant="outline"
               size="sm"
@@ -1033,7 +1038,17 @@ export function ProvidersSection(
     if (confirmed) onDismissRejectedLegacyProviders();
   }
 
-  const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
+  const [activeTab, setActiveTab] = useState<ProviderId>(() =>
+    defaultProviderTab(settings.customProviders),
+  );
+  // Until the user picks a tab, keep showing one that has providers, even when
+  // they load after mount; an explicit choice (or an edit) sticks.
+  const tabChosenRef = useRef(false);
+  useEffect(() => {
+    if (tabChosenRef.current) return;
+    if (settings.customProviders.some((provider) => provider.type === activeTab)) return;
+    setActiveTab(defaultProviderTab(settings.customProviders));
+  }, [activeTab, settings.customProviders]);
   const [modalOpen, setModalOpen] = useState(false);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
@@ -1049,6 +1064,7 @@ export function ProvidersSection(
     const provider = settings.customProviders.find((item) => item.id === providerId);
     if (!provider) return;
     openedInitialProviderIdRef.current = providerId;
+    tabChosenRef.current = true;
     setActiveTab(provider.type);
     setEditingProvider(provider);
     setModalOpen(true);
@@ -1071,6 +1087,7 @@ export function ProvidersSection(
   }
 
   function handleSave(data: Omit<CustomProvider, "id">) {
+    tabChosenRef.current = true;
     setActiveTab(data.type);
     setSettings((prev) => {
       if (editingProvider) {
@@ -1119,7 +1136,9 @@ export function ProvidersSection(
         value={activeTab}
         onValueChange={(value) => {
           const type = PROVIDER_TABS.find((type) => type === value);
-          if (type) setActiveTab(type);
+          if (!type) return;
+          tabChosenRef.current = true;
+          setActiveTab(type);
         }}
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
@@ -1229,6 +1248,7 @@ export function ProvidersSection(
             <DialogBody className="space-y-2">
               <ProviderServiceList
                 onSelect={(type) => {
+                  tabChosenRef.current = true;
                   setActiveTab(type);
                   setServicePickerOpen(false);
                   setModalOpen(true);
