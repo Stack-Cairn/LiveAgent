@@ -6,6 +6,7 @@ import {
 } from "@liveagent/adapters/providerSettings";
 import { testProviderUsage, type UsageData } from "@liveagent/app/lib/providers/usageQuery";
 import {
+  CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
@@ -103,6 +104,18 @@ const NEW_MODEL_BADGE_DURATION_MS = 3_200;
 const NEW_MODEL_BADGE_FADE_MS = 500;
 
 const REDACTED_API_KEY_DISPLAY = "API Key";
+
+export type GeminiEndpointPreset = "ai-studio" | "vertex-ai" | "custom";
+
+export const GEMINI_AI_STUDIO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+export const GEMINI_VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1/publishers/google";
+
+export function detectGeminiEndpointPreset(baseUrl: string): GeminiEndpointPreset {
+  const normalized = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
+  if (normalized === GEMINI_AI_STUDIO_BASE_URL.toLowerCase()) return "ai-studio";
+  if (normalized === GEMINI_VERTEX_AI_BASE_URL.toLowerCase()) return "vertex-ai";
+  return "custom";
+}
 
 function parsePositiveInteger(input: string): number | null {
   const value = Number(input.trim());
@@ -856,10 +869,7 @@ function useProviderModalController({
           : providerType === "codex"
             ? requestFormat
             : undefined,
-      reasoning:
-        providerType === "gemini" && initialData?.reasoning === "xhigh"
-          ? "high"
-          : (initialData?.reasoning ?? "off"),
+      reasoning: initialData?.reasoning ?? "off",
       promptCachingEnabled:
         providerType === "codex"
           ? promptCacheHintMode !== "none"
@@ -1004,6 +1014,58 @@ function useProviderModalController({
   const headerIssueMessage = firstHeaderIssue
     ? customHeaderIssueMessage(firstHeaderIssue, t)
     : null;
+  const geminiEndpointPreset = detectGeminiEndpointPreset(baseUrl);
+  // Lock preset switching on existing providers that already hold credentials or headers so
+  // switching hosts can never redirect relay credentials to a Google endpoint on Refresh or Save.
+  const geminiEndpointPresetLocked =
+    isEditing && (apiKeyIsStoredValue || apiKey.trim().length > 0 || customHeaders.length > 0);
+  const selectGeminiEndpointPreset = (preset: GeminiEndpointPreset) => {
+    if (geminiEndpointPresetLocked) return;
+    if (preset === "ai-studio") {
+      setBaseUrl(GEMINI_AI_STUDIO_BASE_URL);
+      setIsFullUrl(false);
+      if (!name.trim() || name.trim() === "Vertex AI") setName("Gemini");
+    } else if (preset === "vertex-ai") {
+      setBaseUrl(GEMINI_VERTEX_AI_BASE_URL);
+      setIsFullUrl(false);
+      if (!name.trim() || name.trim() === "Gemini") setName("Vertex AI");
+    }
+  };
+  const geminiPresetLabels: Record<GeminiEndpointPreset, string> = {
+    "ai-studio": "Google AI Studio",
+    "vertex-ai": "Vertex AI",
+    custom: t("settings.geminiEndpointCustom"),
+  };
+  const protocolSelect =
+    providerType === "codex"
+      ? {
+          label: t("settings.requestFormat"),
+          value: requestFormat,
+          valueLabel: CODEX_REQUEST_FORMAT_LABELS[requestFormat],
+          disabled: false,
+          options: Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => ({
+            value,
+            label,
+          })),
+          onValueChange: (value: string) => setRequestFormat(value as CodexRequestFormat),
+        }
+      : providerType === "gemini"
+        ? {
+            label: t("settings.geminiEndpointPreset"),
+            value: geminiEndpointPreset,
+            valueLabel: geminiPresetLabels[geminiEndpointPreset],
+            disabled: geminiEndpointPresetLocked,
+            options: [
+              { value: "ai-studio", label: geminiPresetLabels["ai-studio"] },
+              { value: "vertex-ai", label: geminiPresetLabels["vertex-ai"] },
+              ...(geminiEndpointPreset === "custom"
+                ? [{ value: "custom", label: geminiPresetLabels.custom }]
+                : []),
+            ],
+            onValueChange: (value: string) =>
+              selectGeminiEndpointPreset(value as GeminiEndpointPreset),
+          }
+        : null;
   const viewModel = {
     activeCodingPlanProvider,
     activeModels,
@@ -1068,7 +1130,10 @@ function useProviderModalController({
     promptCacheHintMode,
     promptCacheRetention,
     promptCachingEnabled,
+    geminiEndpointPreset,
     providerType,
+    protocolSelect,
+    selectGeminiEndpointPreset,
     removeCustomHeader,
     removeModel,
     requestClose,

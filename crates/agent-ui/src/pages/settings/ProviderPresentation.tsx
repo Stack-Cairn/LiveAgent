@@ -13,6 +13,14 @@ import {
   OpenaiChatgptIcon,
   Video,
 } from "@liveagent/ui/components/IconSet";
+import { FormField, FormFieldLabel } from "@liveagent/ui/components/settings/FormField";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@liveagent/ui/components/ui/select";
 import { SwitchRoot, SwitchThumb } from "@liveagent/ui/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@liveagent/ui/components/ui/tooltip";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -301,3 +309,42 @@ export const MODEL_MODALITY_ICONS = [
   { modality: "video", Icon: Video, labelKey: "settings.modelModalityVideo" },
   { modality: "pdf", Icon: FileText, labelKey: "settings.modelModalityPdf" },
 ] as const;
+
+export type ProviderProtocolSelectConfig = {
+  label: string;
+  value: string;
+  valueLabel: string;
+  disabled?: boolean;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onValueChange: (value: string) => void;
+};
+
+export function ProviderProtocolSelect({ select }: { select: ProviderProtocolSelectConfig }) {
+  return (
+    <FormField>
+      <FormFieldLabel>{select.label}</FormFieldLabel>
+      <Select
+        value={select.value}
+        disabled={select.disabled}
+        onValueChange={(value) => {
+          if (value) select.onValueChange(value);
+        }}
+      >
+        <SelectTrigger
+          variant="plain"
+          className="h-10 w-full shadow-none"
+          aria-label={select.label}
+        >
+          <SelectValue>{select.valueLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {select.options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </FormField>
+  );
+}

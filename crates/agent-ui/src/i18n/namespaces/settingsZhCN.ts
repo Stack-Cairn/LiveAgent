@@ -564,6 +564,8 @@ export const SETTINGS_ZH_CN = {
   "settings.hideApiKey": "隐藏 API Key",
   "settings.showApiKey": "显示 API Key",
   "settings.requestFormat": "请求格式",
+  "settings.geminiEndpointPreset": "接入平台",
+  "settings.geminiEndpointCustom": "自定义",
   "settings.promptCaching": "Prompt 缓存",
   "settings.promptCachingDescClaude": "在请求上标注 ephemeral 缓存断点，长会话可显著降低输入费用。",
   "settings.promptCachingDescCodex":

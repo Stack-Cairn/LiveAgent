@@ -1,8 +1,6 @@
 import "@liveagent/ui/i18n/namespaces/settings";
 import { getUsagePlanDisplay } from "@liveagent/app/lib/providers/usageQuery";
 import {
-  CODEX_REQUEST_FORMAT_LABELS,
-  type CodexRequestFormat,
   PROMPT_CACHE_HINT_MODES,
   type PromptCacheHintMode,
   type UsageQueryMode,
@@ -94,6 +92,7 @@ import {
   PROMPT_CACHE_HINT_LABEL_KEYS,
   PROVIDER_TABS,
   ProviderBrandIcon,
+  ProviderProtocolSelect,
   USAGE_QUERY_SCRIPT_HELP_EXAMPLE,
   UsagePlanLine,
 } from "./ProviderPresentation";
@@ -163,11 +162,11 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     promptCacheRetention,
     promptCachingEnabled,
     providerType,
+    protocolSelect,
     removeCustomHeader,
     removeModel,
     clearVisibleModels,
     requestClose,
-    requestFormat,
     saveInlineModelSettings,
     setActivePanel,
     setAddingModel,
@@ -188,7 +187,6 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setPromptCacheHintMode,
     setPromptCacheRetention,
     setPromptCachingEnabled,
-    setRequestFormat,
     setShowApiKey: _setShowApiKey,
     toggleShowApiKey,
     revealingApiKey,
@@ -385,7 +383,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                 <div
                   className={cn(
                     "grid items-start gap-3",
-                    providerType === "codex" &&
+                    protocolSelect &&
                       "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] max-[640px]:grid-cols-1",
                   )}
                 >
@@ -424,26 +422,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       <p className="text-xs text-destructive">{revealApiKeyError}</p>
                     ) : null}
                   </div>
-                  {providerType === "codex" ? (
-                    <FormField>
-                      <FormFieldLabel>{t("settings.requestFormat")}</FormFieldLabel>
-                      <Select
-                        value={requestFormat}
-                        onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
-                      >
-                        <SelectTrigger variant="plain" className="h-10 w-full shadow-none">
-                          <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-                  ) : null}
+                  {protocolSelect ? <ProviderProtocolSelect select={protocolSelect} /> : null}
                 </div>
               </div>
               <div className="grid min-h-0 flex-1 grid-cols-2 items-stretch gap-3 max-[640px]:min-h-96 max-[640px]:grid-cols-1">

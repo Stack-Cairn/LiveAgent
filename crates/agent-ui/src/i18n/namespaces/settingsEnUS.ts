@@ -570,6 +570,8 @@ export const SETTINGS_EN_US = {
   "settings.hideApiKey": "Hide API Key",
   "settings.showApiKey": "Show API Key",
   "settings.requestFormat": "Request Format",
+  "settings.geminiEndpointPreset": "API Platform",
+  "settings.geminiEndpointCustom": "Custom",
   "settings.promptCaching": "Prompt Caching",
   "settings.promptCachingDescClaude":
     "Mark ephemeral cache breakpoints on requests; long sessions get much cheaper input.",

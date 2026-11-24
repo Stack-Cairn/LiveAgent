@@ -74,3 +74,61 @@ test("ProviderModal keeps the dialog open and flags a base URL K-brain would rej
     await env.act(async () => root.unmount());
   }
 });
+
+test("ProviderModal supports Vertex AI preset under Gemini and preserves xhigh reasoning", async () => {
+  let vm;
+  const saved = [];
+  const { env, module } = await loadProviderModal((viewModel) => {
+    vm = viewModel;
+  });
+  const root = env.createRoot(document.body.appendChild(document.createElement("div")));
+  await env.act(async () =>
+    root.render(
+      env.React.createElement(module.ProviderModal, {
+        providerType: "gemini",
+        initialData: {
+          id: "g1",
+          name: "Gemini",
+          type: "gemini",
+          baseUrl: module.GEMINI_AI_STUDIO_BASE_URL,
+          isFullUrl: true,
+          apiKey: "",
+          customHeaders: [],
+          models: [],
+          activeModels: [],
+          reasoning: "xhigh",
+          promptCachingEnabled: false,
+          nativeWebSearchEnabled: true,
+          useSystemProxy: false,
+        },
+        onSave: (next) => saved.push(next),
+        onClose: () => {},
+      }),
+    ),
+  );
+  try {
+    assert.equal(vm.geminiEndpointPreset, "ai-studio");
+    assert.equal(vm.protocolSelect?.value, "ai-studio");
+
+    await env.act(async () => vm.protocolSelect.onValueChange("vertex-ai"));
+    assert.equal(vm.geminiEndpointPreset, "vertex-ai");
+    assert.equal(vm.baseUrl, module.GEMINI_VERTEX_AI_BASE_URL);
+    assert.equal(vm.isFullUrl, false);
+    assert.equal(vm.name, "Vertex AI");
+
+    await env.act(async () => vm.handleSave());
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].baseUrl, module.GEMINI_VERTEX_AI_BASE_URL);
+    assert.equal(saved[0].reasoning, "xhigh");
+
+    await env.act(async () => vm.setBaseUrl("https://relay.example.com/gemini"));
+    assert.equal(vm.geminiEndpointPreset, "custom");
+
+    await env.act(async () => vm.setApiKey("sk-relay-secret"));
+    assert.equal(vm.protocolSelect?.disabled, true);
+    await env.act(async () => vm.protocolSelect.onValueChange("vertex-ai"));
+    assert.equal(vm.baseUrl, "https://relay.example.com/gemini", "locked preset does not redirect relay credentials");
+  } finally {
+    await env.act(async () => root.unmount());
+  }
+});
