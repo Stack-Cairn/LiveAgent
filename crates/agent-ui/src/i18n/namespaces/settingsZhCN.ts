@@ -564,6 +564,12 @@ export const SETTINGS_ZH_CN = {
   "settings.hideApiKey": "隐藏 API Key",
   "settings.showApiKey": "显示 API Key",
   "settings.requestFormat": "请求格式",
+  "settings.geminiApiPlatform": "API 平台",
+  "settings.geminiApiPlatform.aiStudio": "Google AI Studio",
+  "settings.geminiApiPlatform.vertex": "Vertex AI",
+  "settings.geminiApiPlatform.custom": "自定义",
+  "settings.geminiApiPlatformLocked":
+    "已保存 API Key 或自定义请求头的供应商不能切换平台，如需其它平台请新建供应商。",
   "settings.promptCaching": "Prompt 缓存",
   "settings.promptCachingDescClaude": "在请求上标注 ephemeral 缓存断点，长会话可显著降低输入费用。",
   "settings.promptCachingDescCodex":
@@ -726,6 +732,8 @@ export const SETTINGS_ZH_CN = {
   "settings.modelDiscoveryError.upstreamError": "服务商返回了错误",
   "settings.modelDiscoveryError.withStatus": "{reason}（{status}）",
   "settings.modelDiscoveryError.withDetail": "{reason}：{detail}",
+  "settings.geminiVertexExpressNoModelList":
+    "Vertex AI Express 模式没有模型列表接口，请手动添加 Gemini 模型 ID。",
   "settings.fetchHint": "填写 Base URL 和 API Key 后自动获取",
   "settings.noBaseUrlApiKey": "请先填写 Base URL（或模型列表地址）和 API Key",
   "settings.activeModels": "个激活模型",

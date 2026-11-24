@@ -49,7 +49,7 @@
     "crates/agent-ui/src/lib/chat/uiMessages.ts": 1639,
     "crates/agent-ui/src/lib/settings/index.ts": 2730,
     "crates/agent-ui/src/pages/chat/ChatComposerBar.tsx": 2089,
-    "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2088,
+    "crates/agent-ui/src/pages/settings/ProviderModalView.tsx": 2015,
     "crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx": 1950,
     "crates/virtual-core/src/index.ts": 2505
   }
