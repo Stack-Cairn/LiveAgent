@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "snapshotDate": "2026-11-20",
-  "generatedAt": "2026-11-20T07:44:48.291Z",
+  "snapshotDate": "2026-11-24",
+  "generatedAt": "2026-11-24T00:21:51.505Z",
   "generator": {
-    "commit": "4e19a9240c982feac1db70ff39733d5a89f3fe20",
+    "commit": "c5f2ddba210e5962958fb38a83800a09a15cb265",
     "sources": [
       "https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json",
       "https://models.dev/api.json"
@@ -396,19 +396,6 @@
         }
       },
       {
-        "id": "gemini-2.5-computer-use-preview-10-2025",
-        "contextWindow": 128000,
-        "maxOutputToken": 64000,
-        "inputModalities": [
-          "text",
-          "image"
-        ],
-        "thinking": {
-          "levels": [],
-          "off": false
-        }
-      },
-      {
         "id": "gemini-2.5-flash",
         "contextWindow": 1048576,
         "maxOutputToken": 65536,
@@ -567,27 +554,6 @@
         "thinking": {
           "levels": [
             "minimal",
-            "high"
-          ],
-          "off": false
-        }
-      },
-      {
-        "id": "gemini-3.1-flash-lite-preview",
-        "contextWindow": 1048576,
-        "maxOutputToken": 65536,
-        "inputModalities": [
-          "text",
-          "image",
-          "audio",
-          "video",
-          "pdf"
-        ],
-        "thinking": {
-          "levels": [
-            "minimal",
-            "low",
-            "medium",
             "high"
           ],
           "off": false
@@ -978,31 +944,6 @@
     ],
     "openai": [
       {
-        "id": "gpt-3.5-turbo",
-        "contextWindow": 16385,
-        "maxOutputToken": 4096,
-        "inputModalities": [
-          "text"
-        ]
-      },
-      {
-        "id": "gpt-4",
-        "contextWindow": 8192,
-        "maxOutputToken": 2048,
-        "inputModalities": [
-          "text"
-        ]
-      },
-      {
-        "id": "gpt-4-turbo",
-        "contextWindow": 128000,
-        "maxOutputToken": 4096,
-        "inputModalities": [
-          "text",
-          "image"
-        ]
-      },
-      {
         "id": "gpt-4.1",
         "contextWindow": 1047576,
         "maxOutputToken": 32768,
@@ -1023,15 +964,6 @@
         ]
       },
       {
-        "id": "gpt-4.1-nano",
-        "contextWindow": 1047576,
-        "maxOutputToken": 32768,
-        "inputModalities": [
-          "text",
-          "image"
-        ]
-      },
-      {
         "id": "gpt-4o",
         "contextWindow": 128000,
         "maxOutputToken": 16384,
@@ -1039,15 +971,6 @@
           "text",
           "image",
           "pdf"
-        ]
-      },
-      {
-        "id": "gpt-4o-2024-05-13",
-        "contextWindow": 128000,
-        "maxOutputToken": 4096,
-        "inputModalities": [
-          "text",
-          "image"
         ]
       },
       {
@@ -1203,25 +1126,6 @@
         "id": "gpt-5.3-codex",
         "contextWindow": 400000,
         "maxOutputToken": 128000,
-        "inputModalities": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "thinking": {
-          "levels": [
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "off": true
-        }
-      },
-      {
-        "id": "gpt-5.3-codex-spark",
-        "contextWindow": 128000,
-        "maxOutputToken": 32000,
         "inputModalities": [
           "text",
           "image",
@@ -1594,61 +1498,6 @@
         }
       },
       {
-        "id": "gpt-realtime-2.1",
-        "contextWindow": 128000,
-        "maxOutputToken": 32000,
-        "inputModalities": [
-          "text",
-          "image",
-          "audio"
-        ],
-        "thinking": {
-          "levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "off": false
-        }
-      },
-      {
-        "id": "o1",
-        "contextWindow": 200000,
-        "maxOutputToken": 100000,
-        "inputModalities": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "thinking": {
-          "levels": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "off": false
-        }
-      },
-      {
-        "id": "o1-pro",
-        "contextWindow": 200000,
-        "maxOutputToken": 100000,
-        "inputModalities": [
-          "text",
-          "image"
-        ],
-        "thinking": {
-          "levels": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "off": false
-        }
-      },
-      {
         "id": "o3",
         "contextWindow": 200000,
         "maxOutputToken": 100000,
@@ -1667,40 +1516,7 @@
         }
       },
       {
-        "id": "o3-mini",
-        "contextWindow": 200000,
-        "maxOutputToken": 100000,
-        "inputModalities": [
-          "text"
-        ],
-        "thinking": {
-          "levels": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "off": false
-        }
-      },
-      {
         "id": "o3-pro",
-        "contextWindow": 200000,
-        "maxOutputToken": 100000,
-        "inputModalities": [
-          "text",
-          "image"
-        ],
-        "thinking": {
-          "levels": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "off": false
-        }
-      },
-      {
-        "id": "o4-mini",
         "contextWindow": 200000,
         "maxOutputToken": 100000,
         "inputModalities": [
@@ -2556,6 +2372,22 @@
         "maxOutputToken": 131072,
         "inputModalities": [
           "text"
+        ],
+        "thinking": {
+          "levels": [
+            "high"
+          ],
+          "off": true
+        }
+      },
+      {
+        "id": "LongCat-2.5",
+        "contextWindow": 1048576,
+        "maxOutputToken": 262144,
+        "inputModalities": [
+          "text",
+          "image",
+          "video"
         ],
         "thinking": {
           "levels": [
@@ -3619,5 +3451,5 @@
     "alibaba": 40,
     "tencent": 4
   },
-  "sha256": "9a50e5c0ee5e5f3f205b9c2fe0e34b4eb1eb91656712188849c36bbce8550a9e"
+  "sha256": "783737af0caa1a3b80cf21bb1bfec6156672f0ea49874597601b2998590bc45f"
 }
