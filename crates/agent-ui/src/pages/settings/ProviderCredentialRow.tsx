@@ -79,7 +79,9 @@ export function ProviderCredentialRow({ viewModel }: { viewModel: ProviderModalV
       </div>
       {providerType === "codex" ? (
         <FormField>
-          <FormFieldLabel>{t("settings.requestFormat")}</FormFieldLabel>
+          <div className="flex items-center">
+            <FormFieldLabel>{t("settings.requestFormat")}</FormFieldLabel>
+          </div>
           <Select
             value={requestFormat}
             onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
@@ -99,7 +101,9 @@ export function ProviderCredentialRow({ viewModel }: { viewModel: ProviderModalV
       ) : null}
       {providerType === "gemini" ? (
         <FormField>
-          <FormFieldLabel>{t("settings.geminiApiPlatform")}</FormFieldLabel>
+          <div className="flex items-center">
+            <FormFieldLabel>{t("settings.geminiApiPlatform")}</FormFieldLabel>
+          </div>
           <Select
             value={geminiApiPlatform}
             onValueChange={(value) => {
