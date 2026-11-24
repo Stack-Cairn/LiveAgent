@@ -1,8 +1,6 @@
 import "@liveagent/ui/i18n/namespaces/settings";
 import { getUsagePlanDisplay } from "@liveagent/app/lib/providers/usageQuery";
 import {
-  CODEX_REQUEST_FORMAT_LABELS,
-  type CodexRequestFormat,
   PROMPT_CACHE_HINT_MODES,
   type PromptCacheHintMode,
   type UsageQueryMode,
@@ -83,6 +81,7 @@ import {
   setUsageQueryScript,
   USAGE_QUERY_CODING_PLAN_PROVIDERS,
 } from "@liveagent/ui/pages/settings/providerUtils";
+import { ProviderCredentialRow } from "./ProviderCredentialRow";
 import { ProviderHeaderNameInput } from "./ProviderHeaderNameInput";
 import type { ProviderModalViewModel } from "./ProviderModal";
 import {
@@ -107,9 +106,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     addCustomHeader,
     addingModel,
     allVisibleModelsActive,
-    apiKey,
     apiKeyForRequest,
-    apiKeyIsRedactedDisplay,
     applyCliIdentityHeaders,
     baseUrl,
     canOverrideModelInputModalities,
@@ -167,11 +164,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     removeModel,
     clearVisibleModels,
     requestClose,
-    requestFormat,
     saveInlineModelSettings,
     setActivePanel,
     setAddingModel,
-    setApiKey,
     setBaseUrl,
     setEditingModel,
     setEditingModelImageMode,
@@ -188,18 +183,12 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
     setPromptCacheHintMode,
     setPromptCacheRetention,
     setPromptCachingEnabled,
-    setRequestFormat,
-    setShowApiKey: _setShowApiKey,
-    toggleShowApiKey,
-    revealingApiKey,
-    revealApiKeyError,
     setShowUsageVariableApiKey,
     setStreamRetryCountInput,
     setStreamRetryMode,
     setUsageQuery,
     setUsageTimeoutInput,
     setUseSystemProxy,
-    showApiKey,
     showUsageVariableApiKey,
     streamRetryCountInput,
     streamRetryMode,
@@ -382,69 +371,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                     )}
                   </div>
                 </div>
-                <div
-                  className={cn(
-                    "grid items-start gap-3",
-                    providerType === "codex" &&
-                      "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] max-[640px]:grid-cols-1",
-                  )}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center">
-                      <FormFieldLabel htmlFor="modal-apikey">API Key</FormFieldLabel>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        variant="plain"
-                        id="modal-apikey"
-                        type={showApiKey ? "text" : "password"}
-                        value={apiKey}
-                        className="h-10 pr-9 shadow-none"
-                        onChange={(event) => setApiKey(event.currentTarget.value)}
-                        onFocus={(event) => {
-                          if (apiKeyIsRedactedDisplay) event.currentTarget.select();
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                        onClick={() => void toggleShowApiKey()}
-                        disabled={revealingApiKey}
-                        title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-                        aria-label={
-                          showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")
-                        }
-                      >
-                        {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                      </Button>
-                    </div>
-                    {revealApiKeyError ? (
-                      <p className="text-xs text-destructive">{revealApiKeyError}</p>
-                    ) : null}
-                  </div>
-                  {providerType === "codex" ? (
-                    <FormField>
-                      <FormFieldLabel>{t("settings.requestFormat")}</FormFieldLabel>
-                      <Select
-                        value={requestFormat}
-                        onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
-                      >
-                        <SelectTrigger variant="plain" className="h-10 w-full shadow-none">
-                          <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-                  ) : null}
-                </div>
+                <ProviderCredentialRow viewModel={viewModel} />
               </div>
               <div className="grid min-h-0 flex-1 grid-cols-2 items-stretch gap-3 max-[640px]:min-h-96 max-[640px]:grid-cols-1">
                 <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl bg-settings-tile">

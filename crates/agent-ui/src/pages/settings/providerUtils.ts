@@ -12,7 +12,8 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { CustomHeader } from "../../lib/providers/customHeaders";
 
-const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
+/** Fixed-length stand-in for a stored secret, so a hidden field never reveals its length. */
+export const REDACTED_SECRET_DISPLAY = "••••••••";
 
 export function applyProviderModelDraft(
   models: ProviderModelConfig[],
@@ -269,12 +270,10 @@ export function createUsageQueryDraft(
 
   return {
     ...usageQuery,
-    apiKey: apiKeyIsRedacted ? REDACTED_USAGE_QUERY_SECRET_DISPLAY : usageQuery.apiKey,
-    accessToken: accessTokenIsRedacted
-      ? REDACTED_USAGE_QUERY_SECRET_DISPLAY
-      : usageQuery.accessToken,
+    apiKey: apiKeyIsRedacted ? REDACTED_SECRET_DISPLAY : usageQuery.apiKey,
+    accessToken: accessTokenIsRedacted ? REDACTED_SECRET_DISPLAY : usageQuery.accessToken,
     secretAccessKey: secretAccessKeyIsRedacted
-      ? REDACTED_USAGE_QUERY_SECRET_DISPLAY
+      ? REDACTED_SECRET_DISPLAY
       : usageQuery.secretAccessKey,
   };
 }
@@ -283,12 +282,11 @@ export function serializeUsageQueryDraft(
   usageQuery: UsageQueryConfig,
   useRedactedSecrets: boolean,
 ): UsageQueryConfig {
-  const apiKeyIsRedacted =
-    useRedactedSecrets && usageQuery.apiKey === REDACTED_USAGE_QUERY_SECRET_DISPLAY;
+  const apiKeyIsRedacted = useRedactedSecrets && usageQuery.apiKey === REDACTED_SECRET_DISPLAY;
   const accessTokenIsRedacted =
-    useRedactedSecrets && usageQuery.accessToken === REDACTED_USAGE_QUERY_SECRET_DISPLAY;
+    useRedactedSecrets && usageQuery.accessToken === REDACTED_SECRET_DISPLAY;
   const secretAccessKeyIsRedacted =
-    useRedactedSecrets && usageQuery.secretAccessKey === REDACTED_USAGE_QUERY_SECRET_DISPLAY;
+    useRedactedSecrets && usageQuery.secretAccessKey === REDACTED_SECRET_DISPLAY;
   const apiKey = apiKeyIsRedacted ? "" : usageQuery.apiKey.trim();
   const accessToken = accessTokenIsRedacted ? "" : usageQuery.accessToken.trim();
   const secretAccessKey = secretAccessKeyIsRedacted ? "" : usageQuery.secretAccessKey.trim();

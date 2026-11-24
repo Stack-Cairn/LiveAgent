@@ -570,6 +570,12 @@ export const SETTINGS_EN_US = {
   "settings.hideApiKey": "Hide API Key",
   "settings.showApiKey": "Show API Key",
   "settings.requestFormat": "Request Format",
+  "settings.geminiApiPlatform": "API Platform",
+  "settings.geminiApiPlatform.aiStudio": "Google AI Studio",
+  "settings.geminiApiPlatform.vertex": "Vertex AI",
+  "settings.geminiApiPlatform.custom": "Custom",
+  "settings.geminiApiPlatformLocked":
+    "Fixed for a provider with a saved API key or custom headers. Add a new provider to use another platform.",
   "settings.promptCaching": "Prompt Caching",
   "settings.promptCachingDescClaude":
     "Mark ephemeral cache breakpoints on requests; long sessions get much cheaper input.",
@@ -739,6 +745,8 @@ export const SETTINGS_EN_US = {
   "settings.modelDiscoveryError.upstreamError": "The provider returned an error",
   "settings.modelDiscoveryError.withStatus": "{reason} ({status})",
   "settings.modelDiscoveryError.withDetail": "{reason}: {detail}",
+  "settings.geminiVertexExpressNoModelList":
+    "Vertex AI Express Mode has no model list endpoint. Add Gemini model IDs manually.",
   "settings.fetchHint": "Fill in Base URL and API Key to auto-fetch",
   "settings.noBaseUrlApiKey": "Please fill in a Base URL (or model list URL) and API Key first",
   "settings.activeModels": " active models",

@@ -58,10 +58,19 @@ import {
   matchBalanceProviders,
   mergeFetchedModels,
   providerSupportsModelInputModalitiesOverride,
+  REDACTED_SECRET_DISPLAY,
   requiresCustomUsageQueryConfirmation,
   serializeUsageQueryDraft,
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  detectGeminiApiPlatform,
+  GEMINI_API_PLATFORM_BASE_URLS,
+  type GeminiApiPlatformPreset,
+  geminiApiPlatformLocked,
+  isVertexExpressDiscovery,
+  isVertexExpressDiscoveryError,
+} from "./geminiApiPlatform";
 import { describeModelDiscoveryError } from "./modelDiscoveryError";
 import { ProviderModalView } from "./ProviderModalView";
 import {
@@ -101,8 +110,6 @@ type NewModelPhase = "visible" | "fading";
 const NEW_MODEL_SORT_DELAY_MS = 1_200;
 const NEW_MODEL_BADGE_DURATION_MS = 3_200;
 const NEW_MODEL_BADGE_FADE_MS = 500;
-
-const REDACTED_API_KEY_DISPLAY = "API Key";
 
 function parsePositiveInteger(input: string): number | null {
   const value = Number(input.trim());
@@ -180,7 +187,7 @@ function useProviderModalController({
     providerType === "gemini" ? "" : (initialData?.modelsUrl ?? ""),
   );
   const [apiKey, setApiKey] = useState(
-    initialUsesRedactedApiKey ? REDACTED_API_KEY_DISPLAY : initialApiKey,
+    initialUsesRedactedApiKey ? REDACTED_SECRET_DISPLAY : initialApiKey,
   );
   const [customHeaders, setCustomHeaders] = useState(() =>
     (initialData?.customHeaders ?? []).map((header) => ({ ...header })),
@@ -291,7 +298,7 @@ function useProviderModalController({
   modelsRef.current = models;
   modelOrderRef.current = modelOrder;
   activeModelsRef.current = activeModels;
-  const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
+  const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_SECRET_DISPLAY;
   const apiKeyIsStoredValue =
     apiKeyIsRedactedDisplay || (revealedApiKey !== null && apiKey === revealedApiKey);
   const apiKeyForRequest = apiKeyIsStoredValue ? "" : apiKey.trim();
@@ -319,9 +326,17 @@ function useProviderModalController({
   const toggleShowApiKey = useCallback(async () => {
     if (showApiKey) {
       setShowApiKey(false);
+      // An unedited stored key goes back behind the fixed-length placeholder, so the
+      // mask never shows its length; the cached plaintext makes the next reveal instant.
+      if (revealedApiKey !== null && apiKey === revealedApiKey) setApiKey(REDACTED_SECRET_DISPLAY);
       return;
     }
     setRevealApiKeyError(null);
+    if (apiKeyIsRedactedDisplay && revealedApiKey !== null) {
+      setApiKey(revealedApiKey);
+      setShowApiKey(true);
+      return;
+    }
     if (!apiKeyIsRedactedDisplay || !initialData?.id || isGatewayWebui) {
       setShowApiKey(true);
       return;
@@ -339,7 +354,14 @@ function useProviderModalController({
     } finally {
       setRevealingApiKey(false);
     }
-  }, [apiKeyIsRedactedDisplay, initialData?.id, isGatewayWebui, showApiKey]);
+  }, [
+    apiKey,
+    apiKeyIsRedactedDisplay,
+    initialData?.id,
+    isGatewayWebui,
+    revealedApiKey,
+    showApiKey,
+  ]);
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
   const { confirm: requestConfirm, dialog: confirmDialog } = useConfirmDialog();
   const [usageQueryTest, setUsageQueryTest] = useState<{
@@ -421,10 +443,18 @@ function useProviderModalController({
             !key &&
             storedAddressChangedRef.current &&
             /credentials or endpoint are not configured/i.test(message);
+          const vertexExpress =
+            isVertexExpressDiscovery({
+              providerType,
+              baseUrl: url,
+              isFullUrl,
+            }) && isVertexExpressDiscoveryError(err);
           setFetchError(
             storedKeyRefused
               ? modelsNeedApiKeyMessageRef.current
-              : describeModelDiscoveryError(err, translateRef.current),
+              : vertexExpress
+                ? translateRef.current("settings.geminiVertexExpressNoModelList")
+                : describeModelDiscoveryError(err, translateRef.current),
           );
         }
       } finally {
@@ -856,10 +886,7 @@ function useProviderModalController({
           : providerType === "codex"
             ? requestFormat
             : undefined,
-      reasoning:
-        providerType === "gemini" && initialData?.reasoning === "xhigh"
-          ? "high"
-          : (initialData?.reasoning ?? "off"),
+      reasoning: initialData?.reasoning ?? "off",
       promptCachingEnabled:
         providerType === "codex"
           ? promptCacheHintMode !== "none"
@@ -906,6 +933,13 @@ function useProviderModalController({
 
   const isEditing = Boolean(initialData);
   const typeLabel = getProviderLabel(providerType);
+  const geminiApiPlatform = detectGeminiApiPlatform(baseUrl, isFullUrl);
+  const geminiApiPlatformIsLocked = geminiApiPlatformLocked(initialData);
+  function selectGeminiApiPlatform(preset: GeminiApiPlatformPreset) {
+    if (geminiApiPlatformIsLocked) return;
+    setBaseUrl(GEMINI_API_PLATFORM_BASE_URLS[preset]);
+    setIsFullUrl(false);
+  }
   const orderedModels = useMemo(
     () => applyModelOrderSnapshot(models, modelDisplayOrder),
     [models, modelDisplayOrder],
@@ -1032,6 +1066,8 @@ function useProviderModalController({
     fetchError,
     fetchingModels,
     focusCustomHeader,
+    geminiApiPlatform,
+    geminiApiPlatformIsLocked,
     handleAddModel,
     handleImportCustomHeaders,
     handleModelDraggingChange,
@@ -1074,6 +1110,7 @@ function useProviderModalController({
     requestClose,
     requestFormat,
     saveInlineModelSettings,
+    selectGeminiApiPlatform,
     setActivePanel,
     setAddingModel,
     setApiKey,
@@ -1094,7 +1131,6 @@ function useProviderModalController({
     setPromptCacheRetention,
     setPromptCachingEnabled,
     setRequestFormat,
-    setShowApiKey,
     toggleShowApiKey,
     revealingApiKey,
     revealApiKeyError,
