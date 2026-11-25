@@ -19,7 +19,7 @@ export type StartupProgress = {
 const source = (now: number): SourceProgress => ({
   operationStartedAt: now,
   operation: "waiting",
-  counts: { imported: 0, alreadyImported: 0, skipped: 0, failed: 0, partial: 0 },
+  counts: { imported: 0, alreadyImported: 0, skipped: 0, failed: 0, partial: 0, deferred: 0 },
 });
 export function createStartupProgress(now = Date.now()): StartupProgress {
   return {
@@ -72,5 +72,10 @@ export function migrationCounts(state: StartupProgress) {
     failed: a.failed + b.failed,
     partial: a.partial + b.partial,
   };
-  return { ...counts, processed: Object.values(counts).reduce((sum, count) => sum + count, 0) };
+  return {
+    ...counts,
+    processed: Object.values(counts).reduce((sum, count) => sum + count, 0),
+    // Files another client is still writing: left for later, neither processed nor an issue.
+    deferred: a.deferred + b.deferred,
+  };
 }

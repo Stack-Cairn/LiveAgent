@@ -14,6 +14,7 @@ import {
   restartKBrainBackend,
 } from "./lib/kbrain/bootstrap";
 import { migrateAllHistoryOnce } from "./lib/kbrain/historyMigration";
+import { scheduleDeferredHistoryImport } from "./lib/kbrain/manualHistoryImport";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { createStartupRenderer } from "./lib/startup/render";
 import { runStartupSequence } from "./lib/startup/sequence";
@@ -98,6 +99,8 @@ const bootstrap = createKBrainBootstrapRunner(async () => {
             if (newFailures.length > 0) {
               console.warn("Legacy history migration incomplete", newFailures);
             }
+            // Sessions another client is still writing are imported a few minutes later.
+            if (result.deferred > 0) scheduleDeferredHistoryImport();
           }),
         // The app code needs the backend connection but not the history check: it loads
         // while the check runs and renders once the check is done.

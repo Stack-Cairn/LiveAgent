@@ -15,6 +15,25 @@ import {
 } from "./manualHistoryImport";
 import { kBrainStorageScope } from "./mapping";
 
+const CONFLICT_REASONS = new Set([
+  "different_source",
+  "diverged",
+  "modified_after_import",
+  "no_new_messages",
+  "fingerprint_unchanged",
+]);
+
+function ConflictReason({ reason }: { reason: string }) {
+  const { t } = useLocale();
+  return (
+    <div className="text-muted-foreground text-xs" data-testid="history-migration-conflict-reason">
+      {CONFLICT_REASONS.has(reason)
+        ? t(`historyImport.conflictReason.${reason}`)
+        : t("historyImport.conflictReason.unknown").replace("{reason}", reason)}
+    </div>
+  );
+}
+
 export function formatMigrationBytes(bytes: number | undefined) {
   return bytes === undefined ? "" : `${(bytes / 1048576).toFixed(1)} MB`;
 }
@@ -37,6 +56,7 @@ export function HistoryMigrationFailureList({
           <div className="text-muted-foreground text-xs">
             {t(`historyImport.reason.${record.kind}`)}
           </div>
+          {record.kind === "conflict" && record.reason && <ConflictReason reason={record.reason} />}
         </li>
       ))}
     </ul>
@@ -89,6 +109,9 @@ export function LegacyHistoryImportSettings() {
             <p>{summary}</p>
             {result.results.length === 0 && result.failures.length === 0 && (
               <p>{t("historyImport.empty")}</p>
+            )}
+            {(result.deferred ?? 0) > 0 && (
+              <p>{t("historyImport.deferred").replace("{count}", String(result.deferred))}</p>
             )}
             {incomplete > 0 && (
               <p>{t("historyImport.partial").replace("{count}", String(incomplete))}</p>

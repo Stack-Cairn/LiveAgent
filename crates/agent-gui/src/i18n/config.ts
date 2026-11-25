@@ -38,6 +38,16 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "historyImport.reason.conflict": "K-brain 里已有同一条对话，但内容不一样，K-brain 拒绝覆盖。",
     "historyImport.reason.rejected": "K-brain 认为这条对话的数据无效，拒绝导入。",
     "historyImport.reason.transient": "连接中断或后端出错，下次启动会自动重试。",
+    "historyImport.conflictReason.different_source": "原因：K-brain 中的同名对话来自另一个来源。",
+    "historyImport.conflictReason.diverged": "原因：两边的消息从中间开始不一致，无法接续。",
+    "historyImport.conflictReason.modified_after_import":
+      "原因：这条对话导入后在 K-brain 里继续过，为保护新内容不再覆盖。",
+    "historyImport.conflictReason.no_new_messages":
+      "原因：消息相同，只是元数据变化，没有可补充的内容。",
+    "historyImport.conflictReason.fingerprint_unchanged":
+      "原因：来源指纹没变但内容变长了，K-brain 视为异常而拒绝。",
+    "historyImport.conflictReason.unknown": "原因代码：{reason}",
+    "historyImport.deferred": "{count} 条会话仍在写入，几分钟后会自动导入。",
     "historyImport.notice.title": "{count} 条旧对话没能迁移到 K-brain",
     "historyImport.notice.description":
       "这些对话在当前版本里看不到。旧数据没有删除，启动时也不会再反复上传。",
@@ -418,6 +428,19 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "historyImport.reason.rejected": "K-brain rejected this conversation's data as invalid.",
     "historyImport.reason.transient":
       "The connection dropped or the backend failed; it is retried on the next launch.",
+    "historyImport.conflictReason.different_source":
+      "Reason: the conversation in K-brain came from a different source.",
+    "historyImport.conflictReason.diverged":
+      "Reason: the messages differ partway through, so the new ones cannot be appended.",
+    "historyImport.conflictReason.modified_after_import":
+      "Reason: the conversation was continued in K-brain after import, so it is not overwritten.",
+    "historyImport.conflictReason.no_new_messages":
+      "Reason: the messages are the same and only metadata changed; there is nothing to add.",
+    "historyImport.conflictReason.fingerprint_unchanged":
+      "Reason: the content grew while its source fingerprint stayed the same, so K-brain refused it.",
+    "historyImport.conflictReason.unknown": "Reason code: {reason}",
+    "historyImport.deferred":
+      "{count} conversation(s) are still being written and will be imported in a few minutes.",
     "historyImport.notice.title": "{count} old conversation(s) were not migrated into K-brain",
     "historyImport.notice.description":
       "They are not visible in this version. The old data is kept and is no longer re-uploaded on every launch.",

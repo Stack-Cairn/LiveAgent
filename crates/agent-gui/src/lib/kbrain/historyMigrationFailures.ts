@@ -7,7 +7,9 @@
  * - the manual "Import old conversations" action still retries everything.
  *
  * A record is keyed by conversation id and the migration source fingerprint: once the
- * legacy conversation changes, the record no longer matches and startup retries it.
+ * legacy conversation changes, the record no longer matches and startup retries it. It also
+ * names the K-brain store it was recorded against; a record from another store (or from a
+ * release that did not record one) never blocks a retry.
  */
 
 export type HistoryMigrationFailureKind =
@@ -31,7 +33,26 @@ export type HistoryMigrationFailureRecord = {
   limitBytes?: number;
   message: string;
   failedAt: number;
+  /** K-brain store identity (storage scope) the failure was recorded against. */
+  store?: string;
+  /** For conflicts: the backend build and its prefix-update support when recorded. */
+  backend?: string;
+  /** For conflicts on newer backends: why K-brain refused (e.g. "diverged"). */
+  reason?: string;
 };
+
+/** What decides whether a recorded conflict is still worth skipping, read once per pass. */
+export type ConflictRetryContext = {
+  /** Backend build plus its prefix-update support, as recorded in `backend`. */
+  backend: string;
+  /** The backend can extend an earlier import whose messages are a prefix of the new ones. */
+  prefixUpdate: boolean;
+  /** Conversations whose conflicting K-brain session is known to be gone. */
+  missing: ReadonlySet<string>;
+};
+
+/** Capability of backends that update an imported prefix in place instead of refusing it. */
+export const HISTORY_IMPORT_PREFIX_UPDATE = "history_import_prefix_update";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
@@ -47,9 +68,13 @@ export function classifyHistoryMigrationFailure(input: {
   status?: number;
   message: string;
   bytes?: number;
+  /** Machine-readable code of newer backends (e.g. "import_conflict", "session_busy"). */
+  errorCode?: string;
 }): HistoryMigrationFailureKind {
   const { status } = input;
   if (status === 413) return "too_large";
+  // The session is being written in K-brain right now; the same import succeeds later.
+  if (status === 409 && input.errorCode === "session_busy") return "transient";
   if (status === 409) return "conflict";
   if (status === 400 || status === 422) return "rejected";
   // Network errors and authentication/rate-limit failures can recover without payload changes.
@@ -116,18 +141,39 @@ export function writeHistoryMigrationFailures(
   publish(scope, storage);
 }
 
-/** Record lookup used by migration to skip known deterministic failures at startup. */
+/**
+ * Record lookup used by migration to skip known deterministic failures at startup. Only a
+ * record of the same content against the same K-brain store counts.
+ */
 export function knownDeterministicFailure(
   records: readonly HistoryMigrationFailureRecord[],
   sourceId: string,
   fingerprint: string,
+  store: string,
 ): HistoryMigrationFailureRecord | undefined {
   return records.find(
     (record) =>
       record.sourceId === sourceId &&
       record.fingerprint === fingerprint &&
+      record.store === store &&
       isDeterministicHistoryMigrationFailure(record.kind) &&
       (record.kind !== "too_large" || record.limitBytes === LEGACY_IMPORT_MAX_BODY_BYTES),
+  );
+}
+
+/**
+ * A recorded conflict is retried when the session it conflicted with is gone, or once per
+ * backend build that can update an imported prefix in place (a conversation that was still
+ * being written when it was first imported then completes instead of conflicting forever).
+ */
+export function conflictRetryable(
+  record: Pick<HistoryMigrationFailureRecord, "sourceId" | "kind" | "backend">,
+  context: ConflictRetryContext,
+) {
+  return (
+    record.kind === "conflict" &&
+    (context.missing.has(record.sourceId) ||
+      (context.prefixUpdate && record.backend !== context.backend))
   );
 }
 
