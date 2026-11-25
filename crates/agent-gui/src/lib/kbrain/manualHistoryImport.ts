@@ -1,5 +1,6 @@
 import { isTauriHost } from "../host";
 import { migrateAllHistoryOnce } from "./historyMigration";
+import { PI_HISTORY_DEFER_MS } from "./historyMigrationState";
 
 export type HistoryImportState = {
   running: boolean;
@@ -40,6 +41,7 @@ export function importOldConversations(): Promise<void> {
       const result = await migrateAllHistoryOnce({ retryKnownFailures: true });
       update({ running: false, result });
       if (result.results.length) for (const listener of importedListeners) listener();
+      if (result.deferred > 0) scheduleDeferredHistoryImport();
     } catch (error) {
       update({ running: false, error: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -47,4 +49,33 @@ export function importOldConversations(): Promise<void> {
     }
   })();
   return pending;
+}
+
+/** Longest wait between checks while a session keeps being written. */
+const MAX_DEFERRED_RETRY_MS = 30 * 60_000;
+let deferredTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Picks up session files that were still being written when a pass ran, without a file
+ * watcher: one timer re-runs the ordinary startup pass, which only reads files that changed
+ * (unchanged ones are skipped by their recorded state). While some are still being written it
+ * checks again, waiting longer each time.
+ */
+export function scheduleDeferredHistoryImport(delayMs = PI_HISTORY_DEFER_MS) {
+  if (deferredTimer !== undefined || !isTauriHost()) return;
+  deferredTimer = setTimeout(() => {
+    deferredTimer = undefined;
+    const next = Math.min(delayMs * 2, MAX_DEFERRED_RETRY_MS);
+    // The manual import covers everything; check again once it is done.
+    if (pending) {
+      void pending.finally(() => scheduleDeferredHistoryImport(delayMs));
+      return;
+    }
+    void migrateAllHistoryOnce()
+      .then((result) => {
+        if (result.results.length) for (const listener of importedListeners) listener();
+        if (result.deferred > 0) scheduleDeferredHistoryImport(next);
+      })
+      .catch(() => scheduleDeferredHistoryImport(next));
+  }, delayMs);
 }

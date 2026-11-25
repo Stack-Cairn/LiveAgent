@@ -1,19 +1,36 @@
 import type { Message } from "@liveagent/app/lib/agentTypes";
 import { invoke } from "@liveagent/app/shims/tauriCore";
-import { hasFrozenCapability } from "@liveagent/ui/lib/kbrain/health";
+import { hasFrozenCapability, type KBrainHealth } from "@liveagent/ui/lib/kbrain/health";
 import { isTauriHost } from "../host";
 import { createKBrainClient } from "./client";
 import { withDeadline } from "./deadline";
 import {
+  type ConflictRetryContext,
   classifyHistoryMigrationFailure,
+  conflictRetryable,
+  HISTORY_IMPORT_PREFIX_UPDATE,
   type HistoryMigrationFailureKind,
   type HistoryMigrationFailureRecord,
+  isDeterministicHistoryMigrationFailure,
   knownDeterministicFailure,
   LEGACY_IMPORT_MAX_BODY_BYTES,
   mergeHistoryMigrationFailures,
   readHistoryMigrationFailures,
   writeHistoryMigrationFailures,
 } from "./historyMigrationFailures";
+import {
+  isRecentlyModified,
+  markerSignature,
+  type PiMigrationManifest,
+  type PiSourceFile,
+  parseSessionState,
+  type SessionEntry,
+  type SessionSettlement,
+  type SessionStateFiles,
+  type StoredSessionState,
+  selectPiFiles,
+  storedSessionState,
+} from "./historyMigrationState";
 import { kBrainStorageScope, setKBrainSessionId } from "./mapping";
 import { getConfiguredKBrainConnection } from "./runtimeConnection";
 import { contextToKBrainMessages } from "./turn";
@@ -82,6 +99,8 @@ export type LegacyPage = {
   nextCursor?: string | null;
   complete: boolean;
   source?: string;
+  /** Pi pages: size, mtime and read status of every file the page looked at. */
+  files?: PiSourceFile[];
 };
 export type MigrationImportResult = {
   source_id: string;
@@ -89,6 +108,8 @@ export type MigrationImportResult = {
   status: "imported" | "already_imported";
   checkpoint: "available" | "partial" | "not_found" | "unresolved";
   checkpoint_reason?: string;
+  /** K-brain extended an earlier import of this conversation in place (prefix update). */
+  updated?: boolean;
 };
 export type MigrationFailure = {
   sourceId: string;
@@ -101,6 +122,8 @@ export type MigrationFailure = {
   skipped?: boolean;
   /** True when the exported conversation itself could not be converted, before any request. */
   invalidSource?: boolean;
+  /** Conflicts on newer backends: why K-brain refused the import. */
+  reason?: string;
 };
 
 export type HistoryMigrationSource = "legacy" | "pi";
@@ -109,7 +132,9 @@ export type HistoryMigrationOutcome =
   | "alreadyImported"
   | "skipped"
   | "failed"
-  | "partial";
+  | "partial"
+  /** A session file still being written by another client; picked up later. */
+  | "deferred";
 export type HistoryMigrationProgress = {
   source: HistoryMigrationSource;
   operation: "reading" | "processing" | "importing" | "settled" | "done" | "error";
@@ -142,6 +167,10 @@ export type HistoryMigrationOptions = {
   sessionExists?: (backendId: string) => Promise<boolean>;
   /** Overrides for the per-step time limits (tests use short ones). */
   timeouts?: Partial<HistoryMigrationTimeouts>;
+  /** Shared across pages so one pass asks K-brain about recorded conflicts at most once. */
+  conflictContext?: () => Promise<ConflictRetryContext>;
+  /** Clock for the still-being-written check (tests). */
+  now?: () => number;
 };
 
 export type HistoryMigrationTimeouts = {
@@ -281,6 +310,67 @@ export function createSessionExistenceCheck(
       if (historyErrorStatus(error) !== 404) throw error;
       return false;
     }
+  };
+}
+
+/**
+ * What a pass needs to decide whether a recorded conflict is still worth skipping, fetched only
+ * when a conflict record is met: the backend build and its prefix-update support, and which of
+ * the conflicting sessions K-brain no longer has. A conflict recorded against a session that is
+ * gone (a replaced store, a deleted conversation) would otherwise be skipped forever. Without a
+ * health answer every recorded conflict keeps blocking, as before.
+ */
+export function createConflictRetryContext(
+  client: Pick<ReturnType<typeof createKBrainClient>, "getHealth" | "sessionsExist">,
+  signal?: AbortSignal,
+  timeoutMs = HISTORY_MIGRATION_TIMEOUTS.requestMs,
+): () => Promise<ConflictRetryContext> {
+  let context: Promise<ConflictRetryContext> | undefined;
+  const load = async (): Promise<ConflictRetryContext> => {
+    let health: KBrainHealth;
+    try {
+      health = await withDeadline(
+        (bound) => client.getHealth(bound),
+        timeoutMs,
+        "K-brain health check",
+        signal,
+      );
+    } catch {
+      return { backend: "", prefixUpdate: false, missing: new Set() };
+    }
+    const prefixUpdate = hasFrozenCapability(health, HISTORY_IMPORT_PREFIX_UPDATE);
+    const backend = `${health.build?.version ?? "unversioned"}|${prefixUpdate ? HISTORY_IMPORT_PREFIX_UPDATE : "-"}`;
+    const missing = new Set<string>();
+    if (hasFrozenCapability(health, "session_exists")) {
+      const scope = kBrainStorageScope();
+      const ids = [
+        ...new Set(
+          readHistoryMigrationFailures(scope)
+            .filter((record) => record.kind === "conflict" && record.store === scope)
+            .map((record) => record.sourceId),
+        ),
+      ];
+      try {
+        for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
+          const chunk = ids.slice(start, start + MAX_EXISTS_IDS);
+          const found = await withDeadline(
+            (bound) => client.sessionsExist(chunk, bound),
+            timeoutMs,
+            "K-brain session check",
+            signal,
+          );
+          for (const id of chunk) if (!found.has(id)) missing.add(id);
+        }
+      } catch {
+        // Unknown means the conflicting session may still be there.
+        missing.clear();
+      }
+    }
+    return { backend, prefixUpdate, missing };
+  };
+  return () => {
+    context ??= load();
+    return context;
   };
 }
 
@@ -531,6 +621,19 @@ function isStableMigrationResult(result: MigrationImportResult) {
   );
 }
 
+function historyErrorCode(error: unknown): string | undefined {
+  const code =
+    error && typeof error === "object" ? (error as { errorCode?: unknown }).errorCode : undefined;
+  return typeof code === "string" && code ? code : undefined;
+}
+
+/** Why a newer backend refused an import (`errorCode: "import_conflict"`); older ones say nothing. */
+function importConflictReason(error: unknown): string | undefined {
+  if (historyErrorCode(error) !== "import_conflict") return undefined;
+  const reason = (error as { reason?: unknown }).reason;
+  return typeof reason === "string" && reason.trim() ? reason.trim() : undefined;
+}
+
 export function historyErrorStatus(error: unknown): number | undefined {
   return error && typeof error === "object" && "status" in error ? Number(error.status) : undefined;
 }
@@ -543,6 +646,8 @@ export async function migrateLegacyHistoryPage(
   failures: MigrationFailure[];
   nextCursor?: string | null;
   complete: boolean;
+  /** Conversations whose outcome holds until their content or K-brain changes. */
+  settled: Map<string, { kind: SessionSettlement; fingerprint: string }>;
 }> {
   const connection = getConfiguredKBrainConnection();
   if (!connection) throw new Error("K-brain backend connection is not ready");
@@ -555,6 +660,10 @@ export async function migrateLegacyHistoryPage(
   const sessionExists =
     options.sessionExists ??
     createSessionExistenceCheck(client, options.signal, undefined, timeouts.requestMs);
+  const conflictContext =
+    options.conflictContext ??
+    createConflictRetryContext(client, options.signal, timeouts.requestMs);
+  const settled = new Map<string, { kind: SessionSettlement; fingerprint: string }>();
   const scope = kBrainStorageScope();
   const cache = readMigrationCache(scope);
   const cacheUpdates = new Map<string, CachedMigration | null>();
@@ -577,11 +686,15 @@ export async function migrateLegacyHistoryPage(
       const activeContext = activeContextForMigration(item, messages);
       sourceFingerprint = await fingerprint({ item, messages });
       converted = true;
-      const known = options.retryKnownFailures
+      let known = options.retryKnownFailures
         ? undefined
-        : knownDeterministicFailure(knownFailures, item.id, sourceFingerprint);
+        : knownDeterministicFailure(knownFailures, item.id, sourceFingerprint, scope);
+      if (known?.kind === "conflict" && conflictRetryable(known, await conflictContext())) {
+        known = undefined;
+      }
       if (known) {
         outcome = "skipped";
+        settled.set(item.id, { kind: "f", fingerprint: sourceFingerprint });
         // Same content failed the same way before; re-sending would only fail again.
         failures.push({
           sourceId: item.id,
@@ -590,6 +703,7 @@ export async function migrateLegacyHistoryPage(
           title: known.title,
           bytes: known.bytes,
           skipped: true,
+          ...(known.reason ? { reason: known.reason } : {}),
         });
         continue;
       }
@@ -601,12 +715,12 @@ export async function migrateLegacyHistoryPage(
         !(options.retryKnownFailures && cached.result.checkpoint === "partial");
       if (cached && reusable) {
         if (await sessionExists(cached.result.backend_id)) {
-          const cachedResult: MigrationImportResult = {
-            ...cached.result,
-            status: "already_imported",
-          };
+          // Nothing new reached K-brain this time, whatever the cached import did.
+          const { updated: _updated, ...previous } = cached.result;
+          const cachedResult: MigrationImportResult = { ...previous, status: "already_imported" };
           setKBrainSessionId(item.id, cachedResult.backend_id);
           results.push(cachedResult);
+          settled.set(item.id, { kind: "i", fingerprint: sourceFingerprint });
           outcome = cachedResult.checkpoint === "partial" ? "partial" : "alreadyImported";
           continue;
         }
@@ -679,20 +793,23 @@ export async function migrateLegacyHistoryPage(
       if (isStableMigrationResult(result)) {
         cache[item.id] = { fingerprint: sourceFingerprint, result };
         cacheUpdates.set(item.id, cache[item.id]);
+        settled.set(item.id, { kind: "i", fingerprint: sourceFingerprint });
       }
       succeededIds.push(item.id);
       results.push(result);
+      // An in-place prefix update brought new messages into K-brain: it counts as migrated.
       outcome = ["partial", "unresolved"].includes(result.checkpoint)
         ? "partial"
-        : result.status === "already_imported"
-          ? "alreadyImported"
-          : "imported";
+        : result.status === "imported" || result.updated === true
+          ? "imported"
+          : "alreadyImported";
     } catch (error) {
       const status = historyErrorStatus(error);
       // The backend persists deletion intent across restarts and clients.
       if (status === 410) {
         outcome = "skipped";
         succeededIds.push(item.id);
+        settled.set(item.id, { kind: "d", fingerprint: sourceFingerprint });
         // A deleted conversation is not a cached import any more; keeping it would make every
         // startup existence check report a missing session.
         if (cache[item.id]) {
@@ -707,8 +824,10 @@ export async function migrateLegacyHistoryPage(
             status: Number.isFinite(status) ? status : undefined,
             message,
             bytes: bodyBytes,
+            errorCode: historyErrorCode(error),
           })
         : "transient";
+      const reason = kind === "conflict" ? importConflictReason(error) : undefined;
       failures.push({
         sourceId: item.id,
         error: message,
@@ -716,7 +835,11 @@ export async function migrateLegacyHistoryPage(
         title: item.title,
         bytes: bodyBytes,
         ...(converted ? {} : { invalidSource: true }),
+        ...(reason ? { reason } : {}),
       });
+      if (!converted) settled.set(item.id, { kind: "n", fingerprint: "" });
+      else if (isDeterministicHistoryMigrationFailure(kind))
+        settled.set(item.id, { kind: "f", fingerprint: sourceFingerprint });
       if (sourceFingerprint) {
         failedRecords.push({
           sourceId: item.id,
@@ -727,6 +850,10 @@ export async function migrateLegacyHistoryPage(
           ...(kind === "too_large" ? { limitBytes: LEGACY_IMPORT_MAX_BODY_BYTES } : {}),
           message,
           failedAt: Date.now(),
+          store: scope,
+          // The conflict is retried once a backend that can update an imported prefix arrives.
+          ...(kind === "conflict" ? { backend: (await conflictContext()).backend } : {}),
+          ...(reason ? { reason } : {}),
         });
       }
     } finally {
@@ -746,6 +873,7 @@ export async function migrateLegacyHistoryPage(
   return {
     results,
     failures,
+    settled,
     nextCursor: page.nextCursor,
     complete:
       page.complete &&
@@ -818,8 +946,12 @@ function sourceCompletionScope(scope: string, source: HistorySource) {
   return source === "legacy" ? scope : `${scope}|pi`;
 }
 
-/** A complete legacy pass: the source it covered and the K-brain sessions it confirmed. */
-type MigrationCompletion = { marker: string; backendIds: string[] };
+/**
+ * A complete pass: the source it covered and the K-brain sessions it confirmed. The Pi source
+ * also keeps per-session state, so a changed directory only reads its changed files; its marker
+ * is empty while files are deferred or unsettled.
+ */
+type MigrationCompletion = { marker: string; backendIds: string[]; sessions?: StoredSessionState };
 
 function readMigrationCompletion(scope: string): MigrationCompletion | null {
   try {
@@ -832,31 +964,35 @@ function readMigrationCompletion(scope: string): MigrationCompletion | null {
     ) {
       return null;
     }
-    return { marker: parsed.marker, backendIds: parsed.backendIds };
+    return { marker: parsed.marker, backendIds: parsed.backendIds, sessions: parsed.sessions };
   } catch {
     return null;
   }
 }
 
 function writeMigrationCompletion(scope: string, completion: MigrationCompletion) {
+  const key = migrationCompletionKey(scope);
   try {
-    globalThis.localStorage?.setItem(migrationCompletionKey(scope), JSON.stringify(completion));
+    globalThis.localStorage?.setItem(key, JSON.stringify(completion));
   } catch {
-    // Without the marker the next launch simply runs the full pass again.
+    try {
+      // Out of room: the marker alone still spares an unchanged directory the rescan.
+      const { sessions: _sessions, ...marker } = completion;
+      globalThis.localStorage?.setItem(key, JSON.stringify(marker));
+    } catch {
+      // Without the marker the next launch simply runs the full pass again.
+    }
   }
 }
 
 /**
- * Whether the sessions a complete legacy pass confirmed are all still in K-brain, answered only
- * by a backend with the metadata-only `session_exists` check. Older backends always get the full
- * pass, so a wiped K-brain store is still repaired by re-importing. Only that pass's own sessions
- * count: entries no pass can clear (Pi sources that are gone, conversations skipped as known
- * failures) must not keep the marker from ever applying.
+ * Which of `backendIds` K-brain still has, answered only by a backend with the metadata-only
+ * `session_exists` check (null otherwise, or when the check fails).
  */
-async function migratedSessionsStillExist(
+async function existingSessions(
   backendIds: readonly string[],
   options: HistoryMigrationOptions,
-): Promise<boolean> {
+): Promise<Set<string> | null> {
   try {
     const client = createKBrainClient({ fetch: options.fetch });
     const { requestMs } = timeoutsFor(options);
@@ -866,8 +1002,9 @@ async function migratedSessionsStillExist(
       "K-brain health check",
       options.signal,
     );
-    if (!hasFrozenCapability({ capabilities }, "session_exists")) return false;
+    if (!hasFrozenCapability({ capabilities }, "session_exists")) return null;
     const ids = [...new Set(backendIds)];
+    const existing = new Set<string>();
     for (let start = 0; start < ids.length; start += MAX_EXISTS_IDS) {
       const chunk = ids.slice(start, start + MAX_EXISTS_IDS);
       const found = await withDeadline(
@@ -876,12 +1013,46 @@ async function migratedSessionsStillExist(
         "K-brain session check",
         options.signal,
       );
-      if (chunk.some((id) => !found.has(id))) return false;
+      for (const id of chunk) if (found.has(id)) existing.add(id);
     }
-    return true;
+    return existing;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Whether the sessions a complete legacy pass confirmed are all still in K-brain. Older
+ * backends always get the full pass, so a wiped K-brain store is still repaired by
+ * re-importing. Only that pass's own sessions count: entries no pass can clear (Pi sources that
+ * are gone, conversations skipped as known failures) must not keep the marker from ever applying.
+ */
+async function migratedSessionsStillExist(
+  backendIds: readonly string[],
+  options: HistoryMigrationOptions,
+): Promise<boolean> {
+  const existing = await existingSessions(backendIds, options);
+  return existing !== null && backendIds.every((id) => existing.has(id));
+}
+
+const PI_SOURCE_ID = /^pi-[0-9a-f]{24}$/;
+
+/**
+ * Whether a recorded conflict of this source is due for a retry (its conflicting session is
+ * gone, or a backend that updates imported prefixes arrived), which an unchanged source's
+ * marker must not hide.
+ */
+async function conflictRetryDue(source: HistorySource, options: HistoryMigrationOptions) {
+  const scope = kBrainStorageScope();
+  const conflicts = readHistoryMigrationFailures(scope).filter(
+    (record) =>
+      record.kind === "conflict" &&
+      record.store === scope &&
+      PI_SOURCE_ID.test(record.sourceId) === (source === "pi"),
+  );
+  if (conflicts.length === 0 || !options.conflictContext) return false;
+  const context = await options.conflictContext();
+  return conflicts.some((record) => conflictRetryable(record, context));
 }
 
 /**
@@ -911,36 +1082,292 @@ async function readSourceSignature(
   }
 }
 
+async function readPiManifest(options: HistoryMigrationOptions) {
+  try {
+    const manifest = await withDeadline(
+      () => invoke<PiMigrationManifest | null>("pi_history_migration_manifest"),
+      timeoutsFor(options).pageMs,
+      "Listing Pi sessions",
+      options.signal,
+    );
+    return manifest && typeof manifest.signature === "string" && Array.isArray(manifest.files)
+      ? manifest
+      : null;
+  } catch {
+    // An older desktop without the manifest command runs the full pass, as before.
+    return null;
+  }
+}
+
+/**
+ * First pass after an upgrade from the whole-directory marker: when the directory has not
+ * changed since that marker's complete pass, every file settled then, so its state comes from
+ * the stored outcomes (a recorded failure first, it is the newer one) without reading any file.
+ */
+function seedSessionState(
+  files: readonly PiSourceFile[],
+  cache: Record<string, CachedMigration>,
+  records: readonly HistoryMigrationFailureRecord[],
+): SessionStateFiles {
+  const failed = new Map(records.map((record) => [record.sourceId, record]));
+  const state: SessionStateFiles = {};
+  for (const file of files) {
+    const record = failed.get(file.sourceId);
+    const cached = cache[file.sourceId];
+    if (record && isDeterministicHistoryMigrationFailure(record.kind)) {
+      state[file.sourceId] = [file.size, file.mtimeMs, "f", record.fingerprint];
+    } else if (cached && isStableMigrationResult(cached.result)) {
+      state[file.sourceId] = [file.size, file.mtimeMs, "i", cached.fingerprint];
+    }
+  }
+  return state;
+}
+
+type SourcePass = {
+  results: MigrationImportResult[];
+  failures: MigrationFailure[];
+  complete: boolean;
+  /** Files left for later because another client was still writing them. */
+  deferred: number;
+};
+
+/** Changed Pi sessions are read in batches of one page. */
+const PI_READ_BATCH = 20;
+
+/** Every outcome holds until the source changes: no transient failure, every result cached. */
+function passSettled(
+  results: readonly MigrationImportResult[],
+  failures: readonly MigrationFailure[],
+  scope: string,
+) {
+  const stored = readMigrationCache(scope);
+  return (
+    results.every(
+      (result) =>
+        isStableMigrationResult(result) &&
+        stored[result.source_id]?.result?.backend_id === result.backend_id,
+    ) &&
+    failures.every(
+      (failure) =>
+        failure.kind !== undefined && (failure.kind !== "transient" || failure.invalidSource),
+    )
+  );
+}
+
+/**
+ * The Pi pass when the directory changed: reads only new and changed session files (and those
+ * whose stored outcome no longer holds), leaves files still being written for later, and
+ * records each file's size, mtime and outcome.
+ */
+async function migratePiIncrementally(
+  manifest: PiMigrationManifest,
+  completion: MigrationCompletion | null,
+  completionScope: string,
+  options: HistoryMigrationOptions,
+): Promise<SourcePass> {
+  const scope = kBrainStorageScope();
+  const now = options.now ?? Date.now;
+  const cache = readMigrationCache(scope);
+  const records = readHistoryMigrationFailures(scope);
+  const state =
+    parseSessionState(completion?.sessions) ??
+    (completion &&
+    markerSignature(completion.marker, MIGRATION_MARKER_FORMAT) === manifest.signature
+      ? seedSessionState(manifest.files, cache, records)
+      : {});
+  const conflicts =
+    Object.values(state).some((entry) => entry[2] === "f") &&
+    records.some((record) => record.kind === "conflict") &&
+    options.conflictContext
+      ? await options.conflictContext()
+      : null;
+  const entryHolds = (sourceId: string, [, , kind, fingerprint]: SessionEntry) => {
+    if (kind === "i") {
+      const cached = cache[sourceId];
+      return cached?.fingerprint === fingerprint && isStableMigrationResult(cached.result);
+    }
+    if (kind === "f") {
+      const record = knownDeterministicFailure(records, sourceId, fingerprint, scope);
+      return !!record && !(conflicts && conflictRetryable(record, conflicts));
+    }
+    return true;
+  };
+  const selection = selectPiFiles(
+    manifest.files,
+    state,
+    now(),
+    entryHolds,
+    options.retryKnownFailures === true,
+  );
+  const candidates = [...selection.candidates];
+  if (selection.unchangedImported.length > 0) {
+    // A wiped or replaced K-brain store re-imports what it lost; an older backend that cannot
+    // answer cheaply gets every file read, as before.
+    const existing = await existingSessions(
+      selection.unchangedImported.map((file) => cache[file.sourceId]?.result.backend_id ?? ""),
+      options,
+    );
+    for (const file of selection.unchangedImported) {
+      if (!existing?.has(cache[file.sourceId]?.result.backend_id ?? "")) candidates.push(file);
+    }
+  }
+  let deferred = selection.deferred.length;
+  for (const _file of selection.deferred) reportProgress(options, "settled", "deferred");
+  const results: MigrationImportResult[] = [];
+  const failures: MigrationFailure[] = [];
+  let readError = false;
+  try {
+    for (let start = 0; start < candidates.length; start += PI_READ_BATCH) {
+      const batch = candidates.slice(start, start + PI_READ_BATCH);
+      reportProgress(options, "reading");
+      const page = await withDeadline(
+        () =>
+          invoke<LegacyPage>("pi_history_migration_read", {
+            sourceIds: batch.map((file) => file.sourceId),
+          }),
+        timeoutsFor(options).pageMs,
+        "Reading changed Pi sessions",
+        options.signal,
+      );
+      const seen = new Map((page.files ?? []).map((file) => [file.sourceId, file]));
+      // Written while it was read, or since the listing: left for later like any recent file.
+      const late = new Set(
+        [...seen.values()]
+          .filter(
+            (file) =>
+              file.status === "changed" ||
+              (file.status === "read" && isRecentlyModified(file.mtimeMs, now())),
+          )
+          .map((file) => file.sourceId),
+      );
+      const migrated = await migrateLegacyHistoryPage(
+        {
+          conversations: page.conversations.filter((item) => !late.has(item.id)),
+          complete: true,
+        },
+        options,
+      );
+      results.push(...migrated.results);
+      failures.push(...migrated.failures);
+      for (const { sourceId } of batch) {
+        const file = seen.get(sourceId);
+        if (late.has(sourceId)) {
+          deferred += 1;
+          reportProgress(options, "settled", "deferred");
+          continue;
+        }
+        const outcome = migrated.settled.get(sourceId);
+        if (file?.status === "skipped") state[sourceId] = [file.size, file.mtimeMs, "n", ""];
+        else if (file?.status === "read" && outcome)
+          state[sourceId] = [file.size, file.mtimeMs, outcome.kind, outcome.fingerprint];
+        // Missing, not reported, or not settled (a transient failure): read again next time.
+        else delete state[sourceId];
+      }
+    }
+    reportProgress(options, "done");
+  } catch (error) {
+    readError = true;
+    reportProgress(options, "error");
+    failures.push({
+      sourceId: "pi_history_migration_read",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const listed = new Set(manifest.files.map((file) => file.sourceId));
+  const kept: SessionStateFiles = {};
+  for (const [sourceId, entry] of Object.entries(state)) {
+    if (listed.has(sourceId)) kept[sourceId] = entry;
+  }
+  const stored = readMigrationCache(scope);
+  const settledAll =
+    !readError &&
+    deferred === 0 &&
+    passSettled(results, failures, scope) &&
+    manifest.files.every((file) => kept[file.sourceId] !== undefined);
+  writeMigrationCompletion(completionScope, {
+    // The marker vouches for the whole directory, so it waits for every file to settle.
+    marker: settledAll ? migrationMarker(manifest.signature) : "",
+    backendIds: Object.entries(kept)
+      .filter(([, entry]) => entry[2] === "i")
+      .map(([sourceId]) => stored[sourceId]?.result?.backend_id ?? sourceId),
+    sessions: storedSessionState(kept),
+  });
+  return {
+    results,
+    failures,
+    deferred,
+    complete:
+      failures.length === 0 &&
+      deferred === 0 &&
+      results.every(
+        (result) => result.checkpoint === "available" || result.checkpoint === "not_found",
+      ),
+  };
+}
+
 async function migrateHistorySourceOnce(
   command: "legacy_history_migration_page" | "pi_history_migration_page",
   options: HistoryMigrationOptions = {},
-) {
+): Promise<SourcePass> {
   options = {
     ...options,
     progressSource: command === "legacy_history_migration_page" ? "legacy" : "pi",
   };
   if (!isTauriHost() || !getConfiguredKBrainConnection()) {
     reportProgress(options, "done");
-    return { results: [], failures: [], complete: true };
+    return { results: [], failures: [], complete: true, deferred: 0 };
   }
+  const client = createKBrainClient({ fetch: options.fetch });
+  const { requestMs } = timeoutsFor(options);
+  options = {
+    ...options,
+    sessionExists:
+      options.sessionExists ??
+      createSessionExistenceCheck(client, options.signal, undefined, requestMs),
+    conflictContext:
+      options.conflictContext ?? createConflictRetryContext(client, options.signal, requestMs),
+  };
   // Read before the pass, so a change made while it runs is never covered by its marker.
   const source: HistorySource = command === "legacy_history_migration_page" ? "legacy" : "pi";
   const scope = kBrainStorageScope();
   const completionScope = sourceCompletionScope(scope, source);
   const signature = await readSourceSignature(source, options);
-  const completion =
-    signature && !options.retryKnownFailures ? readMigrationCompletion(completionScope) : null;
+  const completion = readMigrationCompletion(completionScope);
   if (
     signature &&
+    !options.retryKnownFailures &&
     completion?.marker === migrationMarker(signature) &&
-    (await migratedSessionsStillExist(completion.backendIds, options))
+    (await migratedSessionsStillExist(completion.backendIds, options)) &&
+    !(await conflictRetryDue(source, options))
   ) {
+    if (source === "pi" && !parseSessionState(completion.sessions)) {
+      // Upgraded from the whole-directory marker: record every file's state now (a listing, no
+      // file is read), so the next change reads only the files it touched.
+      const manifest = await readPiManifest(options);
+      if (manifest?.signature === signature) {
+        writeMigrationCompletion(completionScope, {
+          ...completion,
+          sessions: storedSessionState(
+            seedSessionState(
+              manifest.files,
+              readMigrationCache(scope),
+              readHistoryMigrationFailures(scope),
+            ),
+          ),
+        });
+      }
+    }
     reportProgress(options, "done");
-    return { results: [], failures: [], complete: true };
+    return { results: [], failures: [], complete: true, deferred: 0 };
+  }
+  if (source === "pi") {
+    const manifest = await readPiManifest(options);
+    if (manifest) return migratePiIncrementally(manifest, completion, completionScope, options);
   }
   let cursor: string | undefined;
   const all: MigrationImportResult[] = [];
   const failures: MigrationFailure[] = [];
+  let deferred = 0;
   try {
     do {
       reportProgress(options, "reading");
@@ -950,7 +1377,21 @@ async function migrateHistorySourceOnce(
         `Reading ${command === "legacy_history_migration_page" ? "legacy" : "other"} history`,
         options.signal,
       );
-      const migrated = await migrateLegacyHistoryPage(page, options);
+      // Pi session files still being written are left for later (legacy pages list no files).
+      const now = (options.now ?? Date.now)();
+      const late = new Set(
+        (page.files ?? [])
+          .filter((file) => file.status === "read" && isRecentlyModified(file.mtimeMs, now))
+          .map((file) => file.sourceId),
+      );
+      for (const _id of late) reportProgress(options, "settled", "deferred");
+      deferred += late.size;
+      const migrated = await migrateLegacyHistoryPage(
+        late.size > 0
+          ? { ...page, conversations: page.conversations.filter((item) => !late.has(item.id)) }
+          : page,
+        options,
+      );
       all.push(...migrated.results);
       failures.push(...migrated.failures);
       if (page.complete) break;
@@ -963,19 +1404,7 @@ async function migrateHistorySourceOnce(
     // failure or an unresolved checkpoint export still needs the next launch to retry.
     // The marker vouches for these results through the cache, so every one of them must have
     // reached storage (a quota failure or a lost write leaves the next launch the full pass).
-    const stored = readMigrationCache(scope);
-    if (
-      signature &&
-      all.every(
-        (result) =>
-          isStableMigrationResult(result) &&
-          stored[result.source_id]?.result?.backend_id === result.backend_id,
-      ) &&
-      failures.every(
-        (failure) =>
-          failure.kind !== undefined && (failure.kind !== "transient" || failure.invalidSource),
-      )
-    ) {
+    if (signature && deferred === 0 && passSettled(all, failures, scope)) {
       writeMigrationCompletion(completionScope, {
         marker: migrationMarker(signature),
         backendIds: all.map((result) => result.backend_id),
@@ -992,8 +1421,10 @@ async function migrateHistorySourceOnce(
   return {
     results: all,
     failures,
+    deferred,
     complete:
       failures.length === 0 &&
+      deferred === 0 &&
       all.every((result) => result.checkpoint === "available" || result.checkpoint === "not_found"),
   };
 }
@@ -1007,16 +1438,15 @@ export async function migratePiHistoryOnce(options: HistoryMigrationOptions = {}
 }
 
 export async function migrateAllHistoryOnce(options: HistoryMigrationOptions = {}) {
+  const client = createKBrainClient({ fetch: options.fetch });
+  const { requestMs } = timeoutsFor(options);
   const shared: HistoryMigrationOptions = {
     ...options,
     sessionExists:
       options.sessionExists ??
-      createSessionExistenceCheck(
-        createKBrainClient({ fetch: options.fetch }),
-        options.signal,
-        undefined,
-        timeoutsFor(options).requestMs,
-      ),
+      createSessionExistenceCheck(client, options.signal, undefined, requestMs),
+    conflictContext:
+      options.conflictContext ?? createConflictRetryContext(client, options.signal, requestMs),
   };
   const [legacy, pi] = await Promise.all([
     migrateLegacyHistoryOnce(shared),
@@ -1026,5 +1456,6 @@ export async function migrateAllHistoryOnce(options: HistoryMigrationOptions = {
     results: [...legacy.results, ...pi.results],
     failures: [...legacy.failures, ...pi.failures],
     complete: legacy.complete && pi.complete,
+    deferred: legacy.deferred + pi.deferred,
   };
 }

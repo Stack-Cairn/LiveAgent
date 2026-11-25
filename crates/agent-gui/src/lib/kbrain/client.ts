@@ -198,6 +198,9 @@ async function readError(response: Response) {
     const parsed = JSON.parse(body) as Record<string, unknown>;
     message = stringField(parsed.error) || stringField(parsed.message) || message;
     reason = discoveryFailureReason(parsed);
+    // Coded errors may say why in a short machine-readable reason (history import conflicts).
+    const why = stringField(parsed.reason).trim();
+    if (reason.errorCode && why) reason.reason = why;
   } catch {
     // Keep the original response body for non-JSON server errors.
   }
@@ -286,6 +289,8 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       checkpoint: "available" | "partial" | "not_found" | "unresolved";
       checkpoint_reason?: string;
       fingerprint: string;
+      /** A backend with history_import_prefix_update extended an earlier import in place. */
+      updated?: boolean;
     }>("/v1/migrations/liveagent-history", {
       method: "POST",
       body: JSON.stringify(input),
@@ -300,6 +305,7 @@ export function createKBrainClient(inputOptions: KBrainClientOptions = {}) {
       (result.status !== "imported" && result.status !== "already_imported") ||
       !["available", "partial", "not_found", "unresolved"].includes(result.checkpoint) ||
       (result.checkpoint_reason !== undefined && typeof result.checkpoint_reason !== "string") ||
+      (result.updated !== undefined && typeof result.updated !== "boolean") ||
       typeof result.fingerprint !== "string" ||
       !result.fingerprint.trim()
     ) {

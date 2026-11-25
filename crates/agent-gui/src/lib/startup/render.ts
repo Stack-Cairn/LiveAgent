@@ -1,3 +1,4 @@
+import { startupText } from "../../i18n/startupTranslations";
 import type { HistoryMigrationProgress } from "../kbrain/historyMigration";
 import {
   applyMigrationProgress,
@@ -35,8 +36,9 @@ export function createStartupRenderer(doc: Document = document) {
     const el = shell?.querySelector<HTMLElement>(`[data-boot-${key}]`);
     if (el && el.textContent !== value) el.textContent = value;
   };
-  const en = startupLanguage() === "en";
-  const choose = (zh: string, english: string) => (en ? english : zh);
+  const language = startupLanguage();
+  const say = (key: Parameters<typeof startupText>[1], values?: Record<string, string | number>) =>
+    startupText(language, key, values);
   let state = createStartupProgress();
   let disposed = false;
   let pending: ReturnType<typeof setTimeout> | undefined;
@@ -66,85 +68,57 @@ export function createStartupRenderer(doc: Document = document) {
     }
   };
   const operations = {
-    waiting: choose("等待检查", "Waiting"),
-    reading: choose("正在读取旧数据", "Reading old data"),
-    processing: choose("正在整理会话", "Preparing a conversation"),
-    importing: choose("正在导入会话", "Importing a conversation"),
-    settled: choose("已处理当前会话", "Conversation processed"),
-    done: choose("检查与迁移结束", "Finished"),
-    error: choose("读取未完成，请进入应用后查看", "Could not finish reading; check in the app"),
+    waiting: say("operation.waiting"),
+    reading: say("operation.reading"),
+    processing: say("operation.processing"),
+    importing: say("operation.importing"),
+    settled: say("operation.settled"),
+    done: say("operation.done"),
+    error: say("operation.error"),
   };
   const paint = () => {
     if (disposed) return;
     lastPaint = Date.now();
     const c = migrationCounts(state);
-    const titles = {
-      connecting: choose("正在连接本地服务", "Connecting to local service"),
-      checking: choose("正在检查旧版数据", "Checking old data"),
-      migrating: choose("正在迁移旧版会话", "Migrating old conversations"),
-      opening: choose("正在准备主界面", "Opening your workspace"),
-      error: choose("启动未完成", "Could not start LiveAgent"),
-    };
-    text("title", titles[state.phase]);
+    text("title", say(`title.${state.phase}`));
     if (state.phase !== "error")
       text(
         "detail",
         state.phase === "migrating"
-          ? choose(
-              "首次升级需要整理历史数据，数据较多时可能需要一些时间。",
-              "The first upgrade needs to prepare your history. Large histories can take a while.",
-            )
+          ? say("detail.migrating")
           : state.phase === "opening"
-            ? choose("即将打开工作区…", "Your workspace will open shortly…")
-            : choose("正在准备启动环境…", "Preparing your startup environment…"),
+            ? say("detail.opening")
+            : say("detail.preparing"),
       );
     text(
       "counts",
-      c.processed
-        ? choose(
-            `已处理 ${c.processed} 条 · 本次迁移 ${c.imported} · 已迁移 ${c.alreadyImported} · 跳过 ${c.skipped} · 问题 ${c.failed + c.partial}`,
-            `Processed ${c.processed} · Imported ${c.imported} · Previously imported ${c.alreadyImported} · Skipped ${c.skipped} · Issues ${c.failed + c.partial}`,
-          )
+      c.processed || c.deferred
+        ? say("counts", { ...c, issues: c.failed + c.partial }) +
+            (c.deferred ? say("counts.deferred", { deferred: c.deferred }) : "")
         : "",
     );
     for (const key of ["legacy", "pi"] as const) {
       const source = state.sources[key];
       const seconds = Math.max(0, Math.floor((Date.now() - source.operationStartedAt) / 1000));
       const duration = ["reading", "processing", "importing"].includes(source.operation)
-        ? choose(` · 当前步骤 ${seconds} 秒`, ` · Current step ${seconds}s`)
+        ? say("stepDuration", { seconds })
         : "";
       text(
         key,
         state.phase === "migrating" || state.phase === "checking"
-          ? `${key === "legacy" ? choose("旧版会话", "Legacy history") : choose("其他历史会话", "Other history")} · ${operations[source.operation]}${duration}`
+          ? `${say(`source.${key}`)} · ${operations[source.operation]}${duration}`
           : "",
       );
     }
     text(
       "elapsed",
-      choose(
-        `已等待 ${Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000))} 秒`,
-        `Elapsed ${Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000))}s`,
-      ),
+      say("elapsed", { seconds: Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000)) }),
     );
     const stalled =
       state.phase !== "error" && Date.now() - state.lastProgressAt >= STARTUP_STALL_MS;
-    text(
-      "waiting",
-      stalled
-        ? escapes
-          ? choose(
-              "当前步骤耗时较长。可以跳过直接进入应用，未完成的迁移会在后台继续；也可以重启本地服务后重试。",
-              "This step is taking a while. Skip to open LiveAgent now while the migration continues in the background, or restart the local service and retry.",
-            )
-          : choose(
-              "当前步骤耗时较长，仍在等待处理结果。",
-              "This step is taking a while. Still waiting for its result.",
-            )
-        : "",
-    );
+    text("waiting", stalled ? (escapes ? say("waiting.escapes") : say("waiting.plain")) : "");
     if (stalled && escapes) {
-      showEscapes(choose("重启本地服务并重试", "Restart local service and retry"), escapes.retry);
+      showEscapes(say("restartRetry"), escapes.retry);
     }
   };
   const schedule = () => {
@@ -165,9 +139,9 @@ export function createStartupRenderer(doc: Document = document) {
     if (retry) retry.onclick = null;
     if (skip) skip.onclick = null;
   };
-  shell?.setAttribute("aria-label", choose("LiveAgent 启动进度", "LiveAgent startup progress"));
-  text("retry", choose("重试", "Retry"));
-  text("skip", choose("跳过，进入应用", "Skip and open LiveAgent"));
+  shell?.setAttribute("aria-label", say("ariaLabel"));
+  text("retry", say("retry"));
+  text("skip", say("skip"));
   if (retry) {
     retry.hidden = true;
     retry.disabled = false;
@@ -200,15 +174,9 @@ export function createStartupRenderer(doc: Document = document) {
       state = { ...state, phase: "error" };
       shell?.setAttribute("aria-busy", "false");
       shell?.setAttribute("data-boot-failed", "");
-      text(
-        "detail",
-        choose(
-          "本地服务或数据准备未能完成，请重试。若仍失败，请查看诊断日志。",
-          "The local service or data preparation could not finish. Retry, or check diagnostic logs if it persists.",
-        ),
-      );
+      text("detail", say("detail.failed"));
       text("waiting", "");
-      showEscapes(choose("重试", "Retry"), () => {
+      showEscapes(say("retry"), () => {
         dispose();
         shell?.removeAttribute("data-boot-failed");
         shell?.setAttribute("aria-busy", "true");

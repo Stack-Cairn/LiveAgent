@@ -66,6 +66,8 @@ macro_rules! app_invoke_handler {
             commands::planning::planning_migrate_legacy,
             commands::chat_history::pi_migration::pi_history_migration_page,
             commands::chat_history::pi_migration::pi_history_migration_signature,
+            commands::chat_history::pi_migration::pi_history_migration_manifest,
+            commands::chat_history::pi_migration::pi_history_migration_read,
             // Trajectory (events ride the owning history segment)
             commands::chat_history::trajectory_append_events,
             commands::chat_history::trajectory_get_events,

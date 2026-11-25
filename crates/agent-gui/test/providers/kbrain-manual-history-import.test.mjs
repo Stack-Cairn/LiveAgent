@@ -48,3 +48,38 @@ test("browser cannot report a successful native import", async () => {
   await assert.rejects(api.importOldConversations(), /desktop app/);
   assert.equal(api.getHistoryImportState().result, undefined);
 });
+
+test("deferred sessions are picked up later in the session by one timer, not a watcher", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const passes = [];
+  const answers = [
+    { results: [], failures: [], complete: false, deferred: 2 },
+    { results: [{ source_id: "pi-a", backend_id: "pi-a", status: "imported", checkpoint: "not_found" }], failures: [], complete: true, deferred: 0 },
+  ];
+  const loader = createTsModuleLoader({ mocks: {
+    "../host": { isTauriHost: () => true },
+    "./historyMigration": { migrateAllHistoryOnce: async (options) => { passes.push(options); return answers.shift(); } },
+  } });
+  const api = loader.loadModule("src/lib/kbrain/manualHistoryImport.ts");
+  let changed = 0;
+  api.subscribeHistoryImported(() => changed++);
+  api.scheduleDeferredHistoryImport(1000);
+  api.scheduleDeferredHistoryImport(1000);
+  t.mock.timers.tick(999);
+  assert.equal(passes.length, 0);
+  t.mock.timers.tick(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(passes.length, 1, "one timer, however often it is asked for");
+  assert.equal(passes[0]?.retryKnownFailures, undefined, "the ordinary pass, not the manual retry");
+  // Still being written: checked again, later.
+  t.mock.timers.tick(1999);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(passes.length, 1);
+  t.mock.timers.tick(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(passes.length, 2);
+  assert.equal(changed, 1, "the chat list refreshes once the session is imported");
+  t.mock.timers.tick(60 * 60_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(passes.length, 2, "nothing left to wait for");
+});

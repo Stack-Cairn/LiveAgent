@@ -15,7 +15,10 @@ test("interleaved sources keep exclusive counts and never end the other source",
   state = applyMigrationProgress(state, {source: "pi", operation: "done"}, 40);
   assert.equal(state.sources.legacy.operation, "importing");
   for (const outcome of ["imported", "alreadyImported", "skipped", "failed"]) state = applyMigrationProgress(state, {source: "legacy", operation: "settled", outcome}, 50);
-  assert.deepEqual(JSON.parse(JSON.stringify(migrationCounts(state))), {imported:1, alreadyImported:1, skipped:1, failed:1, partial:1, processed:5});
+  assert.deepEqual(JSON.parse(JSON.stringify(migrationCounts(state))), {imported:1, alreadyImported:1, skipped:1, failed:1, partial:1, processed:5, deferred:0});
+  // A file another client is still writing is left for later: neither processed nor an issue.
+  state = applyMigrationProgress(state, {source: "pi", operation: "settled", outcome: "deferred"}, 55);
+  assert.deepEqual(JSON.parse(JSON.stringify(migrationCounts(state))), {imported:1, alreadyImported:1, skipped:1, failed:1, partial:1, processed:5, deferred:1});
   state = applyMigrationProgress(state, {source: "legacy", operation: "reading"}, 60);
   state = applyMigrationProgress(state, {source: "legacy", operation: "reading"}, 70);
   assert.equal(state.lastProgressAt, 60);
@@ -45,6 +48,9 @@ test("loading screen shows real work, slow waits, accessible failure, and isolat
   old.progress({source:"legacy", operation:"settled", outcome:"imported"});
   old.phase("migrating");
   assert.match(doc.querySelector("[data-boot-counts]").textContent, /Processed 1/);
+  old.progress({source:"pi", operation:"settled", outcome:"deferred"});
+  old.progress({source:"pi", operation:"done"});
+  assert.equal(doc.querySelector("[data-boot-counts]").textContent, "Processed 1 · Imported 1 · Previously imported 0 · Skipped 0 · Issues 0 · Later 1 (still being written)");
   assert.doesNotMatch(doc.querySelector("[data-static-boot-shell]").textContent, /%/);
   let retries = 0;
   old.fail(() => { retries++; current = createStartupRenderer(doc); });

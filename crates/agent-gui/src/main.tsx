@@ -13,7 +13,6 @@ import {
   notifyFrontendReady,
   restartKBrainBackend,
 } from "./lib/kbrain/bootstrap";
-import { migrateAllHistoryOnce } from "./lib/kbrain/historyMigration";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { createStartupRenderer } from "./lib/startup/render";
 import { runStartupSequence } from "./lib/startup/sequence";
@@ -89,16 +88,26 @@ const bootstrap = createKBrainBootstrapRunner(async () => {
           // content; they are listed in Settings and in the app notice instead of re-uploaded.
           screen.phase("checking");
         },
+        // The migration code loads once the backend is connected, after the startup screen
+        // has painted, so it stays out of the startup bundle.
         checkHistory: () =>
-          migrateAllHistoryOnce({
-            onProgress: screen.progress,
-            signal: attempt.signal,
-          }).then((result) => {
-            const newFailures = result.failures.filter((failure) => !failure.skipped);
-            if (newFailures.length > 0) {
-              console.warn("Legacy history migration incomplete", newFailures);
-            }
-          }),
+          import("./lib/kbrain/historyMigration")
+            .then(({ migrateAllHistoryOnce }) =>
+              migrateAllHistoryOnce({ onProgress: screen.progress, signal: attempt.signal }),
+            )
+            .then((result) => {
+              const newFailures = result.failures.filter((failure) => !failure.skipped);
+              if (newFailures.length > 0) {
+                console.warn("Legacy history migration incomplete", newFailures);
+              }
+              // Sessions another client is still writing are imported a few minutes later. Loaded
+              // lazily: it shares the app's chunk and stays off the startup bundle.
+              if (result.deferred > 0) {
+                void import("./lib/kbrain/manualHistoryImport")
+                  .then(({ scheduleDeferredHistoryImport }) => scheduleDeferredHistoryImport())
+                  .catch((error) => console.error("Deferred history import failed to load", error));
+              }
+            }),
         // The app code needs the backend connection but not the history check: it loads
         // while the check runs and renders once the check is done.
         preloadApp: loadApp,
