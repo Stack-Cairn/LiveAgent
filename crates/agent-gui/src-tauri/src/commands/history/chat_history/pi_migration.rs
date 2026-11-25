@@ -92,6 +92,31 @@ pub struct PiMigrationPage {
     pub next_cursor: Option<String>,
     pub complete: bool,
     pub source: String,
+    /// Size and mtime of every file this page looked at, taken before it was read, so the
+    /// frontend can remember which file state a conversation came from.
+    pub files: Vec<PiSourceFile>,
+}
+
+/// One session file as directory metadata sees it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiSourceFile {
+    pub source_id: String,
+    pub size: u64,
+    pub mtime_ms: i64,
+    /// Page results only: "read" (a conversation was exported), "skipped" (not a session or
+    /// unreadable), "changed" (written while it was read; not exported) or "missing".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
+}
+
+/// Every session file with its size and mtime (no file is opened), plus the directory
+/// signature computed from the same listing.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiMigrationManifest {
+    pub signature: String,
+    pub files: Vec<PiSourceFile>,
 }
 
 #[derive(Debug)]
@@ -99,6 +124,35 @@ struct PiCandidate {
     path: PathBuf,
     id: String,
     modified_at: i64,
+    size: u64,
+}
+
+/// A `.jsonl` file under the sessions root, from directory metadata only.
+#[derive(Debug)]
+struct PiFileStat {
+    path: PathBuf,
+    size: u64,
+    modified_nanos: u128,
+}
+
+impl PiFileStat {
+    fn source_file(&self, status: Option<&'static str>) -> PiSourceFile {
+        PiSourceFile {
+            source_id: safe_id(&self.path.to_string_lossy()),
+            size: self.size,
+            mtime_ms: (self.modified_nanos / 1_000_000).min(i64::MAX as u128) as i64,
+            status,
+        }
+    }
+}
+
+fn modified_nanos(metadata: &fs::Metadata) -> u128 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_nanos())
+        .unwrap_or(0)
 }
 
 fn unix_millis(value: SystemTime) -> i64 {
@@ -145,35 +199,36 @@ fn collect_pi_files(root: &Path, out: &mut Vec<PiCandidate>, budget: &mut usize)
             continue;
         }
         *budget -= 1;
-        let Ok(file) = fs::File::open(&path) else {
-            continue;
-        };
-        let mut reader = BufReader::new(file);
-        let mut line = String::new();
-        let Ok(read) = reader.read_line(&mut line) else {
-            continue;
-        };
-        if read == 0 || read > PI_MAX_LINE_BYTES {
-            continue;
+        if let Some(candidate) = pi_candidate(path, &metadata) {
+            out.push(candidate);
         }
-        let Ok(header) = serde_json::from_str::<Value>(line.trim()) else {
-            continue;
-        };
-        if header.get("type").and_then(Value::as_str) != Some("session") {
-            continue;
-        }
-        let Some(id) = header.get("id").and_then(Value::as_str) else {
-            continue;
-        };
-        let Ok(modified) = metadata.modified() else {
-            continue;
-        };
-        out.push(PiCandidate {
-            path,
-            id: id.to_string(),
-            modified_at: unix_millis(modified),
-        });
     }
+}
+
+/// A session file's candidate entry: opens it and parses the header line only.
+fn pi_candidate(path: PathBuf, metadata: &fs::Metadata) -> Option<PiCandidate> {
+    if !metadata.is_file() || !valid_pi_file(&path) || metadata.len() > PI_MAX_FILE_BYTES {
+        return None;
+    }
+    let file = fs::File::open(&path).ok()?;
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    let read = reader.read_line(&mut line).ok()?;
+    if read == 0 || read > PI_MAX_LINE_BYTES {
+        return None;
+    }
+    let header = serde_json::from_str::<Value>(line.trim()).ok()?;
+    if header.get("type").and_then(Value::as_str) != Some("session") {
+        return None;
+    }
+    let id = header.get("id").and_then(Value::as_str)?;
+    let modified = metadata.modified().ok()?;
+    Some(PiCandidate {
+        path,
+        id: id.to_string(),
+        modified_at: unix_millis(modified),
+        size: metadata.len(),
+    })
 }
 
 fn pi_sessions_root(home: &Path) -> PathBuf {
@@ -186,7 +241,9 @@ fn pi_sessions_root(home: &Path) -> PathBuf {
 /// the full pass, as it did before signatures existed.
 const PI_MAX_SIGNATURE_FILES: usize = 100_000;
 
-fn hash_pi_files(root: &Path, hasher: &mut sha2::Sha256, count: &mut usize) -> bool {
+/// Lists every `.jsonl` file under `root` (sorted per directory, symlinks skipped) from
+/// directory metadata only. False when there are more than `PI_MAX_SIGNATURE_FILES`.
+fn list_pi_files(root: &Path, out: &mut Vec<PiFileStat>) -> bool {
     let Ok(entries) = fs::read_dir(root) else {
         return true;
     };
@@ -200,7 +257,7 @@ fn hash_pi_files(root: &Path, hasher: &mut sha2::Sha256, count: &mut usize) -> b
             continue;
         }
         if metadata.is_dir() {
-            if !hash_pi_files(&path, hasher, count) {
+            if !list_pi_files(&path, out) {
                 return false;
             }
             continue;
@@ -208,41 +265,179 @@ fn hash_pi_files(root: &Path, hasher: &mut sha2::Sha256, count: &mut usize) -> b
         if !metadata.is_file() || !valid_pi_file(&path) {
             continue;
         }
-        *count += 1;
-        if *count > PI_MAX_SIGNATURE_FILES {
+        if out.len() >= PI_MAX_SIGNATURE_FILES {
             return false;
         }
-        let modified = metadata
-            .modified()
-            .ok()
-            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-            .map(|value| value.as_nanos())
-            .unwrap_or(0);
-        let path = path.to_string_lossy();
-        hasher.update((path.len() as u64).to_le_bytes());
-        hasher.update(path.as_bytes());
-        hasher.update(metadata.len().to_le_bytes());
-        hasher.update(modified.to_le_bytes());
+        out.push(PiFileStat {
+            size: metadata.len(),
+            modified_nanos: modified_nanos(&metadata),
+            path,
+        });
     }
     true
 }
 
 /// Fingerprint of the Pi session files from directory metadata only (path, size, mtime of
 /// every `.jsonl` file; no file is opened). Any added, removed, rewritten or appended session
-/// changes it, so an unchanged directory lets startup skip the full rescan.
-fn pi_history_signature_for_root(root: &Path) -> Option<String> {
+/// changes it, so an unchanged directory lets startup skip the full rescan. The value must
+/// stay the same for the same files: an upgrade compares it with the stored completion.
+fn pi_signature_for_files(root: &Path, files: &[PiFileStat]) -> String {
     let mut hasher = sha2::Sha256::new();
     hasher.update(b"pi-sessions-v1\0");
     let root_text = root.to_string_lossy();
     hasher.update((root_text.len() as u64).to_le_bytes());
     hasher.update(root_text.as_bytes());
-    let mut count = 0;
-    if !hash_pi_files(root, &mut hasher, &mut count) {
-        return None;
+    for file in files {
+        let path = file.path.to_string_lossy();
+        hasher.update((path.len() as u64).to_le_bytes());
+        hasher.update(path.as_bytes());
+        hasher.update(file.size.to_le_bytes());
+        hasher.update(file.modified_nanos.to_le_bytes());
     }
     let digest = hasher.finalize();
     let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    Some(format!("pi:{count}:{hex}"))
+    format!("pi:{}:{hex}", files.len())
+}
+
+fn pi_history_signature_for_root(root: &Path) -> Option<String> {
+    let mut files = Vec::new();
+    list_pi_files(root, &mut files).then(|| pi_signature_for_files(root, &files))
+}
+
+/// Source id to path for the files of the last manifest, so reading a few changed sessions
+/// does not walk the directory again.
+static MANIFEST_PATHS: std::sync::Mutex<Option<(PathBuf, HashMap<String, PathBuf>)>> =
+    std::sync::Mutex::new(None);
+
+fn remember_manifest_paths(root: &Path, files: &[PiFileStat]) {
+    let paths = files
+        .iter()
+        .map(|file| (safe_id(&file.path.to_string_lossy()), file.path.clone()))
+        .collect();
+    *MANIFEST_PATHS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some((root.to_path_buf(), paths));
+}
+
+fn pi_manifest_for_root(root: &Path) -> Option<PiMigrationManifest> {
+    let mut files = Vec::new();
+    if !list_pi_files(root, &mut files) {
+        return None;
+    }
+    remember_manifest_paths(root, &files);
+    Some(PiMigrationManifest {
+        signature: pi_signature_for_files(root, &files),
+        files: files.iter().map(|file| file.source_file(None)).collect(),
+    })
+}
+
+/// Every session file's source id, size and mtime, read from directory metadata only. The
+/// frontend compares it with what it already migrated and reads just the changed files.
+#[tauri::command]
+pub async fn pi_history_migration_manifest() -> Result<Option<PiMigrationManifest>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = crate::runtime::data_home::home_dir()
+            .ok_or_else(|| "cannot locate user home".to_string())?;
+        Ok(pi_manifest_for_root(&pi_sessions_root(&home)))
+    })
+    .await
+    .map_err(|e| format!("pi history manifest join failed: {e}"))?
+}
+
+/// At most this many sessions per read, like one page of the full pass.
+const PI_MAX_READ_IDS: usize = PI_PAGE_SIZE;
+
+fn paths_for_ids(root: &Path, ids: &[String]) -> HashMap<String, PathBuf> {
+    let cached = MANIFEST_PATHS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_ref()
+        .filter(|(cached_root, _)| cached_root == root)
+        .map(|(_, paths)| paths.clone());
+    if let Some(paths) = cached {
+        if ids.iter().all(|id| paths.contains_key(id)) {
+            return paths;
+        }
+    }
+    // A file added since the manifest, or no manifest in this process: list again.
+    let mut files = Vec::new();
+    list_pi_files(root, &mut files);
+    remember_manifest_paths(root, &files);
+    files
+        .into_iter()
+        .map(|file| (safe_id(&file.path.to_string_lossy()), file.path))
+        .collect()
+}
+
+fn file_stat(path: &Path) -> Option<(fs::Metadata, PiFileStat)> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return None;
+    }
+    let stat = PiFileStat {
+        path: path.to_path_buf(),
+        size: metadata.len(),
+        modified_nanos: modified_nanos(&metadata),
+    };
+    Some((metadata, stat))
+}
+
+/// Reads only the listed sessions. Each file's size and mtime are taken before it is read
+/// and compared after: a file another client wrote in between is reported as "changed" and
+/// not exported, so a half-written session is never imported.
+fn pi_history_read_for_root(root: &Path, ids: &[String]) -> PiMigrationPage {
+    let ids = &ids[..ids.len().min(PI_MAX_READ_IDS)];
+    let paths = paths_for_ids(root, ids);
+    let mut conversations = Vec::new();
+    let mut files = Vec::new();
+    for id in ids {
+        let Some((metadata, before)) = paths.get(id).and_then(|path| file_stat(path)) else {
+            files.push(PiSourceFile {
+                source_id: id.clone(),
+                size: 0,
+                mtime_ms: 0,
+                status: Some("missing"),
+            });
+            continue;
+        };
+        let record = pi_candidate(before.path.clone(), &metadata)
+            .and_then(|candidate| read_pi_record(&candidate));
+        let Some(record) = record else {
+            files.push(before.source_file(Some("skipped")));
+            continue;
+        };
+        let unchanged = file_stat(&before.path).is_some_and(|(_, after)| {
+            after.size == before.size && after.modified_nanos == before.modified_nanos
+        });
+        if !unchanged {
+            files.push(before.source_file(Some("changed")));
+            continue;
+        }
+        files.push(before.source_file(Some("read")));
+        conversations.push(record);
+    }
+    PiMigrationPage {
+        conversations,
+        next_cursor: None,
+        complete: true,
+        source: "pi-jsonl".to_string(),
+        files,
+    }
+}
+
+/// Exports the given sessions (source ids from the manifest), off the main thread.
+#[tauri::command]
+pub async fn pi_history_migration_read(source_ids: Vec<String>) -> Result<PiMigrationPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = crate::runtime::data_home::home_dir()
+            .ok_or_else(|| "cannot locate user home".to_string())?;
+        Ok(pi_history_read_for_root(
+            &pi_sessions_root(&home),
+            &source_ids,
+        ))
+    })
+    .await
+    .map_err(|e| format!("pi history read join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -704,18 +899,29 @@ fn pi_history_page_for_root(root: &Path, cursor: Option<String>) -> PiMigrationP
     };
     let selected = candidates.iter().skip(start).take(PI_PAGE_SIZE);
     let mut conversations = Vec::new();
+    let mut files = Vec::new();
     for candidate in selected {
-        if let Some(record) = read_pi_record(candidate) {
+        let record = read_pi_record(candidate);
+        files.push(PiSourceFile {
+            source_id: safe_id(&candidate.path.to_string_lossy()),
+            size: candidate.size,
+            mtime_ms: candidate.modified_at,
+            status: Some(if record.is_some() { "read" } else { "skipped" }),
+        });
+        if let Some(record) = record {
             conversations.push(record);
         }
     }
     let has_more = start.saturating_add(PI_PAGE_SIZE) < candidates.len();
-    let next_cursor = conversations.last().map(|record| record.id.clone());
+    // The last file looked at, not the last exported one: a page that ends in files that are
+    // not sessions must still advance.
+    let next_cursor = files.last().map(|file| file.source_id.clone());
     PiMigrationPage {
         conversations,
         next_cursor: has_more.then_some(next_cursor.unwrap_or_default()),
         complete: !has_more,
         source: "pi-jsonl".to_string(),
+        files,
     }
 }
 
@@ -748,6 +954,7 @@ mod tests {
             path,
             id: "pi-session".to_string(),
             modified_at: 1767225603000,
+            size: 0,
         };
         let record = read_pi_record(&candidate).unwrap();
         assert_eq!(record.provider_id, "openai");
@@ -783,6 +990,7 @@ mod tests {
             path,
             id: "pi-session".to_string(),
             modified_at: 1767225603000,
+            size: 0,
         };
         let record = read_pi_record(&candidate).unwrap();
         let messages: Vec<Value> = serde_json::from_str(&record.segments[0].messages_json).unwrap();
@@ -925,6 +1133,158 @@ mod tests {
         assert_eq!(resumed.conversations.len(), PI_PAGE_SIZE);
     }
 
+    /// The signature before it shared the manifest's listing. An upgrade compares the stored
+    /// completion with the new value, so the two must agree for the same files.
+    fn previous_signature(root: &Path) -> String {
+        fn walk(root: &Path, hasher: &mut sha2::Sha256, count: &mut usize) {
+            let Ok(entries) = fs::read_dir(root) else {
+                return;
+            };
+            let mut entries: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
+            entries.sort();
+            for path in entries {
+                let metadata = fs::symlink_metadata(&path).unwrap();
+                if metadata.is_dir() {
+                    walk(&path, hasher, count);
+                    continue;
+                }
+                if !metadata.is_file() || !valid_pi_file(&path) {
+                    continue;
+                }
+                *count += 1;
+                let modified = modified_nanos(&metadata);
+                let path = path.to_string_lossy();
+                hasher.update((path.len() as u64).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(metadata.len().to_le_bytes());
+                hasher.update(modified.to_le_bytes());
+            }
+        }
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(b"pi-sessions-v1\0");
+        let root_text = root.to_string_lossy();
+        hasher.update((root_text.len() as u64).to_le_bytes());
+        hasher.update(root_text.as_bytes());
+        let mut count = 0;
+        walk(root, &mut hasher, &mut count);
+        let hex: String = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        format!("pi:{count}:{hex}")
+    }
+
+    #[test]
+    fn manifest_lists_every_session_file_with_the_unchanged_signature() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        let project = sessions.join("--workspace--");
+        std::fs::create_dir_all(&project).unwrap();
+        let a = write_session(&project, "a.jsonl", "a", 2);
+        write_session(&sessions, "b.jsonl", "b", 3);
+        std::fs::write(project.join("notes.txt"), "not a session").unwrap();
+        // Not a session, but still a .jsonl file: listed, so a later read can settle it.
+        std::fs::write(project.join("junk.jsonl"), "not json\n").unwrap();
+
+        let manifest = pi_manifest_for_root(&sessions).unwrap();
+        assert_eq!(manifest.signature, previous_signature(&sessions));
+        assert_eq!(
+            Some(manifest.signature.clone()),
+            pi_history_signature_for_root(&sessions)
+        );
+        assert_eq!(manifest.files.len(), 3);
+        let entry = manifest
+            .files
+            .iter()
+            .find(|file| file.source_id == safe_id(&a.to_string_lossy()))
+            .expect("a.jsonl is listed");
+        let metadata = std::fs::metadata(&a).unwrap();
+        assert_eq!(entry.size, metadata.len());
+        assert_eq!(entry.mtime_ms, unix_millis(metadata.modified().unwrap()));
+        assert_eq!(entry.status, None);
+        let json = serde_json::to_value(entry).unwrap();
+        assert!(json.get("sourceId").is_some() && json.get("mtimeMs").is_some());
+        assert!(json.get("status").is_none());
+    }
+
+    #[test]
+    fn read_exports_only_the_requested_sessions_and_settles_the_rest() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let wanted = write_session(&sessions, "wanted.jsonl", "wanted", 2);
+        write_session(&sessions, "other.jsonl", "other", 2);
+        let junk = sessions.join("junk.jsonl");
+        std::fs::write(&junk, "not json\n").unwrap();
+        let manifest = pi_manifest_for_root(&sessions).unwrap();
+        assert_eq!(manifest.files.len(), 3);
+
+        let wanted_id = safe_id(&wanted.to_string_lossy());
+        let junk_id = safe_id(&junk.to_string_lossy());
+        let page = pi_history_read_for_root(
+            &sessions,
+            &[wanted_id.clone(), junk_id.clone(), "pi-gone".to_string()],
+        );
+        assert!(page.complete);
+        assert_eq!(page.next_cursor, None);
+        assert_eq!(
+            page.conversations.len(),
+            1,
+            "only the requested session is exported"
+        );
+        assert_eq!(page.conversations[0].id, wanted_id);
+        assert_eq!(page.conversations[0].session_id, "wanted");
+        let statuses: Vec<_> = page
+            .files
+            .iter()
+            .map(|file| (file.source_id.as_str(), file.status.unwrap()))
+            .collect();
+        assert_eq!(
+            statuses,
+            vec![
+                (wanted_id.as_str(), "read"),
+                (junk_id.as_str(), "skipped"),
+                ("pi-gone", "missing"),
+            ]
+        );
+        let read = &page.files[0];
+        assert_eq!(read.size, std::fs::metadata(&wanted).unwrap().len());
+
+        // A session added after the manifest is found by listing again.
+        let late = write_session(&sessions, "late.jsonl", "late", 1);
+        let late_id = safe_id(&late.to_string_lossy());
+        let page = pi_history_read_for_root(&sessions, std::slice::from_ref(&late_id));
+        assert_eq!(page.conversations.len(), 1);
+        assert_eq!(page.files[0].status, Some("read"));
+    }
+
+    #[test]
+    fn a_full_pass_page_reports_the_files_it_read_and_advances_past_non_sessions() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        for index in 0..(PI_PAGE_SIZE + 3) {
+            write_session(
+                &sessions,
+                &format!("s{index:03}.jsonl"),
+                &format!("s{index:03}"),
+                1,
+            );
+        }
+        *PASS_CANDIDATES.lock().unwrap() = None;
+        let first = pi_history_page_for_root(&sessions, None);
+        assert_eq!(first.files.len(), PI_PAGE_SIZE);
+        assert!(first
+            .files
+            .iter()
+            .all(|file| file.status == Some("read") && file.size > 0 && file.mtime_ms > 0));
+        assert_eq!(
+            first.next_cursor.as_deref(),
+            Some(first.files.last().unwrap().source_id.as_str())
+        );
+    }
+
     /// `cargo test --lib pi_migration::tests::bench_ -- --ignored --nocapture`
     #[test]
     #[ignore = "benchmark: prints Pi startup rescan timings for 2000 synthetic sessions"]
@@ -975,6 +1335,102 @@ mod tests {
                 "round {round}: full pass, scan per page {:?}; full pass, one scan {:?}; unchanged launch (signature only) {:?}",
                 rescanning, shared, signature_time
             );
+        }
+    }
+
+    /// `cargo test --lib pi_migration::tests::bench_pi_second -- --ignored --nocapture`
+    /// Set `PI_BENCH_DUMP=<dir>` to also write the native results for a frontend replay.
+    #[test]
+    #[ignore = "benchmark: prints the native cost of a second launch after one appended file"]
+    fn bench_pi_second_start_after_one_append() {
+        let root = tempdir().unwrap();
+        let sessions = root.path().join("sessions");
+        let mut appended = PathBuf::new();
+        for project in 0..10 {
+            let dir = sessions.join(format!("--project-{project}--"));
+            std::fs::create_dir_all(&dir).unwrap();
+            for index in 0..30 {
+                // One large session per project (about 4.5 MB), the rest small.
+                let messages = if index == 0 { 30_000 } else { 40 };
+                let path = write_session(
+                    &dir,
+                    &format!("{index:04}.jsonl"),
+                    &format!("p{project}-s{index}"),
+                    messages,
+                );
+                if project == 3 && index == 7 {
+                    appended = path;
+                }
+            }
+        }
+        let full_pass = || {
+            let mut cursor: Option<String> = None;
+            let mut pages = Vec::new();
+            loop {
+                let page = pi_history_page_for_root(&sessions, cursor.clone());
+                let complete = page.complete;
+                cursor = page.next_cursor.clone();
+                pages.push(page);
+                if complete {
+                    break;
+                }
+            }
+            pages
+        };
+        let bytes: u64 = pi_manifest_for_root(&sessions)
+            .unwrap()
+            .files
+            .iter()
+            .map(|file| file.size)
+            .sum();
+        println!(
+            "synthetic directory: 300 session files, {:.1} MB",
+            bytes as f64 / 1048576.0
+        );
+        let first = full_pass();
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&appended)
+            .unwrap();
+        use std::io::Write;
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({"type":"message","id":"appended","parentId":"p3-s7-m39","timestamp":"2026-01-01T00:00:02Z","message":{"role":"user","content":"appended"}})
+        )
+        .unwrap();
+        drop(file);
+        let appended_id = safe_id(&appended.to_string_lossy());
+        let mut dump = None;
+        for round in 0..3 {
+            *PASS_CANDIDATES.lock().unwrap() = None;
+            let started = std::time::Instant::now();
+            pi_history_signature_for_root(&sessions).unwrap();
+            let pages = full_pass();
+            let before = started.elapsed();
+            *MANIFEST_PATHS.lock().unwrap() = None;
+            let started = std::time::Instant::now();
+            pi_history_signature_for_root(&sessions).unwrap();
+            let manifest = pi_manifest_for_root(&sessions).unwrap();
+            let read = pi_history_read_for_root(&sessions, std::slice::from_ref(&appended_id));
+            let after = started.elapsed();
+            assert_eq!(read.conversations.len(), 1);
+            println!(
+                "round {round}: second launch after one appended file, native work: before (signature + full pass) {before:?}; after (signature + manifest + one read) {after:?}"
+            );
+            dump = Some((pages, manifest, read));
+        }
+        if let Some(dir) = std::env::var_os("PI_BENCH_DUMP") {
+            let (pages, manifest, read) = dump.unwrap();
+            let dir = PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            let write = |name: &str, value: serde_json::Value| {
+                std::fs::write(dir.join(name), value.to_string()).unwrap();
+            };
+            write("first-pass.json", serde_json::to_value(&first).unwrap());
+            write("second-pass.json", serde_json::to_value(&pages).unwrap());
+            write("manifest.json", serde_json::to_value(&manifest).unwrap());
+            write("read.json", serde_json::to_value(&read).unwrap());
         }
     }
 }
